@@ -406,6 +406,11 @@ For support and feature requests, please contact the plugin developer.
 
 ## Changelog
 
+### Version 2.6.0
+
+* **GitHub Repository**: Updated plugin URI to point to GitHub repository
+* **Code Cleanup**: Removed token-debug.php file
+
 ### Version 2.5.1
 - **Security Enhancements**: Fixed SQL injection vulnerabilities in scheduler and database classes
 - **Input Sanitization**: Added proper sanitization for `$_SERVER['REMOTE_ADDR']` in analytics and frontend classes
