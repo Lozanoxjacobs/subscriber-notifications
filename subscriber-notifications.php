@@ -1,9 +1,9 @@
 <?php
 /**
  * Plugin Name: Subscriber Notifications
- * Plugin URI: https://planeteria.com
+ * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
  * Description: Enterprise-grade email notification system featuring personalized content delivery, unique engagement analytics, flexible scheduling options, recurring notifications, and comprehensive subscriber management with preference controls.
- * Version: 2.5.1
+ * Version: 2.6.0
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '2.5.1');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '2.6.0');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL', plugin_dir_url(__FILE__));
