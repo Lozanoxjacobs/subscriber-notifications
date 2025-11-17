@@ -1,0 +1,339 @@
+/* Subscriber Notifications Admin Styles */
+
+.subscriber-notifications-dashboard .dashboard-stats {
+    display: flex;
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.subscriber-notifications-dashboard .stat-box {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    text-align: center;
+    flex: 1;
+}
+
+.subscriber-notifications-dashboard .stat-box h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #666;
+}
+
+.subscriber-notifications-dashboard .stat-number {
+    font-size: 32px;
+    font-weight: bold;
+    color: #0073aa;
+}
+
+.subscriber-notifications-dashboard .dashboard-actions {
+    margin: 20px 0;
+}
+
+.subscriber-notifications-dashboard .dashboard-actions .button {
+    margin-right: 10px;
+}
+
+.subscriber-notifications-dashboard .dashboard-analytics {
+    margin-top: 30px;
+}
+
+/* Subscribers page styles */
+.subscriber-notifications-subscribers .subscribers-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 20px 0;
+}
+
+.subscriber-notifications-subscribers .subscribers-actions .button {
+    margin-right: 10px;
+}
+
+.subscriber-notifications-subscribers .subscribers-filters form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.subscriber-notifications-subscribers .subscribers-filters input[type="search"] {
+    width: 200px;
+}
+
+.subscriber-notifications-subscribers .status-active {
+    color: #46b450;
+    font-weight: bold;
+}
+
+.subscriber-notifications-subscribers .status-pending {
+    color: #ffb900;
+    font-weight: bold;
+}
+
+.subscriber-notifications-subscribers .status-inactive {
+    color: #dc3232;
+    font-weight: bold;
+}
+
+.subscriber-notifications-subscribers .subscribers-pagination {
+    margin-top: 20px;
+    text-align: center;
+}
+
+/* Notification creation form */
+.notification-form .form-table th {
+    width: 200px;
+}
+
+.notification-actions {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #ddd;
+}
+
+.notification-actions .button {
+    margin-right: 10px;
+}
+
+.notification-preview h3 {
+    margin-bottom: 10px;
+}
+
+#preview-content {
+    min-height: 100px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Logs page styles */
+.logs-filters {
+    margin: 20px 0;
+    padding: 15px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.logs-filters form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.logs-filters select,
+.logs-filters input[type="date"] {
+    padding: 5px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.logs-filters select {
+    min-width: 150px;
+    padding-right: 30px;
+}
+
+.status-sent {
+    color: #46b450;
+    font-weight: bold;
+}
+
+.status-failed {
+    color: #dc3232;
+    font-weight: bold;
+}
+
+.status-pending {
+    color: #ffb900;
+    font-weight: bold;
+}
+
+.error-message {
+    color: #dc3232;
+    cursor: help;
+}
+
+.logs-actions {
+    margin-top: 20px;
+}
+
+/* Settings page styles */
+.form-table th {
+    width: 200px;
+}
+
+.form-table .description {
+    font-style: italic;
+    color: #666;
+}
+
+.inline .notice {
+    margin: 5px 0;
+    padding: 5px 10px;
+}
+
+/* Meta box styles */
+.subscriber-notifications-meta-box {
+    padding: 10px;
+}
+
+.subscriber-notifications-meta-box label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+.subscriber-notifications-meta-box input[type="checkbox"] {
+    margin-right: 5px;
+}
+
+.subscriber-notifications-meta-box textarea {
+    width: 100%;
+    margin-top: 5px;
+}
+
+.subscriber-notifications-meta-box .description {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .subscriber-notifications-dashboard .dashboard-stats {
+        flex-direction: column;
+    }
+    
+    .subscriber-notifications-subscribers .subscribers-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .subscriber-notifications-subscribers .subscribers-filters form {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .logs-filters form {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* Loading states */
+.button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.loading {
+    position: relative;
+}
+
+.loading:after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #ffffff;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Form validation */
+.form-errors {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+}
+
+.form-errors ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.field-error {
+    color: #dc3232;
+    font-size: 12px;
+    margin-top: 5px;
+    display: block;
+}
+
+/* Success/Error messages */
+.subscriber-message {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.subscriber-message.success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.subscriber-message.error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* Table improvements */
+.wp-list-table th,
+.wp-list-table td {
+    vertical-align: top;
+}
+
+.wp-list-table .column-actions {
+    width: 120px;
+}
+
+.wp-list-table .button-small {
+    padding: 2px 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    margin-right: 5px;
+}
+
+/* Accessibility improvements */
+.screen-reader-text {
+    clip: rect(1px, 1px, 1px, 1px);
+    position: absolute !important;
+    height: 1px;
+    width: 1px;
+    overflow: hidden;
+}
+
+/* Focus states */
+.button:focus,
+input:focus,
+textarea:focus,
+select:focus {
+    outline: 2px solid #0073aa;
+    outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+    .subscriber-notifications-dashboard .dashboard-actions,
+    .subscriber-notifications-subscribers .subscribers-actions,
+    .logs-actions {
+        display: none;
+    }
+}

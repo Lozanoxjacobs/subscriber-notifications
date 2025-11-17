@@ -1,0 +1,24 @@
+# Debug files
+token-debug.php
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary/backup files
+*.log
+*.tmp
+*.bak
+*.cache
+*.zip
+
+# Test files
+*.eml
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+

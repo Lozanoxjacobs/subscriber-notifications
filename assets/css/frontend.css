@@ -1,0 +1,328 @@
+/* Subscriber Notifications Frontend Styles */
+
+.subscriber-notifications-form {
+    max-width: 600px;
+    margin: 140px auto 20px auto; /* Top margin accounts for sticky header - adjust if your theme's sticky header height differs */
+    padding: 20px;
+    background: #F2F2F2;
+}
+
+.subscriber-notifications-form h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: #000000;
+    font-weight: 700;
+}
+
+.subscriber-notifications-form .form-group {
+    margin-bottom: 20px;
+}
+
+.subscriber-notifications-form .form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    font-size: 16px;
+    color: #000000;
+}
+
+.subscriber-notifications-form .form-group input[type="text"],
+.subscriber-notifications-form .form-group input[type="email"],
+.subscriber-notifications-form .form-group input[type="tel"] {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #000;
+    background: #FFF;
+    font-size: 14px;
+}
+
+.subscriber-notifications-form .form-group input[type="text"]:focus,
+.subscriber-notifications-form .form-group input[type="email"]:focus,
+.subscriber-notifications-form .form-group input[type="tel"]:focus {
+    border-color: #0073aa;
+    outline: none;
+    box-shadow: 0 0 0 1px #0073aa;
+}
+
+.subscriber-notifications-form .form-group h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #000000;
+}
+
+.subscriber-notifications-form .checkbox-label,
+.subscriber-notifications-form .radio-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: normal;
+    cursor: pointer;
+    color: #000000;
+}
+
+.subscriber-notifications-form .checkbox-label input[type="checkbox"],
+.subscriber-notifications-form .radio-label input[type="radio"] {
+    margin-right: 8px;
+    border: 1px solid #000;
+    background: #FFF;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+}
+
+.subscriber-notifications-form .checkbox-label input[type="checkbox"]:checked {
+    background: #ffffff;
+    border: 1px solid #000;
+    position: relative;
+}
+
+.subscriber-notifications-form .checkbox-label input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    right: 2px;
+    bottom: 2px;
+    background: #000000;
+}
+
+.subscriber-notifications-form .radio-label input[type="radio"] {
+    border-radius: 50%;
+}
+
+.subscriber-notifications-form .radio-label input[type="radio"]:checked {
+    background: #ffffff;
+    border: 1px solid #000;
+    position: relative;
+}
+
+.subscriber-notifications-form .radio-label input[type="radio"]:checked::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    right: 2px;
+    bottom: 2px;
+    background: #000000;
+    border-radius: 50%;
+}
+
+.subscriber-notifications-form .required {
+    color: #dc3232;
+}
+
+.subscriber-notifications-form .g-recaptcha {
+    margin: 10px 0;
+}
+
+.subscriber-notifications-form button[type="submit"] {
+    background: #8E1921;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.subscriber-notifications-form button[type="submit"]:hover {
+    background: #72141A;
+}
+
+.subscriber-notifications-form button[type="submit"]:disabled {
+    background: #E7E7E7;
+    color: #686868;
+    cursor: not-allowed;
+}
+
+.subscriber-message {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.subscriber-message.success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.subscriber-message.error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.form-errors {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+}
+
+.form-errors ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.field-error {
+    color: #dc3232;
+    font-size: 12px;
+    margin-top: 5px;
+    display: block;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .subscriber-notifications-form {
+        margin: 85px auto 10px auto; /* Top margin accounts for sticky header on mobile - adjust if your theme's sticky header height differs */
+        padding: 15px;
+    }
+    
+    .subscriber-notifications-form .form-group {
+        margin-bottom: 15px;
+    }
+    
+    .subscriber-notifications-form .checkbox-label,
+    .subscriber-notifications-form .radio-label {
+        margin-bottom: 6px;
+    }
+}
+
+/* Accessibility improvements */
+.subscriber-notifications-form input:focus,
+.subscriber-notifications-form button:focus {
+    outline: 2px solid #0073aa;
+    outline-offset: 2px;
+}
+
+.subscriber-notifications-form .checkbox-label:focus-within,
+.subscriber-notifications-form .radio-label:focus-within {
+    outline: 2px solid #0073aa;
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+/* Loading state */
+.subscriber-notifications-form.loading button[type="submit"] {
+    position: relative;
+    color: transparent;
+}
+
+.subscriber-notifications-form.loading button[type="submit"]:after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #ffffff;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Select All functionality */
+.select-all-label {
+    padding: 10px;
+    margin-bottom: 10px;
+    font-weight: 600;
+    font-size: 16px;
+    color: #000000;
+}
+
+.select-all-label strong {
+    font-weight: 600;
+    font-size: 16px;
+    color: #000000;
+}
+
+.category-checkboxes {
+    margin-left: 20px;
+    border-left: 2px solid #e0e0e0;
+    padding-left: 15px;
+}
+
+.category-checkboxes .checkbox-label {
+    margin-bottom: 6px;
+    font-weight: normal;
+}
+
+/* Indeterminate state styling */
+input[type="checkbox"]:indeterminate {
+    background: #0073aa;
+    border-color: #0073aa;
+}
+
+
+/* Responsive adjustments for select all */
+@media (max-width: 768px) {
+    .category-checkboxes {
+        margin-left: 10px;
+        padding-left: 10px;
+    }
+    
+    .select-all-label {
+        padding: 8px;
+    }
+}
+
+/* Unsubscribe section */
+.subscriber-notifications-form .unsubscribe-section {
+    margin-top: 40px;
+    padding-top: 20px;
+}
+
+.subscriber-notifications-form .unsubscribe-section hr {
+    margin: 30px 0;
+    border: none;
+    border-top: 2px solid #ddd;
+}
+
+.subscriber-notifications-form .unsubscribe-section h3 {
+    color: #dc3232;
+    margin-bottom: 10px;
+}
+
+.subscriber-notifications-form .unsubscribe-section p {
+    margin-bottom: 15px;
+    color: #666;
+}
+
+.subscriber-notifications-form .unsubscribe-button {
+    background: #dc3232;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.subscriber-notifications-form .unsubscribe-button:hover {
+    background: #b32d2e;
+}
+
+.subscriber-notifications-form .unsubscribe-button:disabled {
+    background: #E7E7E7;
+    color: #686868;
+    cursor: not-allowed;
+}
+
+.subscriber-notifications-form .form-group .description {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+    font-style: italic;
+}
