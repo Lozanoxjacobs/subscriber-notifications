@@ -3,13 +3,13 @@
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
  * Description: Enterprise-grade email notification system featuring personalized content delivery, unique engagement analytics, flexible scheduling options, recurring notifications, and comprehensive subscriber management with preference controls.
- * Version: 2.6.0
+ * Version: 2.7.0
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
  * Domain Path: /languages
  * Requires at least: 5.0
- * Tested up to: 6.4
+ * Tested up to: 6.8
  * Requires PHP: 7.4
  * Network: false
  */
@@ -20,11 +20,13 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '2.6.0');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '2.7.0');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_BASENAME', plugin_basename(__FILE__));
+
+require_once SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'includes/options-helpers.php';
 
 /**
  * Main plugin class
@@ -105,6 +107,11 @@ class SubscriberNotifications {
         // Load dependencies
         $this->load_dependencies();
         
+        // Migrate legacy unprefixed options before components read settings.
+        if (function_exists('subscriber_notifications_migrate_prefixed_options')) {
+            subscriber_notifications_migrate_prefixed_options();
+        }
+
         // Initialize components
         $this->init_components();
         
@@ -193,6 +200,7 @@ class SubscriberNotifications {
      */
     private function load_dependencies() {
         
+        // Load helpers first (prefixed options, migration).
         $files = array(
             'includes/class-database.php',
             'includes/class-email-formatter.php',
@@ -321,7 +329,10 @@ class SubscriberNotifications {
     public static function uninstall() {
         // Check if user has opted to delete data on uninstall
         // Default is 0 (preserve data) - user must explicitly check the box to delete
-        $delete_data = get_option('delete_data_on_uninstall', 0);
+        $delete_data = (int) get_option(
+            subscriber_notifications_option_name('delete_data_on_uninstall'),
+            get_option('delete_data_on_uninstall', 0)
+        );
         
         // Log what's happening (for debugging)
         if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -357,11 +368,8 @@ class SubscriberNotifications {
         $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}subscriber_notification_logs");
         $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}subscriber_notifications_queue");
         
-        // Delete all plugin options
-        $options_to_delete = array(
-            'sendgrid_api_key',
-            'sendgrid_from_email',
-            'sendgrid_from_name',
+        // Delete all plugin options (prefixed plus legacy leftovers).
+        $prefixed_suffixes = array(
             'welcome_email_subject',
             'welcome_email_content',
             'welcome_back_email_subject',
@@ -379,17 +387,51 @@ class SubscriberNotifications {
             'weekly_send_day',
             'monthly_send_time',
             'monthly_send_day',
-            'subscriber_notifications_db_version',
-            'subscriber_notifications_rewrite_version',
-            'subscriber_notifications_feed_migration_version',
-            'subscriber_notifications_phone_removal_version',
-            'subscriber_notifications_settings',
-            'mail_method',
+            'test_email',
             'delete_data_on_uninstall',
-            'test_email'
         );
-        
-        foreach ($options_to_delete as $option) {
+        $options_to_delete = array_merge(
+            array(
+                'subscriber_notifications_db_version',
+                'subscriber_notifications_rewrite_version',
+                'subscriber_notifications_feed_migration_version',
+                'subscriber_notifications_phone_removal_version',
+                'subscriber_notifications_settings',
+                'subscriber_notifications_prefixed_options_migrated',
+            ),
+            array_map(
+                'subscriber_notifications_option_name',
+                $prefixed_suffixes
+            ),
+            array(
+                'mail_method',
+                'sendgrid_api_key',
+                'sendgrid_from_email',
+                'sendgrid_from_name',
+            ),
+            array(
+                'welcome_email_subject',
+                'welcome_email_content',
+                'welcome_back_email_subject',
+                'welcome_back_email_content',
+                'preferences_update_email_subject',
+                'preferences_update_email_content',
+                'captcha_site_key',
+                'captcha_secret_key',
+                'global_header_logo',
+                'global_header_content',
+                'global_footer',
+                'email_css',
+                'daily_send_time',
+                'weekly_send_time',
+                'weekly_send_day',
+                'monthly_send_time',
+                'monthly_send_day',
+                'subscriber_notifications_db_version',
+            )
+        );
+
+        foreach (array_unique($options_to_delete) as $option) {
             delete_option($option);
         }
         
@@ -411,24 +453,22 @@ class SubscriberNotifications {
      */
     private function set_default_options() {
         $default_options = array(
-            'sendgrid_api_key' => '',
-            'sendgrid_from_email' => get_option('admin_email'),
-            'sendgrid_from_name' => get_bloginfo('name'),
-            'welcome_email_subject' => __('Welcome! Your subscription is confirmed', 'subscriber-notifications'),
-            'welcome_email_content' => __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'),
-            'welcome_back_email_subject' => __('Welcome back! Your subscription has been reactivated', 'subscriber-notifications'),
-            'welcome_back_email_content' => __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'),
+            'welcome_email_subject'           => __('Welcome! Your subscription is confirmed', 'subscriber-notifications'),
+            'welcome_email_content'            => __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'),
+            'welcome_back_email_subject'      => __('Welcome back! Your subscription has been reactivated', 'subscriber-notifications'),
+            'welcome_back_email_content'      => __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'),
             'preferences_update_email_subject' => __('Your preferences have been updated', 'subscriber-notifications'),
             'preferences_update_email_content' => __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('News Categories: [selected_news_categories]', 'subscriber-notifications') . "\n" . __('Meeting Categories: [selected_meeting_categories]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'),
-            'captcha_site_key' => '',
-            'captcha_secret_key' => '',
-            'global_header_logo' => '',
-            'global_header_content' => ''
+            'captcha_site_key'               => '',
+            'captcha_secret_key'             => '',
+            'global_header_logo'              => '',
+            'global_header_content'           => '',
         );
-        
-        foreach ($default_options as $option => $value) {
-            if (get_option($option) === false) {
-                add_option($option, $value);
+
+        foreach ($default_options as $short_key => $value) {
+            $prefixed = subscriber_notifications_option_name($short_key);
+            if (get_option($prefixed) === false) {
+                add_option($prefixed, $value);
             }
         }
     }
@@ -446,11 +486,11 @@ class SubscriberNotifications {
      * Auto-populate global footer if empty
      */
     private function auto_populate_global_footer() {
-        $global_footer = get_option('global_footer', '');
+        $global_footer = subscriber_notifications_get_option('global_footer', '');
         
         if (empty($global_footer)) {
             $default_footer = '[site_title] | [manage_preferences_link]';
-            update_option('global_footer', $default_footer);
+            subscriber_notifications_update_option('global_footer', $default_footer);
         }
     }
     

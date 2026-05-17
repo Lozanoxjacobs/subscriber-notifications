@@ -50,19 +50,12 @@ if (!defined('ABSPATH')) {
         
         <div class="dashboard-status">
             <div class="status-box">
-                <h3><?php _e('Mail Delivery Method', 'subscriber-notifications'); ?></h3>
+                <h3><?php esc_html_e('Mail delivery', 'subscriber-notifications'); ?></h3>
                 <div class="status-info">
-                    <?php 
-                    $mail_method = get_option('mail_method', 'sendgrid');
-                    if ($mail_method === 'wp_mail') {
-                        echo '<span class="status-wp-mail">' . __('WordPress Default Mail', 'subscriber-notifications') . '</span>';
-                    } else {
-                        echo '<span class="status-sendgrid">' . __('SendGrid', 'subscriber-notifications') . '</span>';
-                    }
-                    ?>
+                    <span class="status-wp-mail"><?php esc_html_e('WordPress wp_mail()', 'subscriber-notifications'); ?></span>
                 </div>
-                <a href="<?php echo admin_url('admin.php?page=subscriber-notifications-settings'); ?>" class="button button-small">
-                    <?php _e('Change Settings', 'subscriber-notifications'); ?>
+                <a href="<?php echo esc_url(admin_url('admin.php?page=subscriber-notifications-settings')); ?>" class="button button-small">
+                    <?php _e('Test email & settings', 'subscriber-notifications'); ?>
                 </a>
             </div>
             
@@ -70,11 +63,11 @@ if (!defined('ABSPATH')) {
                 <h3><?php _e('Email Schedule', 'subscriber-notifications'); ?></h3>
                 <div class="status-info">
                     <?php
-                    $daily_time = get_option('daily_send_time', '09:00');
-                    $weekly_day = get_option('weekly_send_day', 'tuesday');
-                    $weekly_time = get_option('weekly_send_time', '14:00');
-                    $monthly_day = get_option('monthly_send_day', 15);
-                    $monthly_time = get_option('monthly_send_time', '14:00');
+                    $daily_time = subscriber_notifications_get_option('daily_send_time', '09:00');
+                    $weekly_day = subscriber_notifications_get_option('weekly_send_day', 'tuesday');
+                    $weekly_time = subscriber_notifications_get_option('weekly_send_time', '14:00');
+                    $monthly_day = subscriber_notifications_get_option('monthly_send_day', 15);
+                    $monthly_time = subscriber_notifications_get_option('monthly_send_time', '14:00');
                     
                     echo '<div class="schedule-info">';
                     echo '<strong>' . __('Daily:', 'subscriber-notifications') . '</strong> ' . date('g:i A', strtotime($daily_time)) . '<br>';

@@ -34,7 +34,6 @@ class SubscriberNotifications_Frontend {
      * Initialize hooks
      */
     private function init_hooks() {
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
         add_action('wp_ajax_subscriber_notifications_subscribe', array($this, 'handle_subscription'));
         add_action('wp_ajax_nopriv_subscriber_notifications_subscribe', array($this, 'handle_subscription'));
         add_action('wp_ajax_subscriber_notifications_update_preferences', array($this, 'handle_preferences_update'));
@@ -46,14 +45,19 @@ class SubscriberNotifications_Frontend {
     }
     
     /**
-     * Enqueue frontend scripts and styles
+     * Enqueue CSS/JS when subscription or preferences UI is rendered.
      */
-    public function enqueue_scripts() {
+    private function enqueue_subscription_form_assets() {
+        static $enqueued = false;
+        if ($enqueued) {
+            return;
+        }
+        $enqueued = true;
+
         wp_enqueue_script('jquery');
-        
-        // Enqueue reCAPTCHA
-        $site_key = get_option('captcha_site_key', '');
-        if (!empty($site_key)) {
+
+        $site_key = subscriber_notifications_get_option('captcha_site_key', '');
+        if ('' !== $site_key) {
             wp_enqueue_script(
                 'google-recaptcha',
                 'https://www.google.com/recaptcha/api.js',
@@ -62,7 +66,7 @@ class SubscriberNotifications_Frontend {
                 true
             );
         }
-        
+
         wp_enqueue_script(
             'subscriber-notifications-frontend',
             SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL . 'assets/js/frontend.js',
@@ -70,15 +74,19 @@ class SubscriberNotifications_Frontend {
             SUBSCRIBER_NOTIFICATIONS_VERSION,
             true
         );
-        
-        wp_localize_script('subscriber-notifications-frontend', 'subscriberNotifications', array(
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'homeUrl' => home_url('/'),
-            'nonce' => wp_create_nonce('subscriber_notifications_nonce'),
-            'unsubscribeNonce' => wp_create_nonce('subscriber_notifications_unsubscribe'),
-            'siteKey' => $site_key
-        ));
-        
+
+        wp_localize_script(
+            'subscriber-notifications-frontend',
+            'subscriberNotifications',
+            array(
+                'ajaxUrl'          => admin_url('admin-ajax.php'),
+                'homeUrl'          => home_url('/'),
+                'nonce'            => wp_create_nonce('subscriber_notifications_nonce'),
+                'unsubscribeNonce' => wp_create_nonce('subscriber_notifications_unsubscribe'),
+                'siteKey'          => $site_key,
+            )
+        );
+
         wp_enqueue_style(
             'subscriber-notifications-frontend',
             SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL . 'assets/css/frontend.css',
@@ -86,7 +94,7 @@ class SubscriberNotifications_Frontend {
             SUBSCRIBER_NOTIFICATIONS_VERSION
         );
     }
-    
+
     /**
      * Subscription form shortcode
      * 
@@ -94,6 +102,7 @@ class SubscriberNotifications_Frontend {
      * @return string Form HTML
      */
     public function subscription_form_shortcode($atts) {
+        $this->enqueue_subscription_form_assets();
         $atts = shortcode_atts(array(
             'title' => __('Subscribe to Notifications', 'subscriber-notifications')
         ), $atts);
@@ -185,9 +194,9 @@ class SubscriberNotifications_Frontend {
                     </label>
                 </div>
                 
-                <?php if (!empty(get_option('captcha_site_key', ''))): ?>
+                <?php if (!empty(subscriber_notifications_get_option('captcha_site_key', ''))): ?>
                 <div class="form-group">
-                    <div class="g-recaptcha" data-sitekey="<?php echo esc_attr(get_option('captcha_site_key')); ?>"></div>
+                    <div class="g-recaptcha" data-sitekey="<?php echo esc_attr(subscriber_notifications_get_option('captcha_site_key')); ?>"></div>
                 </div>
                 <?php endif; ?>
                 
@@ -209,11 +218,12 @@ class SubscriberNotifications_Frontend {
     public function handle_subscription() {
         // Verify nonce
         if (!wp_verify_nonce($_POST['subscriber_nonce'], 'subscriber_notifications_subscribe')) {
-            wp_die(__('Security check failed.', 'subscriber-notifications'));
+            wp_send_json_error(__('Security check failed.', 'subscriber-notifications'));
+            return;
         }
         
         // Verify CAPTCHA if enabled
-        if (!empty(get_option('captcha_site_key', ''))) {
+        if (!empty(subscriber_notifications_get_option('captcha_site_key', ''))) {
             if (!$this->verify_captcha($_POST['g-recaptcha-response'])) {
                 wp_send_json_error(__('CAPTCHA verification failed.', 'subscriber-notifications'));
                 return;
@@ -228,6 +238,11 @@ class SubscriberNotifications_Frontend {
         $frequency = sanitize_text_field($_POST['frequency']);
         
         // Validate required fields
+        if (!in_array($frequency, array('daily', 'weekly', 'monthly'), true)) {
+            wp_send_json_error(__('Please select a valid notification frequency.', 'subscriber-notifications'));
+            return;
+        }
+        
         if (empty($name) || empty($email) || !is_email($email)) {
             wp_send_json_error(__('Please provide a valid name and email address.', 'subscriber-notifications'));
             return;
@@ -308,7 +323,7 @@ class SubscriberNotifications_Frontend {
      * @return bool True if valid, false otherwise
      */
     private function verify_captcha($response) {
-        $secret_key = get_option('captcha_secret_key', '');
+        $secret_key = subscriber_notifications_get_option('captcha_secret_key', '');
         if (empty($secret_key)) {
             return true; // No CAPTCHA configured
         }
@@ -348,8 +363,8 @@ class SubscriberNotifications_Frontend {
      * Send welcome email after verification
      */
     private function send_welcome_email($subscriber) {
-        $subject = get_option('welcome_email_subject', __('Welcome! Your subscription is confirmed', 'subscriber-notifications'));
-        $content = get_option('welcome_email_content', __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
+        $subject = subscriber_notifications_get_option('welcome_email_subject', __('Welcome! Your subscription is confirmed', 'subscriber-notifications'));
+        $content = subscriber_notifications_get_option('welcome_email_content', __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
         
         // Process shortcodes
         $shortcodes = new SubscriberNotifications_Shortcodes();
@@ -357,32 +372,22 @@ class SubscriberNotifications_Frontend {
         $processed_content = $shortcodes->process_shortcodes($content, $subscriber);
         
         // Apply custom CSS if set
-        $email_css = get_option('email_css', '');
+        $email_css = subscriber_notifications_get_option('email_css', '');
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
-        
-        // Send email using current mail method
-        $settings = get_option('subscriber_notifications_settings', array());
-        $mail_method = isset($settings['mail_method']) ? $settings['mail_method'] : 'wp_mail';
-        
-        if ($mail_method === 'sendgrid') {
-            $sendgrid = new SubscriberNotifications_SendGrid();
-            $sendgrid->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
-        } else {
-            // Use WordPress default mail
-            $headers = array('Content-Type: text/html; charset=UTF-8');
-            wp_mail($subscriber->email, $processed_subject, $processed_content, $headers);
-        }
+
+        $mailer = new SubscriberNotifications_SendGrid();
+        $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
     }
     
     /**
      * Send welcome back email for resubscribing users
-     * 
+     *
      * @param object $subscriber Subscriber object
      */
     private function send_welcome_back_email($subscriber) {
-        $subject = get_option('welcome_back_email_subject', __('Welcome back! Your subscription has been reactivated', 'subscriber-notifications'));
-        $content = get_option('welcome_back_email_content', __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
+        $subject = subscriber_notifications_get_option('welcome_back_email_subject', __('Welcome back! Your subscription has been reactivated', 'subscriber-notifications'));
+        $content = subscriber_notifications_get_option('welcome_back_email_content', __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
         
         // Process shortcodes
         $shortcodes = new SubscriberNotifications_Shortcodes();
@@ -390,22 +395,12 @@ class SubscriberNotifications_Frontend {
         $processed_content = $shortcodes->process_shortcodes($content, $subscriber);
         
         // Apply custom CSS if set
-        $email_css = get_option('email_css', '');
+        $email_css = subscriber_notifications_get_option('email_css', '');
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
-        
-        // Send email using current mail method
-        $settings = get_option('subscriber_notifications_settings', array());
-        $mail_method = isset($settings['mail_method']) ? $settings['mail_method'] : 'wp_mail';
-        
-        if ($mail_method === 'sendgrid') {
-            $sendgrid = new SubscriberNotifications_SendGrid();
-            $sendgrid->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
-        } else {
-            // Use WordPress default mail
-            $headers = array('Content-Type: text/html; charset=UTF-8');
-            wp_mail($subscriber->email, $processed_subject, $processed_content, $headers);
-        }
+
+        $mailer = new SubscriberNotifications_SendGrid();
+        $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
     }
     
     /**
@@ -505,6 +500,7 @@ class SubscriberNotifications_Frontend {
      * @param string $token Management token
      */
     private function render_preferences_form($token) {
+        $this->enqueue_subscription_form_assets();
         $token = trim($token);
         
         if (empty($token)) {
@@ -669,6 +665,11 @@ class SubscriberNotifications_Frontend {
         $frequency = sanitize_text_field($_POST['frequency']);
         
         // Validate required fields
+        if (!in_array($frequency, array('daily', 'weekly', 'monthly'), true)) {
+            wp_send_json_error(__('Please select a valid notification frequency.', 'subscriber-notifications'));
+            return;
+        }
+        
         if (empty($name) || empty($frequency)) {
             wp_send_json_error(__('Please provide a valid name and frequency preference.', 'subscriber-notifications'));
             return;
@@ -733,8 +734,8 @@ class SubscriberNotifications_Frontend {
      * @param object $subscriber Subscriber object
      */
     private function send_preferences_update_email($subscriber) {
-        $subject = get_option('preferences_update_email_subject', __('Your preferences have been updated', 'subscriber-notifications'));
-        $content = get_option('preferences_update_email_content', __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('News Categories: [selected_news_categories]', 'subscriber-notifications') . "\n" . __('Meeting Categories: [selected_meeting_categories]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'));
+        $subject = subscriber_notifications_get_option('preferences_update_email_subject', __('Your preferences have been updated', 'subscriber-notifications'));
+        $content = subscriber_notifications_get_option('preferences_update_email_content', __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('News Categories: [selected_news_categories]', 'subscriber-notifications') . "\n" . __('Meeting Categories: [selected_meeting_categories]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'));
         
         // Process shortcodes
         $shortcodes = new SubscriberNotifications_Shortcodes();
@@ -742,22 +743,12 @@ class SubscriberNotifications_Frontend {
         $processed_content = $shortcodes->process_shortcodes($content, $subscriber);
         
         // Apply custom CSS if set
-        $email_css = get_option('email_css', '');
+        $email_css = subscriber_notifications_get_option('email_css', '');
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
-        
-        // Send email using current mail method
-        $settings = get_option('subscriber_notifications_settings', array());
-        $mail_method = isset($settings['mail_method']) ? $settings['mail_method'] : 'wp_mail';
-        
-        if ($mail_method === 'sendgrid') {
-            $sendgrid = new SubscriberNotifications_SendGrid();
-            $sendgrid->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
-        } else {
-            // Use WordPress default mail
-            $headers = array('Content-Type: text/html; charset=UTF-8');
-            wp_mail($subscriber->email, $processed_subject, $processed_content, $headers);
-        }
+
+        $mailer = new SubscriberNotifications_SendGrid();
+        $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
     }
     
     /**

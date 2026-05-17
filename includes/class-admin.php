@@ -38,7 +38,6 @@ class SubscriberNotifications_Admin {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_action('admin_init', array($this, 'handle_admin_actions'));
         add_action('admin_init', array($this, 'register_settings'));
-        add_action('wp_ajax_test_sendgrid_connection', array($this, 'test_sendgrid_connection'));
         add_action('wp_ajax_test_wp_mail', array($this, 'test_wp_mail'));
         add_action('wp_ajax_get_notification_preview', array($this, 'get_notification_preview'));
         add_action('wp_ajax_send_preview_email', array($this, 'send_preview_email'));
@@ -539,14 +538,9 @@ class SubscriberNotifications_Admin {
         // Get active tab from URL or default to 'general'
         $current_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'general';
         
-        // Define which options belong to each tab
+        // Define which options belong to each tab (short keys; stored as subscriber_notifications_{key}).
         $tab_options = array(
             'general' => array(
-                'mail_method',
-                'sendgrid_api_key',
-                'sendgrid_from_email',
-                'sendgrid_from_name',
-                'rate_limit_hours',
                 'test_email',
                 'delete_data_on_uninstall'
             ),
@@ -587,44 +581,42 @@ class SubscriberNotifications_Admin {
         
         // Process each option in the current tab
         foreach ($options_to_save as $option) {
+            $pref_full = subscriber_notifications_option_name($option);
+
             // Handle checkboxes - they don't send a value when unchecked
             if ($option === 'delete_data_on_uninstall') {
-                $new_value = isset($_POST[$option]) ? 1 : 0;
-                $old_value = get_option($option, 0);
-                
-                // Only update if value actually changed
+                $new_value = isset($_POST[$pref_full]) ? 1 : 0;
+                $old_value = (int) subscriber_notifications_get_option('delete_data_on_uninstall', 0);
+
                 if ($old_value !== $new_value) {
-                    update_option($option, $new_value);
+                    subscriber_notifications_update_option('delete_data_on_uninstall', $new_value);
                 }
                 continue;
             }
-            
-            if (!isset($_POST[$option])) {
+
+            if (!isset($_POST[$pref_full])) {
                 continue;
             }
-            
-            // Get the sanitization callback
+
             $sanitize_callback = 'sanitize_setting_' . $option;
-            if (method_exists($this, $sanitize_callback)) {
-                // Get old value before sanitizing new value
-                $old_value = get_option($option);
-                $new_value = $this->$sanitize_callback($_POST[$option]);
-                
-                // Normalize values for comparison (handle type mismatches)
-                // For integer fields, ensure both are integers
-                if ($option === 'monthly_send_day') {
-                    $old_value = intval($old_value);
-                    $new_value = intval($new_value);
-                }
-                
-                // Only update if value actually changed
-                if ($old_value !== $new_value) {
-                    update_option($option, $new_value);
-                    
-                    // Track which specific scheduling fields changed
-                    if ($current_tab === 'scheduling') {
-                        $scheduling_fields_changed[] = $option;
-                    }
+            if (!method_exists($this, $sanitize_callback)) {
+                continue;
+            }
+
+            $posted = wp_unslash($_POST[$pref_full]);
+            $old_value = subscriber_notifications_get_option($option);
+            $new_value = $this->$sanitize_callback($posted);
+
+            if ($option === 'monthly_send_day') {
+                $old_value = intval($old_value);
+                $new_value = intval($new_value);
+            }
+
+            if ($old_value !== $new_value) {
+                subscriber_notifications_update_option($option, $new_value);
+
+                if ($current_tab === 'scheduling') {
+                    $scheduling_fields_changed[] = $option;
                 }
             }
         }
@@ -695,28 +687,6 @@ class SubscriberNotifications_Admin {
     }
     
     /**
-     * Test SendGrid connection
-     */
-    public function test_sendgrid_connection() {
-        if (!wp_verify_nonce($_POST['nonce'], 'subscriber_notifications_nonce')) {
-            wp_die(__('Security check failed.', 'subscriber-notifications'));
-        }
-        
-        if (!current_user_can('manage_options')) {
-            wp_die(__('You do not have permission to perform this action.', 'subscriber-notifications'));
-        }
-        
-        $sendgrid = new SubscriberNotifications_SendGrid();
-        $result = $sendgrid->test_connection();
-        
-        if ($result['success']) {
-            wp_send_json_success($result['message']);
-        } else {
-            wp_send_json_error($result['message']);
-        }
-    }
-    
-    /**
      * Test WordPress mail
      */
     public function test_wp_mail() {
@@ -759,7 +729,7 @@ class SubscriberNotifications_Admin {
         $test_content .= '</ul>';
         
         // Use the same email template as notifications
-        $css = get_option('email_css', '');
+        $css = subscriber_notifications_get_option('email_css', '');
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $message = $formatter->wrap_content_with_css($test_content, $css, $test_subscriber);
         
@@ -813,7 +783,7 @@ class SubscriberNotifications_Admin {
         $preview_content = $shortcodes->process_shortcodes($notification->content, $sample_subscriber, $notification);
         
         // Apply CSS (default CSS or custom CSS)
-        $email_css = get_option('email_css', '');
+        $email_css = subscriber_notifications_get_option('email_css', '');
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $preview_content = $formatter->wrap_content_with_css($preview_content, $email_css, $sample_subscriber);
         
@@ -1657,10 +1627,6 @@ class SubscriberNotifications_Admin {
         // Define tab groups
         $tabs = array(
             'general' => array(
-                'mail_method',
-                'sendgrid_api_key',
-                'sendgrid_from_email',
-                'sendgrid_from_name',
                 'test_email',
                 'delete_data_on_uninstall'
             ),
@@ -1694,9 +1660,10 @@ class SubscriberNotifications_Admin {
         // Register all settings with sanitization callbacks
         foreach ($tabs as $tab => $options) {
             foreach ($options as $option) {
+                $full_option_name = subscriber_notifications_option_name($option);
                 register_setting(
                     'subscriber_notifications_' . $tab,
-                    $option,
+                    $full_option_name,
                     array($this, 'sanitize_setting_' . $option)
                 );
             }
@@ -1754,38 +1721,6 @@ class SubscriberNotifications_Admin {
      */
     private function add_settings_fields() {
         // General tab fields
-        add_settings_field(
-            'mail_method',
-            __('Mail Delivery Method', 'subscriber-notifications'),
-            array($this, 'render_mail_method_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_general'
-        );
-        
-        add_settings_field(
-            'sendgrid_api_key',
-            __('SendGrid API Key', 'subscriber-notifications'),
-            array($this, 'render_sendgrid_api_key_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_general'
-        );
-        
-        add_settings_field(
-            'sendgrid_from_email',
-            __('From Email', 'subscriber-notifications'),
-            array($this, 'render_sendgrid_from_email_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_general'
-        );
-        
-        add_settings_field(
-            'sendgrid_from_name',
-            __('From Name', 'subscriber-notifications'),
-            array($this, 'render_sendgrid_from_name_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_general'
-        );
-        
         add_settings_field(
             'test_email',
             __('Test Email Address', 'subscriber-notifications'),
@@ -1946,22 +1881,6 @@ class SubscriberNotifications_Admin {
     /**
      * Sanitization callbacks for each setting
      */
-    public function sanitize_setting_mail_method($value) {
-        return sanitize_text_field($value);
-    }
-    
-    public function sanitize_setting_sendgrid_api_key($value) {
-        return sanitize_text_field($value);
-    }
-    
-    public function sanitize_setting_sendgrid_from_email($value) {
-        return sanitize_email($value);
-    }
-    
-    public function sanitize_setting_sendgrid_from_name($value) {
-        return sanitize_text_field($value);
-    }
-    
     public function sanitize_setting_test_email($value) {
         return sanitize_email($value);
     }
@@ -2043,78 +1962,24 @@ class SubscriberNotifications_Admin {
     /**
      * Field render methods - General tab
      */
-    public function render_mail_method_field() {
-        $value = get_option('mail_method', 'sendgrid');
-        ?>
-        <select name="mail_method" id="mail_method">
-            <option value="sendgrid" <?php selected($value, 'sendgrid'); ?>>
-                <?php _e('SendGrid (Recommended)', 'subscriber-notifications'); ?>
-            </option>
-            <option value="wp_mail" <?php selected($value, 'wp_mail'); ?>>
-                <?php _e('WordPress Default Mail', 'subscriber-notifications'); ?>
-            </option>
-        </select>
-        <p class="description">
-            <?php _e('Choose how emails should be delivered. WordPress default mail is useful for testing.', 'subscriber-notifications'); ?>
-        </p>
-        <div id="mail-method-status" class="notice notice-info inline" style="margin-top: 10px;">
-            <p>
-                <strong><?php _e('Current Status:', 'subscriber-notifications'); ?></strong>
-                <span id="current-method-status">
-                    <?php 
-                    if ($value === 'wp_mail') {
-                        _e('Using WordPress Default Mail', 'subscriber-notifications');
-                    } else {
-                        _e('Using SendGrid', 'subscriber-notifications');
-                    }
-                    ?>
-                </span>
-            </p>
-        </div>
-        <?php
-    }
-    
-    public function render_sendgrid_api_key_field() {
-        $value = get_option('sendgrid_api_key', '');
-        ?>
-        <input type="password" id="sendgrid_api_key" name="sendgrid_api_key" value="<?php echo esc_attr($value); ?>" class="regular-text">
-        <p class="description"><?php _e('Your SendGrid API key for sending emails.', 'subscriber-notifications'); ?></p>
-        <button type="button" id="test-sendgrid" class="button"><?php _e('Test Connection', 'subscriber-notifications'); ?></button>
-        <div id="sendgrid-test-result"></div>
-        <?php
-    }
-    
-    public function render_sendgrid_from_email_field() {
-        $value = get_option('sendgrid_from_email', get_option('admin_email'));
-        ?>
-        <input type="email" id="sendgrid_from_email" name="sendgrid_from_email" value="<?php echo esc_attr($value); ?>" class="regular-text" required>
-        <p class="description"><?php _e('Email address to send notifications from.', 'subscriber-notifications'); ?></p>
-        <?php
-    }
-    
-    public function render_sendgrid_from_name_field() {
-        $value = get_option('sendgrid_from_name', get_bloginfo('name'));
-        ?>
-        <input type="text" id="sendgrid_from_name" name="sendgrid_from_name" value="<?php echo esc_attr($value); ?>" class="regular-text" required>
-        <p class="description"><?php _e('Name to send notifications from.', 'subscriber-notifications'); ?></p>
-        <?php
-    }
-    
     public function render_test_email_field() {
-        $value = get_option('test_email', get_option('admin_email'));
+        $name_opt = subscriber_notifications_option_name('test_email');
+        $value = subscriber_notifications_get_option('test_email', get_option('admin_email'));
         ?>
-        <input type="email" id="test_email" name="test_email" value="<?php echo esc_attr($value); ?>" class="regular-text">
+        <input type="email" id="test_email" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text">
         <p class="description"><?php _e('Email address to send test notifications to.', 'subscriber-notifications'); ?></p>
-        <button type="button" id="test-wp-mail" class="button"><?php _e('Test WordPress Mail', 'subscriber-notifications'); ?></button>
+        <p class="description"><?php _e('Emails are sent through WordPress wp_mail() (configure SMTP or a mail plugin as needed).', 'subscriber-notifications'); ?></p>
+        <button type="button" id="test-wp-mail" class="button"><?php _e('Send Test Email', 'subscriber-notifications'); ?></button>
         <div id="wp-mail-test-result"></div>
         <?php
     }
     
     public function render_delete_data_on_uninstall_field() {
-        $value = get_option('delete_data_on_uninstall', 0);
+        $name_opt = subscriber_notifications_option_name('delete_data_on_uninstall');
+        $value = (int) subscriber_notifications_get_option('delete_data_on_uninstall', 0);
         ?>
         <label>
-            <input type="checkbox" name="delete_data_on_uninstall" value="1" <?php checked($value, 1); ?>>
+            <input type="checkbox" name="<?php echo esc_attr($name_opt); ?>" value="1" <?php checked($value, 1); ?>>
             <?php _e('Delete all plugin data (subscribers, logs, settings) when the plugin is uninstalled', 'subscriber-notifications'); ?>
         </label>
         <p class="description">
@@ -2134,20 +1999,22 @@ class SubscriberNotifications_Admin {
      * Field render methods - Email Templates tab
      */
     public function render_welcome_email_subject_field() {
-        $value = get_option('welcome_email_subject', __('Welcome! Your subscription is confirmed', 'subscriber-notifications'));
+        $name_opt = subscriber_notifications_option_name('welcome_email_subject');
+        $value = subscriber_notifications_get_option('welcome_email_subject', __('Welcome! Your subscription is confirmed', 'subscriber-notifications'));
         ?>
-        <input type="text" id="welcome_email_subject" name="welcome_email_subject" value="<?php echo esc_attr($value); ?>" class="large-text" required>
+        <input type="text" id="welcome_email_subject" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" required>
         <p class="description"><?php _e('Subject line for the welcome email sent immediately after subscription.', 'subscriber-notifications'); ?></p>
         <?php
     }
     
     public function render_welcome_email_content_field() {
-        $value = get_option('welcome_email_content', __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
+        $name_opt = subscriber_notifications_option_name('welcome_email_content');
+        $value = subscriber_notifications_get_option('welcome_email_content', __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
         wp_editor(
             wp_unslash($value),
             'welcome_email_content',
             array(
-                'textarea_name' => 'welcome_email_content',
+                'textarea_name' => $name_opt,
                 'media_buttons' => false,
                 'textarea_rows' => 8,
                 'teeny' => false
@@ -2168,20 +2035,22 @@ class SubscriberNotifications_Admin {
     }
     
     public function render_welcome_back_email_subject_field() {
-        $value = get_option('welcome_back_email_subject', __('Welcome back! Your subscription has been reactivated', 'subscriber-notifications'));
+        $name_opt = subscriber_notifications_option_name('welcome_back_email_subject');
+        $value = subscriber_notifications_get_option('welcome_back_email_subject', __('Welcome back! Your subscription has been reactivated', 'subscriber-notifications'));
         ?>
-        <input type="text" id="welcome_back_email_subject" name="welcome_back_email_subject" value="<?php echo esc_attr($value); ?>" class="large-text" required>
+        <input type="text" id="welcome_back_email_subject" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" required>
         <p class="description"><?php _e('Subject line for the welcome back email sent when an inactive subscriber resubscribes.', 'subscriber-notifications'); ?></p>
         <?php
     }
     
     public function render_welcome_back_email_content_field() {
-        $value = get_option('welcome_back_email_content', __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
+        $name_opt = subscriber_notifications_option_name('welcome_back_email_content');
+        $value = subscriber_notifications_get_option('welcome_back_email_content', __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
         wp_editor(
             wp_unslash($value),
             'welcome_back_email_content',
             array(
-                'textarea_name' => 'welcome_back_email_content',
+                'textarea_name' => $name_opt,
                 'media_buttons' => false,
                 'textarea_rows' => 8,
                 'teeny' => false
@@ -2202,20 +2071,22 @@ class SubscriberNotifications_Admin {
     }
     
     public function render_preferences_update_email_subject_field() {
-        $value = get_option('preferences_update_email_subject', __('Your preferences have been updated', 'subscriber-notifications'));
+        $name_opt = subscriber_notifications_option_name('preferences_update_email_subject');
+        $value = subscriber_notifications_get_option('preferences_update_email_subject', __('Your preferences have been updated', 'subscriber-notifications'));
         ?>
-        <input type="text" id="preferences_update_email_subject" name="preferences_update_email_subject" value="<?php echo esc_attr($value); ?>" class="large-text" required>
+        <input type="text" id="preferences_update_email_subject" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" required>
         <p class="description"><?php _e('Subject line for the email sent when a subscriber updates their preferences.', 'subscriber-notifications'); ?></p>
         <?php
     }
     
     public function render_preferences_update_email_content_field() {
-        $value = get_option('preferences_update_email_content', __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('News Categories: [selected_news_categories]', 'subscriber-notifications') . "\n" . __('Meeting Categories: [selected_meeting_categories]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'));
+        $name_opt = subscriber_notifications_option_name('preferences_update_email_content');
+        $value = subscriber_notifications_get_option('preferences_update_email_content', __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('News Categories: [selected_news_categories]', 'subscriber-notifications') . "\n" . __('Meeting Categories: [selected_meeting_categories]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'));
         wp_editor(
             wp_unslash($value),
             'preferences_update_email_content',
             array(
-                'textarea_name' => 'preferences_update_email_content',
+                'textarea_name' => $name_opt,
                 'media_buttons' => false,
                 'textarea_rows' => 8,
                 'teeny' => false
@@ -2239,17 +2110,19 @@ class SubscriberNotifications_Admin {
      * Field render methods - Scheduling tab
      */
     public function render_daily_send_time_field() {
-        $value = get_option('daily_send_time', '09:00');
+        $name_opt = subscriber_notifications_option_name('daily_send_time');
+        $value = subscriber_notifications_get_option('daily_send_time', '09:00');
         ?>
-        <input type="time" name="daily_send_time" id="daily_send_time" value="<?php echo esc_attr($value); ?>" class="regular-text">
+        <input type="time" name="<?php echo esc_attr($name_opt); ?>" id="daily_send_time" value="<?php echo esc_attr($value); ?>" class="regular-text">
         <p class="description"><?php _e('Time to send daily notifications.', 'subscriber-notifications'); ?></p>
         <?php
     }
     
     public function render_weekly_send_day_field() {
-        $value = get_option('weekly_send_day', 'tuesday');
+        $name_opt = subscriber_notifications_option_name('weekly_send_day');
+        $value = subscriber_notifications_get_option('weekly_send_day', 'tuesday');
         ?>
-        <select name="weekly_send_day" id="weekly_send_day">
+        <select name="<?php echo esc_attr($name_opt); ?>" id="weekly_send_day">
             <option value="monday" <?php selected($value, 'monday'); ?>><?php _e('Monday', 'subscriber-notifications'); ?></option>
             <option value="tuesday" <?php selected($value, 'tuesday'); ?>><?php _e('Tuesday', 'subscriber-notifications'); ?></option>
             <option value="wednesday" <?php selected($value, 'wednesday'); ?>><?php _e('Wednesday', 'subscriber-notifications'); ?></option>
@@ -2263,17 +2136,19 @@ class SubscriberNotifications_Admin {
     }
     
     public function render_weekly_send_time_field() {
-        $value = get_option('weekly_send_time', '14:00');
+        $name_opt = subscriber_notifications_option_name('weekly_send_time');
+        $value = subscriber_notifications_get_option('weekly_send_time', '14:00');
         ?>
-        <input type="time" name="weekly_send_time" id="weekly_send_time" value="<?php echo esc_attr($value); ?>" class="regular-text">
+        <input type="time" name="<?php echo esc_attr($name_opt); ?>" id="weekly_send_time" value="<?php echo esc_attr($value); ?>" class="regular-text">
         <p class="description"><?php _e('Time to send weekly notifications.', 'subscriber-notifications'); ?></p>
         <?php
     }
     
     public function render_monthly_send_day_field() {
-        $value = get_option('monthly_send_day', 15);
+        $name_opt = subscriber_notifications_option_name('monthly_send_day');
+        $value = subscriber_notifications_get_option('monthly_send_day', 15);
         ?>
-        <select name="monthly_send_day" id="monthly_send_day">
+        <select name="<?php echo esc_attr($name_opt); ?>" id="monthly_send_day">
             <?php for ($i = 1; $i <= 31; $i++): ?>
                 <option value="<?php echo $i; ?>" <?php selected($value, $i); ?>>
                     <?php 
@@ -2295,9 +2170,10 @@ class SubscriberNotifications_Admin {
     }
     
     public function render_monthly_send_time_field() {
-        $value = get_option('monthly_send_time', '14:00');
+        $name_opt = subscriber_notifications_option_name('monthly_send_time');
+        $value = subscriber_notifications_get_option('monthly_send_time', '14:00');
         ?>
-        <input type="time" name="monthly_send_time" id="monthly_send_time" value="<?php echo esc_attr($value); ?>" class="regular-text">
+        <input type="time" name="<?php echo esc_attr($name_opt); ?>" id="monthly_send_time" value="<?php echo esc_attr($value); ?>" class="regular-text">
         <p class="description"><?php _e('Time to send monthly notifications.', 'subscriber-notifications'); ?></p>
         <?php
     }
@@ -2306,17 +2182,19 @@ class SubscriberNotifications_Admin {
      * Field render methods - Security tab
      */
     public function render_captcha_site_key_field() {
-        $value = get_option('captcha_site_key', '');
+        $name_opt = subscriber_notifications_option_name('captcha_site_key');
+        $value = subscriber_notifications_get_option('captcha_site_key', '');
         ?>
-        <input type="text" id="captcha_site_key" name="captcha_site_key" value="<?php echo esc_attr($value); ?>" class="regular-text">
+        <input type="text" id="captcha_site_key" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text">
         <p class="description"><?php _e('Your Google reCAPTCHA site key.', 'subscriber-notifications'); ?></p>
         <?php
     }
     
     public function render_captcha_secret_key_field() {
-        $value = get_option('captcha_secret_key', '');
+        $name_opt = subscriber_notifications_option_name('captcha_secret_key');
+        $value = subscriber_notifications_get_option('captcha_secret_key', '');
         ?>
-        <input type="password" id="captcha_secret_key" name="captcha_secret_key" value="<?php echo esc_attr($value); ?>" class="regular-text">
+        <input type="password" id="captcha_secret_key" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text">
         <p class="description"><?php _e('Your Google reCAPTCHA secret key.', 'subscriber-notifications'); ?></p>
         <?php
     }
@@ -2325,14 +2203,15 @@ class SubscriberNotifications_Admin {
      * Field render methods - Email Design tab
      */
     public function render_global_header_logo_field() {
-        $header_logo_id = get_option('global_header_logo', '');
+        $name_opt = subscriber_notifications_option_name('global_header_logo');
+        $header_logo_id = subscriber_notifications_get_option('global_header_logo', '');
         $header_logo_url = '';
         if ($header_logo_id) {
             $header_logo_url = wp_get_attachment_url($header_logo_id);
         }
         ?>
         <div class="header-logo-upload">
-            <input type="hidden" id="global_header_logo" name="global_header_logo" value="<?php echo esc_attr($header_logo_id); ?>" />
+            <input type="hidden" id="global_header_logo" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($header_logo_id); ?>" />
             <div class="logo-preview" style="margin-bottom: 10px;">
                 <?php if ($header_logo_url): ?>
                     <img src="<?php echo esc_url($header_logo_url); ?>" style="max-width: 200px; max-height: 100px; border: 1px solid #ddd;" />
@@ -2353,12 +2232,13 @@ class SubscriberNotifications_Admin {
     }
     
     public function render_global_header_content_field() {
-        $value = get_option('global_header_content', '');
+        $name_opt = subscriber_notifications_option_name('global_header_content');
+        $value = subscriber_notifications_get_option('global_header_content', '');
         wp_editor(
             wp_unslash($value),
             'global_header_content',
             array(
-                'textarea_name' => 'global_header_content',
+                'textarea_name' => $name_opt,
                 'media_buttons' => false,
                 'textarea_rows' => 6,
                 'teeny' => false
@@ -2373,12 +2253,13 @@ class SubscriberNotifications_Admin {
     }
     
     public function render_global_footer_field() {
-        $value = get_option('global_footer', '');
+        $name_opt = subscriber_notifications_option_name('global_footer');
+        $value = subscriber_notifications_get_option('global_footer', '');
         wp_editor(
             wp_unslash($value),
             'global_footer',
             array(
-                'textarea_name' => 'global_footer',
+                'textarea_name' => $name_opt,
                 'media_buttons' => false,
                 'textarea_rows' => 8,
                 'teeny' => false
@@ -2394,9 +2275,10 @@ class SubscriberNotifications_Admin {
     }
     
     public function render_email_css_field() {
-        $value = get_option('email_css', '');
+        $name_opt = subscriber_notifications_option_name('email_css');
+        $value = subscriber_notifications_get_option('email_css', '');
         ?>
-        <textarea id="email_css" name="email_css" rows="10" class="large-text code" style="font-family: monospace;"><?php echo esc_textarea($value); ?></textarea>
+        <textarea id="email_css" name="<?php echo esc_attr($name_opt); ?>" rows="10" class="large-text code" style="font-family: monospace;"><?php echo esc_textarea($value); ?></textarea>
         <p class="description">
             <?php _e('Custom CSS styles for email notifications. These styles will be applied to all notification emails.', 'subscriber-notifications'); ?><br>
             <strong><?php _e('Note:', 'subscriber-notifications'); ?></strong> <?php _e('The plugin includes default styling. Leave this field empty to use the default styles, or add custom CSS to override specific elements.', 'subscriber-notifications'); ?><br>
@@ -2594,23 +2476,13 @@ class SubscriberNotifications_Admin {
             $processed_content = $shortcodes->process_shortcodes($content, $sample_subscriber);
             
             // Apply CSS (default CSS or custom CSS)
-            $email_css = get_option('email_css', '');
+            $email_css = subscriber_notifications_get_option('email_css', '');
             $formatter = SubscriberNotifications_Email_Formatter::get_instance();
             $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $sample_subscriber);
-            
-            // Send email using current mail method
-            $settings = get_option('subscriber_notifications_settings', array());
-            $mail_method = isset($settings['mail_method']) ? $settings['mail_method'] : 'wp_mail';
-            
-            if ($mail_method === 'sendgrid') {
-                $sendgrid = new SubscriberNotifications_SendGrid();
-                $result = $sendgrid->send_email($email, $processed_subject, $processed_content, 0, 0);
-            } else {
-                // Use WordPress default mail
-                $headers = array('Content-Type: text/html; charset=UTF-8');
-                $result = wp_mail($email, $processed_subject, $processed_content, $headers);
-            }
-            
+
+            $mailer = new SubscriberNotifications_SendGrid();
+            $result = $mailer->send_email($email, $processed_subject, $processed_content, 0, 0);
+
             if ($result) {
                 wp_send_json_success(__('Preview email sent successfully!', 'subscriber-notifications'));
             } else {
@@ -2798,7 +2670,7 @@ class SubscriberNotifications_Admin {
         
         switch ($frequency) {
             case 'daily':
-                $daily_time = get_option('daily_send_time', '09:00');
+                $daily_time = subscriber_notifications_get_option('daily_send_time', '09:00');
                 $timezone = wp_timezone();
                 // Use timezone-aware method to get today's date
                 $now = new DateTime('@' . $current_time);
@@ -2818,8 +2690,8 @@ class SubscriberNotifications_Admin {
                 }
                 
             case 'weekly':
-                $weekly_time = get_option('weekly_send_time', '14:00');
-                $weekly_day = get_option('weekly_send_day', 'tuesday');
+                $weekly_time = subscriber_notifications_get_option('weekly_send_time', '14:00');
+                $weekly_day = subscriber_notifications_get_option('weekly_send_day', 'tuesday');
                 
                 $day_numbers = array(
                     'sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3,
@@ -2855,8 +2727,8 @@ class SubscriberNotifications_Admin {
                 return $next_date_datetime->format('Y-m-d H:i:s');
                 
             case 'monthly':
-                $monthly_day = get_option('monthly_send_day', 15);
-                $monthly_time = get_option('monthly_send_time', '14:00');
+                $monthly_day = subscriber_notifications_get_option('monthly_send_day', 15);
+                $monthly_time = subscriber_notifications_get_option('monthly_send_time', '14:00');
                 
                 // Use timezone-aware method to get current month/year
                 $timezone = wp_timezone();

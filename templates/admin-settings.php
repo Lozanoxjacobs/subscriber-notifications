@@ -32,42 +32,9 @@ if (!defined('ABSPATH')) {
         <!-- General Tab -->
         <?php if ($active_tab == 'general'): ?>
             <?php settings_fields('subscriber_notifications_general'); ?>
-            <table class="form-table">
-                <tr>
-                    <th scope="row">
-                        <label for="mail_method"><?php _e('Mail Delivery Method', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_mail_method_field(); ?>
-                    </td>
-                </tr>
-            </table>
-            <table class="form-table" id="sendgrid-settings">
-                <tr>
-                    <th scope="row">
-                        <label for="sendgrid_api_key"><?php _e('SendGrid API Key', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_sendgrid_api_key_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="sendgrid_from_email"><?php _e('From Email', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_sendgrid_from_email_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="sendgrid_from_name"><?php _e('From Name', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_sendgrid_from_name_field(); ?>
-                    </td>
-                </tr>
-            </table>
+            <div class="notice notice-info inline" style="margin: 15px 0;">
+                <p><?php esc_html_e('Outgoing mail uses WordPress wp_mail(). Configure your site email (SMTP plugin, hosts mail, etc.) as needed.', 'subscriber-notifications'); ?></p>
+            </div>
             <table class="form-table">
                 <tr>
                     <th scope="row">
@@ -260,53 +227,7 @@ if (!defined('ABSPATH')) {
 
 <script>
 jQuery(document).ready(function($) {
-    // Handle mail method change
-    $('#mail_method').on('change', function() {
-        var method = $(this).val();
-        var $status = $('#current-method-status');
-        var $sendgridSettings = $('#sendgrid-settings');
-        
-        if (method === 'wp_mail') {
-            $status.text('<?php _e('Using WordPress Default Mail', 'subscriber-notifications'); ?>');
-            $sendgridSettings.hide();
-        } else {
-            $status.text('<?php _e('Using SendGrid', 'subscriber-notifications'); ?>');
-            $sendgridSettings.show();
-        }
-    });
-    
-    // Test SendGrid connection
-    $('#test-sendgrid').on('click', function() {
-        var $button = $(this);
-        var $result = $('#sendgrid-test-result');
-        
-        $button.prop('disabled', true).text('Testing...');
-        $result.html('');
-        
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'test_sendgrid_connection',
-                nonce: '<?php echo wp_create_nonce('test_sendgrid'); ?>'
-            },
-            success: function(response) {
-                if (response.success) {
-                    $result.html('<div class="notice notice-success inline"><p>' + response.data + '</p></div>');
-                } else {
-                    $result.html('<div class="notice notice-error inline"><p>' + response.data + '</p></div>');
-                }
-            },
-            error: function() {
-                $result.html('<div class="notice notice-error inline"><p>Connection test failed.</p></div>');
-            },
-            complete: function() {
-                $button.prop('disabled', false).text('Test Connection');
-            }
-        });
-    });
-    
-    // Test WordPress mail
+    // Test WordPress mail (wp_mail via plugin mail helper)
     $('#test-wp-mail').on('click', function() {
         var $button = $(this);
         var $result = $('#wp-mail-test-result');
@@ -339,13 +260,10 @@ jQuery(document).ready(function($) {
                 $result.html('<div class="notice notice-error inline"><p>WordPress mail test failed.</p></div>');
             },
             complete: function() {
-                $button.prop('disabled', false).text('Test WordPress Mail');
+                $button.prop('disabled', false).text('<?php echo esc_js(__('Send Test Email', 'subscriber-notifications')); ?>');
             }
         });
     });
-    
-    // Initialize on page load
-    $('#mail_method').trigger('change');
     
     // Media uploader for header logo
     var mediaUploader;

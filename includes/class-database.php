@@ -243,11 +243,11 @@ class SubscriberNotifications_Database {
      * Auto-populate global footer if empty
      */
     private function migrate_auto_populate_global_footer() {
-        $global_footer = get_option('global_footer', '');
+        $global_footer = subscriber_notifications_get_option('global_footer', '');
         
         if (empty($global_footer)) {
             $default_footer = '[site_title] | [manage_preferences_link]';
-            update_option('global_footer', $default_footer);
+            subscriber_notifications_update_option('global_footer', $default_footer);
         }
     }
     
@@ -418,7 +418,7 @@ class SubscriberNotifications_Database {
         
         switch ($frequency) {
             case 'daily':
-                $daily_time = get_option('daily_send_time', '09:00');
+                $daily_time = subscriber_notifications_get_option('daily_send_time', '09:00');
                 // Use timezone-aware method to get today's date
                 $now = new DateTime('@' . $current_time);
                 $now->setTimezone($timezone);
@@ -434,8 +434,8 @@ class SubscriberNotifications_Database {
                 }
                 
             case 'weekly':
-                $weekly_time = get_option('weekly_send_time', '14:00');
-                $weekly_day = get_option('weekly_send_day', 'tuesday');
+                $weekly_time = subscriber_notifications_get_option('weekly_send_time', '14:00');
+                $weekly_day = subscriber_notifications_get_option('weekly_send_day', 'tuesday');
                 
                 $day_numbers = array(
                     'sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3,
@@ -466,8 +466,8 @@ class SubscriberNotifications_Database {
                 return $next_date_datetime->format('Y-m-d H:i:s');
                 
             case 'monthly':
-                $monthly_day = get_option('monthly_send_day', 15);
-                $monthly_time = get_option('monthly_send_time', '14:00');
+                $monthly_day = subscriber_notifications_get_option('monthly_send_day', 15);
+                $monthly_time = subscriber_notifications_get_option('monthly_send_time', '14:00');
                 
                 // Use timezone-aware method to get current month/year
                 $now = new DateTime('@' . $current_time);
@@ -605,6 +605,16 @@ class SubscriberNotifications_Database {
         );
         
         $args = wp_parse_args($args, $defaults);
+
+        $orderby_whitelist = array(
+            'date_added' => 'date_added',
+            'email'      => 'email',
+            'name'       => 'name',
+            'status'     => 'status',
+            'id'         => 'id',
+        );
+        $orderby_sql = isset($orderby_whitelist[ $args['orderby'] ]) ? $orderby_whitelist[ $args['orderby'] ] : 'date_added';
+        $order_sql   = 'ASC' === strtoupper((string) $args['order']) ? 'ASC' : 'DESC';
         
         $where_conditions = array("1=1");
         $where_values = array();
@@ -623,12 +633,15 @@ class SubscriberNotifications_Database {
         
         $where_clause = implode(' AND ', $where_conditions);
         
-        $sql = $this->wpdb->prepare("
+        $sql = $this->wpdb->prepare(
+            "
             SELECT * FROM {$this->subscribers_table} 
             WHERE {$where_clause} 
-            ORDER BY {$args['orderby']} {$args['order']} 
+            ORDER BY {$orderby_sql} {$order_sql} 
             LIMIT %d OFFSET %d
-        ", array_merge($where_values, array($args['limit'], $args['offset'])));
+            ",
+            array_merge($where_values, array($args['limit'], $args['offset']))
+        );
         
         return $this->wpdb->get_results($sql);
     }
@@ -731,14 +744,17 @@ class SubscriberNotifications_Database {
         
         foreach ($data as $key => $value) {
             switch ($key) {
-                case 'name':
                 case 'email':
+                    $sanitized_data[ $key ] = sanitize_email((string) $value);
+                    $format[] = '%s';
+                    break;
+                case 'name':
                 case 'news_categories':
                 case 'meeting_categories':
                 case 'frequency':
                 case 'status':
                 case 'management_token':
-                    $sanitized_data[$key] = sanitize_text_field($value);
+                    $sanitized_data[ $key ] = sanitize_text_field($value);
                     $format[] = '%s';
                     break;
                 case 'date_verified':

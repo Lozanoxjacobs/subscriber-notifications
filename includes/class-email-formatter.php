@@ -498,8 +498,8 @@ class SubscriberNotifications_Email_Formatter {
      * @return string Header HTML
      */
     public function get_global_header_content($subscriber = null): string {
-        $header_logo_id = get_option('global_header_logo', '');
-        $header_content = get_option('global_header_content', '');
+        $header_logo_id = subscriber_notifications_get_option('global_header_logo', '');
+        $header_content = subscriber_notifications_get_option('global_header_content', '');
         
         $logo_html = '';
         if ($header_logo_id) {
@@ -552,7 +552,7 @@ class SubscriberNotifications_Email_Formatter {
      * @return string Footer HTML
      */
     public function get_global_footer_content($subscriber = null): string {
-        $global_footer = get_option('global_footer', '');
+        $global_footer = subscriber_notifications_get_option('global_footer', '');
         
         if (empty($global_footer)) {
             return '';

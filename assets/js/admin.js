@@ -178,37 +178,6 @@ jQuery(document).ready(function($) {
         $('#notification-options').hide();
     });
     
-    // Handle SendGrid connection test
-    $('#test-sendgrid').on('click', function() {
-        var $button = $(this);
-        var $result = $('#sendgrid-test-result');
-        
-        $button.prop('disabled', true).text('Testing...');
-        $result.html('<p>Testing connection...</p>');
-        
-        $.ajax({
-            url: subscriberNotifications.ajaxUrl,
-            type: 'POST',
-            data: {
-                action: 'test_sendgrid_connection',
-                nonce: subscriberNotifications.nonce
-            },
-            success: function(response) {
-                if (response.success) {
-                    $result.html('<div class="notice notice-success inline"><p>' + response.data + '</p></div>');
-                } else {
-                    $result.html('<div class="notice notice-error inline"><p>' + response.data + '</p></div>');
-                }
-            },
-            error: function(xhr, status, error) {
-                $result.html('<div class="notice notice-error inline"><p>Connection test failed: ' + error + '</p></div>');
-            },
-            complete: function() {
-                $button.prop('disabled', false).text('Test Connection');
-            }
-        });
-    });
-    
     // Auto-save form data
     $('form').on('input change', 'input, textarea, select', function() {
         var $form = $(this).closest('form');

@@ -8,7 +8,7 @@ A comprehensive WordPress plugin for managing subscriber notifications with imme
 - **Subscriber Registration Form** - Frontend form with CAPTCHA protection
 - **Immediate Subscription** - Subscribers are activated immediately upon form submission
 - **Notification Management** - WYSIWYG editor for creating notifications
-- **Flexible Email Delivery** - SendGrid integration with WordPress mail fallback
+- **Email Delivery** - Sends through WordPress `wp_mail()` (use your SMTP or mail plugin); open/click logging preserved
 - **Smart Scheduling System** - Daily, weekly and monthly email scheduling
 - **Recurring Notifications** - Send notifications repeatedly based on frequency schedule
 - **Analytics Tracking** - Email open/click tracking
@@ -22,10 +22,8 @@ A comprehensive WordPress plugin for managing subscriber notifications with imme
 - **Subscriber Management** - View, edit, activate/deactivate subscribers
 - **Notification Creation** - Rich text editor with shortcodes and live preview
 - **Email Logs** - Track all email activity with detailed analytics
-- **Settings** - Configure email delivery, scheduling, CAPTCHA, templates, global footer, and custom CSS
-- **Mail Method Selection** - Choose between SendGrid and WordPress default mail
-- **Email Scheduling** - Set daily, weekly and monthly email delivery times
-- **Test Functionality** - Test both SendGrid and WordPress mail delivery
+- **Settings** - Configure scheduling, CAPTCHA, templates, global footer, and custom CSS
+- **Test email** - Send a test message to verify mail delivery (`wp_mail()`)
 - **Migration Tools** - Convert existing notifications to recurring format
 
 ### Shortcodes
@@ -61,23 +59,14 @@ The `[news_feed]` and `[meetings_feed]` shortcodes automatically show content ba
 - PHP 7.4+
 - MySQL 5.6+ (or MariaDB equivalent)
 - The Events Calendar plugin (for meeting categories)
-- SendGrid account (recommended, optional)
 - Google reCAPTCHA v2 account (optional)
-- **Tested up to WordPress 6.4**
+- **Tested up to WordPress 6.8**
 
 ## Configuration
 
 ### Email Delivery Setup
-1. **Choose Mail Method** - Select SendGrid (recommended) or WordPress default mail
-2. **SendGrid Setup** (if using SendGrid):
-   - Get your SendGrid API key from your SendGrid account
-   - Enter the API key in Settings > SendGrid API Key
-   - Configure your from email and name
-   - Test the connection
-3. **WordPress Mail** (if using WordPress default):
-   - No additional setup required
-   - Uses your server's mail configuration
-   - Test functionality available
+1. **WordPress mail** - All plugin emails go through `wp_mail()`. Configure **SMTP** or a mail plugin if your host does not send mail reliably.
+2. **Test** - In **Notifications > Settings > General**, enter a test address and use **Send Test Email** to verify delivery.
 
 ### Email Scheduling
 1. **Daily Emails** - Set time for daily email delivery (e.g., "9:00 AM")
@@ -363,10 +352,9 @@ To customize for your theme's sticky header height:
 ### Common Issues
 
 1. **Emails not sending**
-   - Check mail delivery method in Settings
-   - If using SendGrid: verify API key and test connection
-   - If using WordPress mail: test WordPress mail functionality
-   - Check server mail configuration
+   - Confirm `wp_mail()` works on this site (SMTP plugin or host mail logs)
+   - Use **Send Test Email** under Settings > General
+   - Check server mail configuration or outbound SMTP blocking
 
 2. **Scheduled emails not working**
    - Verify WordPress cron is functioning
@@ -406,6 +394,16 @@ For support and feature requests, please contact the plugin developer.
 
 ## Changelog
 
+### Version 2.7.0
+
+- **Mail delivery:** All outbound mail uses **`wp_mail()`** with one HTML/logging path (`SubscriberNotifications_SendGrid` wraps core mail only; native SendGrid REST and plugin-stored API/from settings removed). Configure transport (SMTP, SendGrid WP plugin, etc.) site-wide.
+- **Prefixed options:** Settings use **`subscriber_notifications_*`** keys; one-time migration copies legacy flat keys then removes obsolete transport keys (`mail_method`, legacy SendGrid options, bundled settings array).
+- **Admin:** General settings simplified (test email, delete-on-uninstall); scheduling/templates/security/design read/write prefixed options.
+- **Frontend:** Conditional enqueue for form assets; **`frequency`** allowlist (`daily` | `weekly` | `monthly`); subscription AJAX nonce failures return JSON errors; transactional mail uses unified sender.
+- **Database:** Subscriber email updates use **`sanitize_email()`**; **`get_subscribers()`** whitelist for `orderby` / `ASC` | `DESC`.
+- **Notifications class:** Removed unused instant-send helpers (`send_update_notification`, category SQL helper, individual send path).
+- **Docs / compatibility:** README aligned with **`wp_mail()`**-only behavior; tested up to **WordPress 6.8**.
+
 ### Version 2.6.0
 
 * **GitHub Repository**: Updated plugin URI to point to GitHub repository
@@ -439,7 +437,7 @@ For support and feature requests, please contact the plugin developer.
 ### Version 1.0.0
 - Initial release
 - Complete subscriber management system
-- Flexible email delivery (SendGrid + WordPress mail)
+- Email delivery via WordPress `wp_mail()` with logging
 - Smart scheduling system (weekly/monthly)
 - Notification management (view, edit, cancel, resend, delete)
 - Analytics tracking

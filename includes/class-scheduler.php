@@ -85,12 +85,12 @@ class SubscriberNotifications_Scheduler {
         
         switch ($frequency) {
             case 'daily':
-                $daily_time = get_option('daily_send_time', '09:00');
+                $daily_time = subscriber_notifications_get_option('daily_send_time', '09:00');
                 return $current_time >= $daily_time;
                 
             case 'weekly':
-                $weekly_day = get_option('weekly_send_day', 'tuesday');
-                $weekly_time = get_option('weekly_send_time', '14:00');
+                $weekly_day = subscriber_notifications_get_option('weekly_send_day', 'tuesday');
+                $weekly_time = subscriber_notifications_get_option('weekly_send_time', '14:00');
                 
                 // Convert day name to number (0 = Sunday, 1 = Monday, etc.)
                 $day_numbers = array(
@@ -102,8 +102,8 @@ class SubscriberNotifications_Scheduler {
                 return ($current_day == $target_day) && ($current_time >= $weekly_time);
                 
             case 'monthly':
-                $monthly_day = get_option('monthly_send_day', 15);
-                $monthly_time = get_option('monthly_send_time', '14:00');
+                $monthly_day = subscriber_notifications_get_option('monthly_send_day', 15);
+                $monthly_time = subscriber_notifications_get_option('monthly_send_time', '14:00');
                 
                 // Handle months with fewer days (e.g., if set to 31st but month only has 30 days)
                 // Use timezone-aware method to get days in month
@@ -177,7 +177,7 @@ class SubscriberNotifications_Scheduler {
         $content = $shortcodes->process_shortcodes($notification->content, $subscriber, $notification);
         
         // Wrap content with CSS (default CSS or custom CSS)
-        $email_css = get_option('email_css', '');
+        $email_css = subscriber_notifications_get_option('email_css', '');
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $content = $formatter->wrap_content_with_css($content, $email_css, $subscriber);
         
@@ -783,7 +783,7 @@ class SubscriberNotifications_Scheduler {
         
         switch ($frequency) {
             case 'daily':
-                $daily_time = get_option('daily_send_time', '09:00');
+                $daily_time = subscriber_notifications_get_option('daily_send_time', '09:00');
                 $timezone = wp_timezone();
                 $tomorrow = new DateTime('tomorrow', $timezone);
                 $tomorrow->setTime(
@@ -793,8 +793,8 @@ class SubscriberNotifications_Scheduler {
                 return $tomorrow->format('Y-m-d H:i:s');
                 
             case 'weekly':
-                $weekly_time = get_option('weekly_send_time', '14:00');
-                $weekly_day = get_option('weekly_send_day', 'tuesday');
+                $weekly_time = subscriber_notifications_get_option('weekly_send_time', '14:00');
+                $weekly_day = subscriber_notifications_get_option('weekly_send_day', 'tuesday');
                 
                 $day_numbers = array(
                     'sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3,
@@ -822,8 +822,8 @@ class SubscriberNotifications_Scheduler {
                 return $next_date_datetime->format('Y-m-d H:i:s');
                 
             case 'monthly':
-                $monthly_day = get_option('monthly_send_day', 15);
-                $monthly_time = get_option('monthly_send_time', '14:00');
+                $monthly_day = subscriber_notifications_get_option('monthly_send_day', 15);
+                $monthly_time = subscriber_notifications_get_option('monthly_send_time', '14:00');
                 
                 // Use timezone-aware method to get current month/year
                 $timezone = wp_timezone();
