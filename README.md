@@ -402,6 +402,12 @@ For support and feature requests, please contact your site administrator or the 
 
 ## Changelog
 
+### Version 3.1.3
+
+- **Create notification** — after a successful save, you are taken to the edit screen for that notification (same pattern as creating a post), with a success notice
+- **Required notification fields** — Target Content (at least one term) and Target Frequency are required on create and edit, in addition to notification title and email subject
+- **Form errors** — if validation fails, entered values stay on the form (title, subject, content, targets, and frequency) so nothing is lost while you fix the issue
+
 ### Version 3.1.2
 
 - **Subscription form term lists** — subscribe, preferences, and notification target pickers use a single-column checklist. Hierarchical taxonomies show a nested tree (A–Z at each level); non-hierarchical taxonomies show a flat A–Z list. Post type sections start collapsed

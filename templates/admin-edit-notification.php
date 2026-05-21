@@ -10,6 +10,8 @@ if (!defined('ABSPATH')) {
 
 <div class="wrap">
     <h1><?php _e('Edit Notification', 'subscriber-notifications'); ?></h1>
+
+    <?php settings_errors('subscriber_notifications'); ?>
     
     <?php if ($notification->status === 'sent'): ?>
         <div class="notice notice-warning">
@@ -27,7 +29,7 @@ if (!defined('ABSPATH')) {
         </div>
     <?php endif; ?>
     
-    <form method="post" action="">
+    <form method="post" action="" class="notification-form" id="edit-notification-form">
         <?php wp_nonce_field('update_notification', 'notification_nonce'); ?>
         <input type="hidden" name="notification_id" value="<?php echo $notification->id; ?>">
         
@@ -87,7 +89,7 @@ if (!defined('ABSPATH')) {
             </tr>
 
             <tr>
-                <th scope="row"><?php esc_html_e('Target Content', 'subscriber-notifications'); ?></th>
+                <th scope="row"><?php esc_html_e('Target Content', 'subscriber-notifications'); ?> <span class="required">*</span></th>
                 <td>
                     <?php
                     if (empty($is_configured)) {
@@ -102,7 +104,7 @@ if (!defined('ABSPATH')) {
             
             <tr>
                 <th scope="row">
-                    <label for="frequency_target"><?php _e('Target Frequency', 'subscriber-notifications'); ?></label>
+                    <label for="frequency_target"><?php _e('Target Frequency', 'subscriber-notifications'); ?> <span class="required">*</span></label>
                 </th>
                 <td>
                     <select id="frequency_target" name="frequency_target" required>

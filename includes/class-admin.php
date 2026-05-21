@@ -404,30 +404,23 @@ class SubscriberNotifications_Admin {
             wp_die(__('Notification not found.', 'subscriber-notifications'));
         }
         
-        $title   = sanitize_text_field($_POST['notification_title']);
-        $subject = sanitize_textarea_field($_POST['notification_subject']);
-        $content = wp_kses_post($_POST['notification_content']);
-
-        $raw_targets      = isset($_POST['target_preferences']) ? wp_unslash($_POST['target_preferences']) : array();
-        $target_prefs     = SubscriberNotifications_Preferences::sanitize_from_post($raw_targets);
-        $target_prefs     = SubscriberNotifications_Preferences::prune_to_allowed_terms($target_prefs);
-        $frequency_target = sanitize_text_field($_POST['frequency_target']);
-        $is_recurring     = isset($_POST['is_recurring']) ? 1 : 0;
-
-        if (!SubscriberNotifications_Preferences::has_at_least_one_term($target_prefs)) {
-            add_action('admin_notices', function () {
-                echo '<div class="notice notice-error"><p>' . esc_html__('Please select at least one target term before saving the notification.', 'subscriber-notifications') . '</p></div>';
-            });
+        $form = $this->parse_notification_form_from_request();
+        $errors = $this->validate_notification_form($form);
+        if ($errors->has_errors()) {
+            $this->register_notification_form_errors($errors);
             return;
         }
 
-        $target_prefs_json = SubscriberNotifications_Preferences::encode($target_prefs);
+        $target_prefs_json = SubscriberNotifications_Preferences::encode($form['target_prefs']);
+        $frequency_target  = $form['frequency_target'];
+        $is_recurring      = (int) $form['is_recurring'];
+        $allowed_freqs     = $this->get_allowed_notification_frequencies();
 
         // Determine next_send_date based on current state and new settings
         $next_send_date = $current_notification->next_send_date; // Preserve by default
         
         // Only recalculate if notification is pending and will be recurring
-        if ($current_notification->status === 'pending' && $is_recurring && in_array($frequency_target, ['daily', 'weekly', 'monthly'])) {
+        if ($current_notification->status === 'pending' && $is_recurring && in_array($frequency_target, $allowed_freqs, true)) {
             // Determine if recalculation is needed
             $should_recalculate = false;
             
@@ -475,9 +468,9 @@ class SubscriberNotifications_Admin {
         $result = $wpdb->update(
             $wpdb->prefix . 'subscriber_notifications_queue',
             array(
-                'title'              => $title,
-                'subject'            => $subject,
-                'content'            => $content,
+                'title'              => $form['title'],
+                'subject'            => $form['subject'],
+                'content'            => $form['content'],
                 'target_preferences' => $target_prefs_json,
                 'frequency_target'   => $frequency_target,
                 'is_recurring'       => $is_recurring,
@@ -500,59 +493,234 @@ class SubscriberNotifications_Admin {
     }
     
     /**
-     * Handle notification creation
+     * Handle notification creation (form POST). Redirects to the edit screen on success.
      */
     private function handle_notification_creation() {
         if (!wp_verify_nonce($_POST['notification_nonce'], 'create_notification')) {
             wp_die(__('Security check failed.', 'subscriber-notifications'));
         }
-        
-        $title   = sanitize_text_field($_POST['notification_title']);
-        $subject = sanitize_textarea_field($_POST['notification_subject']);
-        $content = wp_kses_post($_POST['notification_content']);
 
-        $raw_targets      = isset($_POST['target_preferences']) ? wp_unslash($_POST['target_preferences']) : array();
-        $target_prefs     = SubscriberNotifications_Preferences::sanitize_from_post($raw_targets);
-        $target_prefs     = SubscriberNotifications_Preferences::prune_to_allowed_terms($target_prefs);
-        $frequency_target = sanitize_text_field($_POST['frequency_target']);
-        $is_recurring     = isset($_POST['is_recurring']) ? 1 : 0;
-
-        if (!SubscriberNotifications_Preferences::has_at_least_one_term($target_prefs)) {
-            add_action('admin_notices', function () {
-                echo '<div class="notice notice-error"><p>' . esc_html__('Please select at least one target term before creating the notification.', 'subscriber-notifications') . '</p></div>';
-            });
-            return;
+        $result = $this->create_notification_from_post();
+        if (is_int($result) && $result > 0) {
+            wp_safe_redirect($this->get_notification_edit_url($result, 'created'));
+            exit;
         }
 
-        $target_prefs_json = SubscriberNotifications_Preferences::encode($target_prefs);
+        if ($result === false) {
+            add_settings_error(
+                'subscriber_notifications',
+                'notification_create_failed',
+                __('Failed to create notification.', 'subscriber-notifications'),
+                'error'
+            );
+        }
+    }
 
-        $next_send_date = null;
-        if ($is_recurring && in_array($frequency_target, ['daily', 'weekly', 'monthly'])) {
-            $next_send_date = $this->calculate_next_send_date($frequency_target);
+    /**
+     * Valid target frequency values for notifications.
+     *
+     * @return string[]
+     */
+    private function get_allowed_notification_frequencies() {
+        return array('daily', 'weekly', 'monthly');
+    }
+
+    /**
+     * Default notification form values for create screen.
+     *
+     * @return array
+     */
+    private function get_empty_notification_form() {
+        return array(
+            'title'              => '',
+            'subject'            => '',
+            'content'            => '',
+            'frequency_target'   => '',
+            'is_recurring'       => 0,
+            'target_prefs'       => array(),
+            'selected_targets'   => array(),
+        );
+    }
+
+    /**
+     * Parse and sanitize notification form fields from $_POST.
+     *
+     * @return array
+     */
+    private function parse_notification_form_from_request() {
+        $raw_targets  = isset($_POST['target_preferences']) ? wp_unslash($_POST['target_preferences']) : array();
+        $target_prefs = SubscriberNotifications_Preferences::sanitize_from_post($raw_targets);
+        $target_prefs = SubscriberNotifications_Preferences::prune_to_allowed_terms($target_prefs);
+
+        $frequency_target = isset($_POST['frequency_target']) ? sanitize_text_field(wp_unslash($_POST['frequency_target'])) : '';
+        if (!in_array($frequency_target, $this->get_allowed_notification_frequencies(), true)) {
+            $frequency_target = '';
+        }
+
+        return array(
+            'title'            => isset($_POST['notification_title']) ? sanitize_text_field(wp_unslash($_POST['notification_title'])) : '',
+            'subject'          => isset($_POST['notification_subject']) ? sanitize_textarea_field(wp_unslash($_POST['notification_subject'])) : '',
+            'content'          => isset($_POST['notification_content']) ? wp_kses_post(wp_unslash($_POST['notification_content'])) : '',
+            'frequency_target' => $frequency_target,
+            'is_recurring'     => isset($_POST['is_recurring']) ? 1 : 0,
+            'target_prefs'     => $target_prefs,
+            'selected_targets' => $target_prefs,
+        );
+    }
+
+    /**
+     * Validate parsed notification form data.
+     *
+     * @param array $form Parsed form from {@see parse_notification_form_from_request()}.
+     * @return WP_Error Empty when valid.
+     */
+    private function validate_notification_form(array $form) {
+        $errors = new WP_Error();
+
+        if (!SubscriberNotifications_Preferences::has_at_least_one_term($form['target_prefs'])) {
+            $errors->add(
+                'target_prefs',
+                __('Please select at least one target term in Target Content.', 'subscriber-notifications')
+            );
+        }
+
+        if (!in_array($form['frequency_target'], $this->get_allowed_notification_frequencies(), true)) {
+            $errors->add(
+                'frequency_target',
+                __('Please select a Target Frequency (Daily, Weekly, or Monthly).', 'subscriber-notifications')
+            );
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Queue validation errors for display via settings_errors() in templates.
+     *
+     * @param WP_Error $errors Validation errors.
+     */
+    private function register_notification_form_errors(WP_Error $errors) {
+        foreach ($errors->get_error_codes() as $code) {
+            add_settings_error(
+                'subscriber_notifications',
+                'notification_' . $code,
+                $errors->get_error_message($code),
+                'error'
+            );
+        }
+    }
+
+    /**
+     * Apply parsed form values onto a notification row object for template display.
+     *
+     * @param object $notification Queue row object.
+     * @param array  $form         Parsed form values.
+     * @return object
+     */
+    private function apply_notification_form_to_object($notification, array $form) {
+        $notification->title            = $form['title'];
+        $notification->subject          = $form['subject'];
+        $notification->content          = $form['content'];
+        $notification->frequency_target = $form['frequency_target'];
+        $notification->is_recurring     = (int) $form['is_recurring'];
+
+        return $notification;
+    }
+
+    /**
+     * Insert a notification from the current POST payload.
+     *
+     * @return int|false|WP_Error New notification ID, WP_Error when validation fails, false on DB error.
+     */
+    private function create_notification_from_post() {
+        $form   = $this->parse_notification_form_from_request();
+        $errors = $this->validate_notification_form($form);
+
+        if ($errors->has_errors()) {
+            $this->register_notification_form_errors($errors);
+            return $errors;
+        }
+
+        $target_prefs_json = SubscriberNotifications_Preferences::encode($form['target_prefs']);
+        $next_send_date    = null;
+
+        if ($form['is_recurring']) {
+            $next_send_date = $this->calculate_next_send_date($form['frequency_target']);
         }
 
         global $wpdb;
         $result = $wpdb->insert(
             $wpdb->prefix . 'subscriber_notifications_queue',
             array(
-                'title'              => $title,
-                'subject'            => $subject,
-                'content'            => $content,
+                'title'              => $form['title'],
+                'subject'            => $form['subject'],
+                'content'            => $form['content'],
                 'target_preferences' => $target_prefs_json,
-                'frequency_target'   => $frequency_target,
+                'frequency_target'   => $form['frequency_target'],
                 'status'             => 'pending',
                 'created_by'         => get_current_user_id(),
-                'is_recurring'       => $is_recurring,
+                'is_recurring'       => (int) $form['is_recurring'],
                 'next_send_date'     => $next_send_date,
                 'recurrence_count'   => 0,
             )
         );
-        
-        if ($result) {
-            add_action('admin_notices', function() {
-                echo '<div class="notice notice-success"><p>' . __('Notification created successfully.', 'subscriber-notifications') . '</p></div>';
-            });
+
+        if ($result === false) {
+            return false;
         }
+
+        $notification_id = (int) $wpdb->insert_id;
+        return $notification_id > 0 ? $notification_id : false;
+    }
+
+    /**
+     * Admin URL for the notification edit screen.
+     *
+     * @param int    $notification_id Notification row ID.
+     * @param string $message         Optional flash message key (e.g. `created`).
+     * @return string
+     */
+    private function get_notification_edit_url($notification_id, $message = '') {
+        $args = array(
+            'page' => 'subscriber-notifications-edit',
+            'id'   => (int) $notification_id,
+        );
+
+        if ($message !== '') {
+            $args['message'] = sanitize_key($message);
+        }
+
+        return add_query_arg($args, admin_url('admin.php'));
+    }
+
+    /**
+     * Show a one-time admin notice after redirect (Post-Redirect-Get).
+     */
+    private function maybe_render_notification_flash_notice() {
+        if (!isset($_GET['page'], $_GET['message'])) {
+            return;
+        }
+
+        if ($_GET['page'] !== 'subscriber-notifications-edit') {
+            return;
+        }
+
+        $message_key = sanitize_key(wp_unslash($_GET['message']));
+        $messages    = array(
+            'created' => __('Notification created successfully.', 'subscriber-notifications'),
+        );
+
+        if (!isset($messages[$message_key])) {
+            return;
+        }
+
+        $text = $messages[$message_key];
+        add_action(
+            'admin_notices',
+            function () use ($text) {
+                echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
+            }
+        );
     }
     
     /**
@@ -1069,9 +1237,16 @@ class SubscriberNotifications_Admin {
      * Create notification page
      */
     public function create_notification_page() {
-        $is_configured     = SubscriberNotifications_Content_Config::is_configured();
+        $is_configured      = SubscriberNotifications_Content_Config::is_configured();
         $enabled_post_types = SubscriberNotifications_Content_Config::get_enabled_post_types();
-        $selected_targets   = array();
+
+        $notification_form = $this->get_empty_notification_form();
+
+        if (isset($_POST['create_notification'])) {
+            $notification_form = $this->parse_notification_form_from_request();
+        }
+
+        $selected_targets = $notification_form['selected_targets'];
 
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-create-notification.php';
     }
@@ -1080,6 +1255,8 @@ class SubscriberNotifications_Admin {
      * Edit notification page
      */
     public function edit_notification_page() {
+        $this->maybe_render_notification_flash_notice();
+
         $notification_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
         
         if (!$notification_id) {
@@ -1102,6 +1279,12 @@ class SubscriberNotifications_Admin {
         $is_configured      = SubscriberNotifications_Content_Config::is_configured();
         $enabled_post_types = SubscriberNotifications_Content_Config::get_enabled_post_types();
         $selected_targets   = SubscriberNotifications_Preferences::decode($notification->target_preferences ?? '');
+
+        if (isset($_POST['update_notification'])) {
+            $form_state       = $this->parse_notification_form_from_request();
+            $notification     = $this->apply_notification_form_to_object($notification, $form_state);
+            $selected_targets = $form_state['selected_targets'];
+        }
 
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-edit-notification.php';
     }
@@ -2366,8 +2549,26 @@ class SubscriberNotifications_Admin {
         }
         
         try {
-            $this->handle_notification_creation();
-            wp_send_json_success(__('Notification created successfully.', 'subscriber-notifications'));
+            $result = $this->create_notification_from_post();
+
+            if (is_int($result) && $result > 0) {
+                wp_send_json_success(
+                    array(
+                        'message'  => __('Notification created successfully.', 'subscriber-notifications'),
+                        'redirect' => $this->get_notification_edit_url($result, 'created'),
+                    )
+                );
+            }
+
+            if (is_wp_error($result)) {
+                wp_send_json_error($result->get_error_message());
+            }
+
+            if ($result === false) {
+                wp_send_json_error(__('Failed to create notification.', 'subscriber-notifications'));
+            }
+
+            wp_send_json_error(__('Unable to create notification.', 'subscriber-notifications'));
         } catch (Exception $e) {
             wp_send_json_error($e->getMessage());
         }

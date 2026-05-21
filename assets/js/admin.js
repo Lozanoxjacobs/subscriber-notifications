@@ -114,29 +114,21 @@ jQuery(document).ready(function($) {
         });
     });
     
-    // Handle notification creation
-    $('#create-notification-form').on('submit', function(e) {
-        var title = $('#notification_title').val();
-        var content = $('#notification_content').val();
-        
-        if (!title.trim()) {
-            alert('Please enter a notification title.');
-            e.preventDefault();
-            return false;
-        }
-        
-        if (!content.trim()) {
-            alert('Please enter notification content.');
-            e.preventDefault();
-            return false;
-        }
-        
-        // Check that at least one term is selected across configured taxonomies.
-        var selectedTerms = $('input[name^="target_preferences["]:checked').length;
+    // Target Content has no HTML5 "required" for checkbox groups; sync editor before submit.
+    $('#create-notification-form, #edit-notification-form').on('submit', function(e) {
+        var $form = $(this);
 
-        if (selectedTerms === 0) {
-            alert('Please select at least one term across the configured taxonomies.');
+        if (typeof tinymce !== 'undefined' && tinymce.get('notification_content')) {
+            tinymce.get('notification_content').save();
+        }
+
+        if ($form.find('input[name^="target_preferences["]:checked').length === 0) {
             e.preventDefault();
+            alert('Please select at least one target term in Target Content.');
+            var $targets = $form.find('.sn-targets').first();
+            if ($targets.length) {
+                $('html, body').animate({ scrollTop: $targets.offset().top - 50 }, 200);
+            }
             return false;
         }
     });
@@ -178,30 +170,25 @@ jQuery(document).ready(function($) {
         $('#notification-options').hide();
     });
     
-    // Auto-save form data
-    $('form').on('input change', 'input, textarea, select', function() {
+    // Auto-save draft data for non-notification admin forms only.
+    $('form').not('.notification-form').on('input change', 'input, textarea, select', function() {
         var $form = $(this).closest('form');
-        var formData = $form.serialize();
-        localStorage.setItem('subscriber_notifications_form_data', formData);
+        localStorage.setItem('subscriber_notifications_form_data', $form.serialize());
     });
-    
-    // Restore form data on page load
+
     var savedData = localStorage.getItem('subscriber_notifications_form_data');
     if (savedData) {
-        // Only restore if form is empty
-        var $form = $('form');
-        var hasData = $form.find('input[value!=""], textarea:not(:empty), select option:selected').length > 0;
-        
-        if (!hasData) {
-            // Parse and restore form data
+        var $draftForm = $('form').not('.notification-form').first();
+        var hasData = $draftForm.find('input[value!=""], textarea:not(:empty)').length > 0;
+
+        if ($draftForm.length && !hasData) {
             var params = new URLSearchParams(savedData);
             params.forEach(function(value, key) {
-                // Skip the notify_subscribers checkbox to prevent accidental notifications
                 if (key === 'notify_subscribers') {
                     return;
                 }
-                
-                var $field = $form.find('[name="' + key + '"]');
+
+                var $field = $draftForm.find('[name="' + key + '"]');
                 if ($field.length) {
                     if ($field.is(':checkbox, :radio')) {
                         $field.filter('[value="' + value + '"]').prop('checked', true);
@@ -212,9 +199,8 @@ jQuery(document).ready(function($) {
             });
         }
     }
-    
-    // Clear saved data on successful form submission and reset notify checkbox
-    $('form').on('submit', function() {
+
+    $('form').not('.notification-form').on('submit', function() {
         localStorage.removeItem('subscriber_notifications_form_data');
         // Reset notify checkbox to unchecked after form submission
         $('#notify_subscribers').prop('checked', false);

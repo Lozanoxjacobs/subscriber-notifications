@@ -2,31 +2,43 @@
 if (!defined('ABSPATH')) {
     exit;
 }
+
+$notification_form = isset($notification_form) ? $notification_form : array(
+    'title'            => '',
+    'subject'          => '',
+    'content'          => '',
+    'frequency_target' => '',
+    'is_recurring'     => 0,
+    'selected_targets' => array(),
+);
+$selected_targets = isset($selected_targets) ? $selected_targets : $notification_form['selected_targets'];
 ?>
 
 <div class="wrap">
     <h1><?php _e('Create Notification', 'subscriber-notifications'); ?></h1>
+
+    <?php settings_errors('subscriber_notifications'); ?>
     
-    <form method="post" action="" class="notification-form">
+    <form method="post" action="" id="create-notification-form" class="notification-form">
         <?php wp_nonce_field('create_notification', 'notification_nonce'); ?>
         
         <table class="form-table">
             <tr>
                 <th scope="row">
-                    <label for="notification_title"><?php _e('Notification Title', 'subscriber-notifications'); ?></label>
+                    <label for="notification_title"><?php _e('Notification Title', 'subscriber-notifications'); ?> <span class="required">*</span></label>
                 </th>
                 <td>
-                    <input type="text" id="notification_title" name="notification_title" class="regular-text" required>
+                    <input type="text" id="notification_title" name="notification_title" class="regular-text" value="<?php echo esc_attr($notification_form['title']); ?>" required>
                     <p class="description"><?php _e('Internal title for this notification.', 'subscriber-notifications'); ?></p>
                 </td>
             </tr>
             
             <tr>
                 <th scope="row">
-                    <label for="notification_subject"><?php _e('Email Subject', 'subscriber-notifications'); ?></label>
+                    <label for="notification_subject"><?php _e('Email Subject', 'subscriber-notifications'); ?> <span class="required">*</span></label>
                 </th>
                 <td>
-                    <input type="text" id="notification_subject" name="notification_subject" class="regular-text" required>
+                    <input type="text" id="notification_subject" name="notification_subject" class="regular-text" value="<?php echo esc_attr($notification_form['subject']); ?>" required>
                     <p class="description">
                         <?php _e('Email subject line. You can use shortcodes like [subscriber_name], [selected_subscriptions], etc.', 'subscriber-notifications'); ?>
                     </p>
@@ -39,12 +51,16 @@ if (!defined('ABSPATH')) {
                 </th>
                 <td>
                     <?php
-                    wp_editor('', 'notification_content', array(
-                        'textarea_name' => 'notification_content',
-                        'media_buttons' => false,
-                        'textarea_rows' => 15,
-                        'teeny' => false
-                    ));
+                    wp_editor(
+                        $notification_form['content'],
+                        'notification_content',
+                        array(
+                            'textarea_name' => 'notification_content',
+                            'media_buttons' => false,
+                            'textarea_rows' => 15,
+                            'teeny'         => false,
+                        )
+                    );
                     ?>
                     <p class="description">
                         <?php _e('Available shortcodes:', 'subscriber-notifications'); ?><br>
@@ -62,7 +78,9 @@ if (!defined('ABSPATH')) {
             </tr>
 
             <tr>
-                <th scope="row"><?php esc_html_e('Target Content', 'subscriber-notifications'); ?></th>
+                <th scope="row">
+                    <?php esc_html_e('Target Content', 'subscriber-notifications'); ?> <span class="required">*</span>
+                </th>
                 <td>
                     <?php
                     if (empty($is_configured)) {
@@ -77,16 +95,16 @@ if (!defined('ABSPATH')) {
             
             <tr>
                 <th scope="row">
-                    <label for="frequency_target"><?php _e('Target Frequency', 'subscriber-notifications'); ?></label>
+                    <label for="frequency_target"><?php _e('Target Frequency', 'subscriber-notifications'); ?> <span class="required">*</span></label>
                 </th>
                 <td>
-                    <select name="frequency_target" id="frequency_target">
-                        <option value=""><?php _e('All Frequencies', 'subscriber-notifications'); ?></option>
-                        <option value="daily"><?php _e('Daily', 'subscriber-notifications'); ?></option>
-                        <option value="weekly"><?php _e('Weekly', 'subscriber-notifications'); ?></option>
-                        <option value="monthly"><?php _e('Monthly', 'subscriber-notifications'); ?></option>
+                    <select name="frequency_target" id="frequency_target" required>
+                        <option value=""><?php esc_html_e('Select frequency', 'subscriber-notifications'); ?></option>
+                        <option value="daily" <?php selected($notification_form['frequency_target'], 'daily'); ?>><?php esc_html_e('Daily', 'subscriber-notifications'); ?></option>
+                        <option value="weekly" <?php selected($notification_form['frequency_target'], 'weekly'); ?>><?php esc_html_e('Weekly', 'subscriber-notifications'); ?></option>
+                        <option value="monthly" <?php selected($notification_form['frequency_target'], 'monthly'); ?>><?php esc_html_e('Monthly', 'subscriber-notifications'); ?></option>
                     </select>
-                    <p class="description"><?php _e('Target subscribers with specific frequency preferences.', 'subscriber-notifications'); ?></p>
+                    <p class="description"><?php _e('Only subscribers with this frequency preference will receive this notification.', 'subscriber-notifications'); ?></p>
                 </td>
             </tr>
             
@@ -96,7 +114,7 @@ if (!defined('ABSPATH')) {
                 </th>
                 <td>
                     <label>
-                        <input type="checkbox" name="is_recurring" id="is_recurring" value="1">
+                        <input type="checkbox" name="is_recurring" id="is_recurring" value="1" <?php checked(!empty($notification_form['is_recurring'])); ?>>
                         <?php _e('Make this notification recurring', 'subscriber-notifications'); ?>
                     </label>
                     <p class="description">
@@ -108,8 +126,8 @@ if (!defined('ABSPATH')) {
         </table>
         
         <div class="notification-actions">
-            <input type="submit" name="create_notification" class="button button-primary" value="<?php _e('Create Notification', 'subscriber-notifications'); ?>">
-            <a href="<?php echo admin_url('admin.php?page=subscriber-notifications'); ?>" class="button"><?php _e('Cancel', 'subscriber-notifications'); ?></a>
+            <input type="submit" name="create_notification" class="button button-primary" value="<?php esc_attr_e('Create Notification', 'subscriber-notifications'); ?>">
+            <a href="<?php echo esc_url(admin_url('admin.php?page=subscriber-notifications')); ?>" class="button"><?php esc_html_e('Cancel', 'subscriber-notifications'); ?></a>
         </div>
     </form>
     
@@ -153,48 +171,48 @@ jQuery(document).ready(function($) {
         }
         
         if (!email) {
-            alert('<?php _e('Please enter an email address.', 'subscriber-notifications'); ?>');
+            alert('<?php echo esc_js(__('Please enter an email address.', 'subscriber-notifications')); ?>');
             return;
         }
         
         if (!subject) {
-            alert('<?php _e('Please enter a subject.', 'subscriber-notifications'); ?>');
+            alert('<?php echo esc_js(__('Please enter a subject.', 'subscriber-notifications')); ?>');
             return;
         }
         
         if (!content) {
-            alert('<?php _e('Please enter content.', 'subscriber-notifications'); ?>');
+            alert('<?php echo esc_js(__('Please enter content.', 'subscriber-notifications')); ?>');
             return;
         }
         
         var button = $(this);
         var resultDiv = $('#preview-email-result');
         
-        button.prop('disabled', true).text('<?php _e('Sending...', 'subscriber-notifications'); ?>');
-        resultDiv.html('<p style="color: #666;"><?php _e('Sending preview email...', 'subscriber-notifications'); ?></p>');
+        button.prop('disabled', true).text('<?php echo esc_js(__('Sending...', 'subscriber-notifications')); ?>');
+        resultDiv.html('<p style="color: #666;"><?php echo esc_js(__('Sending preview email...', 'subscriber-notifications')); ?></p>');
         
         $.ajax({
             url: ajaxurl,
             type: 'POST',
             data: {
                 action: 'send_preview_email',
-                nonce: '<?php echo wp_create_nonce('send_preview_email'); ?>',
+                nonce: '<?php echo esc_js(wp_create_nonce('send_preview_email')); ?>',
                 email: email,
                 subject: subject,
                 content: content
             },
             success: function(response) {
                 if (response.success) {
-                    resultDiv.html('<p style="color: #46b450;"><?php _e('Preview email sent successfully!', 'subscriber-notifications'); ?></p>');
+                    resultDiv.html('<p style="color: #46b450;"><?php echo esc_js(__('Preview email sent successfully!', 'subscriber-notifications')); ?></p>');
                 } else {
-                    resultDiv.html('<p style="color: #dc3232;"><?php _e('Failed to send preview email: ', 'subscriber-notifications'); ?>' + response.data + '</p>');
+                    resultDiv.html('<p style="color: #dc3232;"><?php echo esc_js(__('Failed to send preview email: ', 'subscriber-notifications')); ?>' + response.data + '</p>');
                 }
             },
             error: function() {
-                resultDiv.html('<p style="color: #dc3232;"><?php _e('Failed to send preview email due to an error.', 'subscriber-notifications'); ?></p>');
+                resultDiv.html('<p style="color: #dc3232;"><?php echo esc_js(__('Failed to send preview email due to an error.', 'subscriber-notifications')); ?></p>');
             },
             complete: function() {
-                button.prop('disabled', false).text('<?php _e('Send Preview Email', 'subscriber-notifications'); ?>');
+                button.prop('disabled', false).text('<?php echo esc_js(__('Send Preview Email', 'subscriber-notifications')); ?>');
             }
         });
     });
@@ -204,6 +222,10 @@ jQuery(document).ready(function($) {
 <style>
 .notification-form .form-table th {
     width: 200px;
+}
+
+.notification-form .required {
+    color: #d63638;
 }
 
 .notification-actions {
