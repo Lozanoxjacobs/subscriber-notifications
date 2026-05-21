@@ -46,6 +46,14 @@ if (!defined('ABSPATH')) {
                 </tr>
                 <tr>
                     <th scope="row">
+                        <label for="hide_terms_without_published_content"><?php _e('Hide Empty Terms on Subscription Form', 'subscriber-notifications'); ?></label>
+                    </th>
+                    <td>
+                        <?php $admin->render_hide_terms_without_published_content_field(); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
                         <label for="delete_data_on_uninstall"><?php _e('Delete Data on Uninstall', 'subscriber-notifications'); ?></label>
                     </th>
                     <td>
@@ -180,9 +188,20 @@ if (!defined('ABSPATH')) {
             </table>
         <?php endif; ?>
         
-        <!-- Email Design Tab -->
-        <?php if ($active_tab == 'email-design'): ?>
+        <?php if ($active_tab !== 'email-design') : ?>
+            <p class="submit">
+                <input type="submit" name="save_settings" class="button button-primary" value="<?php _e('Save Settings', 'subscriber-notifications'); ?>">
+            </p>
+        <?php endif; ?>
+    </form>
+
+    <!-- Email Design Tab: posts to options.php via the Settings API. -->
+    <?php if ($active_tab == 'email-design'): ?>
+        <?php settings_errors(); ?>
+        <form method="post" action="<?php echo esc_url(admin_url('options.php')); ?>">
             <?php settings_fields('subscriber_notifications_email-design'); ?>
+
+            <h2><?php esc_html_e('Header & Footer', 'subscriber-notifications'); ?></h2>
             <table class="form-table">
                 <tr>
                     <th scope="row">
@@ -208,6 +227,54 @@ if (!defined('ABSPATH')) {
                         <?php $admin->render_global_footer_field(); ?>
                     </td>
                 </tr>
+            </table>
+
+            <h2><?php esc_html_e('Brand Colors', 'subscriber-notifications'); ?></h2>
+            <table class="form-table">
+                <tr>
+                    <th scope="row"><label for="email_color_text"><?php esc_html_e('Body Text', 'subscriber-notifications'); ?></label></th>
+                    <td><?php $admin->render_email_color_text_field(); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="email_color_link"><?php esc_html_e('Link', 'subscriber-notifications'); ?></label></th>
+                    <td><?php $admin->render_email_color_link_field(); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="email_color_link_hover"><?php esc_html_e('Link Hover', 'subscriber-notifications'); ?></label></th>
+                    <td><?php $admin->render_email_color_link_hover_field(); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="email_color_background"><?php esc_html_e('Outer Background', 'subscriber-notifications'); ?></label></th>
+                    <td><?php $admin->render_email_color_background_field(); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="email_color_content_bg"><?php esc_html_e('Content Background', 'subscriber-notifications'); ?></label></th>
+                    <td><?php $admin->render_email_color_content_bg_field(); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="email_color_footer_bg"><?php esc_html_e('Footer Background', 'subscriber-notifications'); ?></label></th>
+                    <td><?php $admin->render_email_color_footer_bg_field(); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="email_color_footer_text"><?php esc_html_e('Footer Text', 'subscriber-notifications'); ?></label></th>
+                    <td><?php $admin->render_email_color_footer_text_field(); ?></td>
+                </tr>
+            </table>
+
+            <h2><?php esc_html_e('Typography', 'subscriber-notifications'); ?></h2>
+            <table class="form-table">
+                <tr>
+                    <th scope="row"><label for="email_font_body"><?php esc_html_e('Body Font', 'subscriber-notifications'); ?></label></th>
+                    <td><?php $admin->render_email_font_body_field(); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="email_font_heading"><?php esc_html_e('Heading Font', 'subscriber-notifications'); ?></label></th>
+                    <td><?php $admin->render_email_font_heading_field(); ?></td>
+                </tr>
+            </table>
+
+            <h2><?php esc_html_e('Advanced', 'subscriber-notifications'); ?></h2>
+            <table class="form-table">
                 <tr>
                     <th scope="row">
                         <label for="email_css"><?php _e('Custom Email CSS', 'subscriber-notifications'); ?></label>
@@ -217,12 +284,10 @@ if (!defined('ABSPATH')) {
                     </td>
                 </tr>
             </table>
-        <?php endif; ?>
-        
-        <p class="submit">
-            <input type="submit" name="save_settings" class="button button-primary" value="<?php _e('Save Settings', 'subscriber-notifications'); ?>">
-        </p>
-    </form>
+
+            <?php submit_button(); ?>
+        </form>
+    <?php endif; ?>
 </div>
 
 <script>

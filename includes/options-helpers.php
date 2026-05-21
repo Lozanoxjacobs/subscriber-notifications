@@ -100,3 +100,28 @@ function subscriber_notifications_migrate_prefixed_options() {
 
     update_option('subscriber_notifications_prefixed_options_migrated', SUBSCRIBER_NOTIFICATIONS_VERSION);
 }
+
+/**
+ * Migrate Email Design options: rename accent → link hover; remove unused button colors.
+ */
+function subscriber_notifications_migrate_email_design_options() {
+    if (get_option('subscriber_notifications_email_design_options_migrated', '')) {
+        return;
+    }
+
+    $link_hover_key = subscriber_notifications_option_name('email_color_link_hover');
+    $accent_key     = subscriber_notifications_option_name('email_color_accent');
+
+    if (get_option($link_hover_key, null) === null) {
+        $legacy_accent = get_option($accent_key, null);
+        if ($legacy_accent !== null && $legacy_accent !== '') {
+            add_option($link_hover_key, $legacy_accent);
+        }
+    }
+
+    delete_option($accent_key);
+    delete_option(subscriber_notifications_option_name('email_color_button_bg'));
+    delete_option(subscriber_notifications_option_name('email_color_button_text'));
+
+    update_option('subscriber_notifications_email_design_options_migrated', SUBSCRIBER_NOTIFICATIONS_VERSION);
+}

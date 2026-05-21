@@ -178,13 +178,22 @@ class SubscriberNotifications_Admin {
             SUBSCRIBER_NOTIFICATIONS_VERSION,
             true
         );
-        
+
         wp_enqueue_style(
             'subscriber-notifications-admin',
             SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL . 'assets/css/admin.css',
             array(),
             SUBSCRIBER_NOTIFICATIONS_VERSION
         );
+
+        // Color picker on the Email Design tab.
+        $is_settings_page = isset($_GET['page']) && $_GET['page'] === 'subscriber-notifications-settings';
+        $is_email_design_tab = $is_settings_page && isset($_GET['tab']) && $_GET['tab'] === 'email-design';
+        if ($is_email_design_tab) {
+            wp_enqueue_style('wp-color-picker');
+            wp_enqueue_script('wp-color-picker');
+            add_action('admin_footer', array($this, 'render_color_picker_init_script'));
+        }
         
         wp_localize_script('subscriber-notifications-admin', 'subscriberNotifications', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -395,14 +404,25 @@ class SubscriberNotifications_Admin {
             wp_die(__('Notification not found.', 'subscriber-notifications'));
         }
         
-        $title = sanitize_text_field($_POST['notification_title']);
+        $title   = sanitize_text_field($_POST['notification_title']);
         $subject = sanitize_textarea_field($_POST['notification_subject']);
         $content = wp_kses_post($_POST['notification_content']);
-        $news_categories = isset($_POST['news_categories']) ? array_map('sanitize_text_field', $_POST['news_categories']) : array();
-        $meeting_categories = isset($_POST['meeting_categories']) ? array_map('sanitize_text_field', $_POST['meeting_categories']) : array();
+
+        $raw_targets      = isset($_POST['target_preferences']) ? wp_unslash($_POST['target_preferences']) : array();
+        $target_prefs     = SubscriberNotifications_Preferences::sanitize_from_post($raw_targets);
+        $target_prefs     = SubscriberNotifications_Preferences::prune_to_allowed_terms($target_prefs);
         $frequency_target = sanitize_text_field($_POST['frequency_target']);
-        $is_recurring = isset($_POST['is_recurring']) ? 1 : 0;
-        
+        $is_recurring     = isset($_POST['is_recurring']) ? 1 : 0;
+
+        if (!SubscriberNotifications_Preferences::has_at_least_one_term($target_prefs)) {
+            add_action('admin_notices', function () {
+                echo '<div class="notice notice-error"><p>' . esc_html__('Please select at least one target term before saving the notification.', 'subscriber-notifications') . '</p></div>';
+            });
+            return;
+        }
+
+        $target_prefs_json = SubscriberNotifications_Preferences::encode($target_prefs);
+
         // Determine next_send_date based on current state and new settings
         $next_send_date = $current_notification->next_send_date; // Preserve by default
         
@@ -455,17 +475,16 @@ class SubscriberNotifications_Admin {
         $result = $wpdb->update(
             $wpdb->prefix . 'subscriber_notifications_queue',
             array(
-                'title' => $title,
-                'subject' => $subject,
-                'content' => $content,
-                'news_categories' => implode(',', $news_categories),
-                'meeting_categories' => implode(',', $meeting_categories),
-                'frequency_target' => $frequency_target,
-                'is_recurring' => $is_recurring,
-                'next_send_date' => $next_send_date
+                'title'              => $title,
+                'subject'            => $subject,
+                'content'            => $content,
+                'target_preferences' => $target_prefs_json,
+                'frequency_target'   => $frequency_target,
+                'is_recurring'       => $is_recurring,
+                'next_send_date'     => $next_send_date,
             ),
             array('id' => $notification_id),
-            array('%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s'),
+            array('%s', '%s', '%s', '%s', '%s', '%d', '%s'),
             array('%d')
         );
         
@@ -488,35 +507,44 @@ class SubscriberNotifications_Admin {
             wp_die(__('Security check failed.', 'subscriber-notifications'));
         }
         
-        $title = sanitize_text_field($_POST['notification_title']);
+        $title   = sanitize_text_field($_POST['notification_title']);
         $subject = sanitize_textarea_field($_POST['notification_subject']);
         $content = wp_kses_post($_POST['notification_content']);
-        $news_categories = isset($_POST['news_categories']) ? array_map('sanitize_text_field', $_POST['news_categories']) : array();
-        $meeting_categories = isset($_POST['meeting_categories']) ? array_map('sanitize_text_field', $_POST['meeting_categories']) : array();
+
+        $raw_targets      = isset($_POST['target_preferences']) ? wp_unslash($_POST['target_preferences']) : array();
+        $target_prefs     = SubscriberNotifications_Preferences::sanitize_from_post($raw_targets);
+        $target_prefs     = SubscriberNotifications_Preferences::prune_to_allowed_terms($target_prefs);
         $frequency_target = sanitize_text_field($_POST['frequency_target']);
-        $is_recurring = isset($_POST['is_recurring']) ? 1 : 0;
-        
-        // Calculate next send date for recurring notifications
+        $is_recurring     = isset($_POST['is_recurring']) ? 1 : 0;
+
+        if (!SubscriberNotifications_Preferences::has_at_least_one_term($target_prefs)) {
+            add_action('admin_notices', function () {
+                echo '<div class="notice notice-error"><p>' . esc_html__('Please select at least one target term before creating the notification.', 'subscriber-notifications') . '</p></div>';
+            });
+            return;
+        }
+
+        $target_prefs_json = SubscriberNotifications_Preferences::encode($target_prefs);
+
         $next_send_date = null;
         if ($is_recurring && in_array($frequency_target, ['daily', 'weekly', 'monthly'])) {
             $next_send_date = $this->calculate_next_send_date($frequency_target);
         }
-        
+
         global $wpdb;
         $result = $wpdb->insert(
             $wpdb->prefix . 'subscriber_notifications_queue',
             array(
-                'title' => $title,
-                'subject' => $subject,
-                'content' => $content,
-                'news_categories' => implode(',', $news_categories),
-                'meeting_categories' => implode(',', $meeting_categories),
-                'frequency_target' => $frequency_target,
-                'status' => 'pending',
-                'created_by' => get_current_user_id(),
-                'is_recurring' => $is_recurring,
-                'next_send_date' => $next_send_date,
-                'recurrence_count' => 0
+                'title'              => $title,
+                'subject'            => $subject,
+                'content'            => $content,
+                'target_preferences' => $target_prefs_json,
+                'frequency_target'   => $frequency_target,
+                'status'             => 'pending',
+                'created_by'         => get_current_user_id(),
+                'is_recurring'       => $is_recurring,
+                'next_send_date'     => $next_send_date,
+                'recurrence_count'   => 0,
             )
         );
         
@@ -528,21 +556,32 @@ class SubscriberNotifications_Admin {
     }
     
     /**
-     * Handle settings save
+     * Handle settings save for legacy tabs.
+     *
+     * @todo v3.1: Remove this method once General / Scheduling / Security /
+     *       Email Templates tabs are migrated to the Settings API + options.php.
+     *       Tracked in Internal Resources/ROADMAP.md. The Content Types and Email Design tabs
+     *       already use options.php; this handler is only for the legacy tabs.
      */
     private function handle_settings_save() {
         if (!wp_verify_nonce($_POST['settings_nonce'], 'save_settings')) {
             wp_die(__('Security check failed.', 'subscriber-notifications'));
         }
-        
+
         // Get active tab from URL or default to 'general'
         $current_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'general';
-        
+
+        // Email Design tab is handled by options.php (Settings API) — bail.
+        if ($current_tab === 'email-design') {
+            return;
+        }
+
         // Define which options belong to each tab (short keys; stored as subscriber_notifications_{key}).
         $tab_options = array(
             'general' => array(
                 'test_email',
-                'delete_data_on_uninstall'
+                'delete_data_on_uninstall',
+                'hide_terms_without_published_content'
             ),
             'email-templates' => array(
                 'welcome_email_subject',
@@ -562,12 +601,6 @@ class SubscriberNotifications_Admin {
             'security' => array(
                 'captcha_site_key',
                 'captcha_secret_key'
-            ),
-            'email-design' => array(
-                'global_header_logo',
-                'global_header_content',
-                'global_footer',
-                'email_css'
             )
         );
         
@@ -590,6 +623,16 @@ class SubscriberNotifications_Admin {
 
                 if ($old_value !== $new_value) {
                     subscriber_notifications_update_option('delete_data_on_uninstall', $new_value);
+                }
+                continue;
+            }
+
+            if ($option === 'hide_terms_without_published_content') {
+                $new_value = isset($_POST[$pref_full]) ? 1 : 0;
+                $old_value = (int) subscriber_notifications_get_option('hide_terms_without_published_content', 1);
+
+                if ($old_value !== $new_value) {
+                    subscriber_notifications_update_option('hide_terms_without_published_content', $new_value);
                 }
                 continue;
             }
@@ -677,11 +720,20 @@ class SubscriberNotifications_Admin {
         
         if ($result['success']) {
             add_action('admin_notices', function() use ($result) {
-                echo '<div class="notice notice-success"><p>' . sprintf(__('%d subscribers imported successfully.', 'subscriber-notifications'), $result['count']) . '</p></div>';
+                $count = isset($result['count']) ? (int) $result['count'] : 0;
+                echo '<div class="notice notice-success"><p>' . sprintf(__('%d subscribers imported successfully.', 'subscriber-notifications'), $count) . '</p></div>';
+
+                if (!empty($result['errors'])) {
+                    echo '<div class="notice notice-warning"><p><strong>' . esc_html__('Some rows were skipped:', 'subscriber-notifications') . '</strong></p><ul style="list-style: disc; margin-left: 20px;">';
+                    foreach ($result['errors'] as $error_line) {
+                        echo '<li>' . esc_html($error_line) . '</li>';
+                    }
+                    echo '</ul></div>';
+                }
             });
         } else {
             add_action('admin_notices', function() use ($result) {
-                echo '<div class="notice notice-error"><p>' . $result['message'] . '</p></div>';
+                echo '<div class="notice notice-error"><p>' . esc_html($result['message']) . '</p></div>';
             });
         }
     }
@@ -708,8 +760,7 @@ class SubscriberNotifications_Admin {
             'id' => 0,
             'name' => 'Test User',
             'email' => $test_email,
-            'news_categories' => '1,2,3',
-            'meeting_categories' => '4,5,6',
+            'subscription_preferences' => '{}',
             'frequency' => 'weekly',
             'status' => 'active',
             'management_token' => 'test-token'
@@ -772,8 +823,7 @@ class SubscriberNotifications_Admin {
         $sample_subscriber = (object) array(
             'name' => 'John Doe',
             'email' => 'john.doe@example.com',
-            'news_categories' => '1,2,3',
-            'meeting_categories' => '4,5,6',
+            'subscription_preferences' => '{}',
             'frequency' => 'weekly'
         );
         
@@ -815,387 +865,6 @@ class SubscriberNotifications_Admin {
         $preview_html .= '</div>';
         
         wp_send_json_success($preview_html);
-    }
-    
-    /**
-     * Wrap email content with custom CSS
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->wrap_content_with_css() instead
-     * @param string $content Email content
-     * @param string $css Custom CSS
-     * @param object $subscriber Subscriber object for shortcode processing
-     * @return string Wrapped content with CSS
-     */
-    private function wrap_content_with_css($content, $css, $subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->wrap_content_with_css()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->wrap_content_with_css($content, $css, $subscriber);
-    }
-    
-    /**
-     * Wrap content with proper email structure
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->wrap_with_email_structure() instead
-     * @param string $content Email content
-     * @param string $css CSS styles
-     * @param object|null $subscriber Subscriber object for shortcode processing
-     * @return string Wrapped content with email structure
-     */
-    private function wrap_with_email_structure($content, $css, $subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->wrap_with_email_structure()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->wrap_with_email_structure($content, $css, $subscriber);
-    }
-    
-    /**
-     * Get default CSS
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->get_default_css() instead
-     * @return string Default CSS for emails
-     */
-    private function get_default_css() {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->get_default_css()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->get_default_css();
-    }
-    
-    /**
-     * Get default CSS (old implementation - kept for reference)
-     * 
-     * @deprecated 2.2.0 This method is deprecated and will be removed in version 3.0.0
-     * @return string Default CSS for emails
-     */
-    private function get_default_css_old() {
-        return '
-        /* Reset styles for email clients */
-        body, table, td, p, a, li, blockquote {
-            -webkit-text-size-adjust: 100%;
-            -ms-text-size-adjust: 100%;
-        }
-        
-        table, td {
-            mso-table-lspace: 0pt;
-            mso-table-rspace: 0pt;
-        }
-        
-        img {
-            -ms-interpolation-mode: bicubic;
-            border: 0;
-            height: auto;
-            line-height: 100%;
-            outline: none;
-            text-decoration: none;
-        }
-        
-        /* Email container */
-        .email-container {
-            max-width: 600px !important;
-            width: 100% !important;
-            margin: 0 auto !important;
-            background-color: #F2F2F2 !important;
-        }
-        
-        /* Email content area */
-        .email-content {
-            background-color: #F2F2F2 !important;
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
-        }
-        
-        /* Ensure all div and span elements default to body text size */
-        .email-content div,
-        .email-content span {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
-        }
-        
-        /* Override any inline font-size styles that might be smaller */
-        .email-content *:not(h1):not(h2):not(h3):not(h4):not(h5):not(h6) {
-            font-size: 16px !important;
-        }
-        
-        /* Typography - Default Style Guide */
-        body {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        
-        h1 {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 28px !important;
-            line-height: 32px !important;
-            color: #000000 !important;
-            margin: 0 0 20px 0 !important;
-        }
-        
-        h2 {
-            font-family: "Kepler Std", "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 38px !important;
-            line-height: 39px !important;
-            color: #000000 !important;
-            margin: 0 0 20px 0 !important;
-        }
-        
-        h3 {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 22px !important;
-            line-height: 26px !important;
-            color: #000000 !important;
-            margin: 0 0 15px 0 !important;
-        }
-        
-        h4 {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
-            margin: 0 0 15px 0 !important;
-        }
-        
-        h5 {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 14px !important;
-            line-height: 18px !important;
-            color: #000000 !important;
-            margin: 0 0 10px 0 !important;
-        }
-        
-        h6 {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 12px !important;
-            line-height: 16px !important;
-            color: #000000 !important;
-            margin: 0 0 10px 0 !important;
-        }
-        
-        p {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
-            margin: 0 0 15px 0 !important;
-        }
-        
-        /* Links */
-        a {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
-            text-decoration: underline !important;
-        }
-        
-        a:hover {
-            color: #004EBE !important;
-            text-decoration: underline !important;
-        }
-        
-        /* Links on dark background */
-        .email-footer a {
-            color: #ffffff !important;
-            text-decoration: underline !important;
-        }
-        
-        .email-footer a:hover {
-            color: #A4EAFF !important;
-            text-decoration: underline !important;
-        }
-        
-        /* Header styling */
-        .email-header {
-            background-color: #F2F2F2 !important;
-            color: #000000 !important;
-        }
-        
-        .email-header h1 {
-            color: #000000 !important;
-        }
-        
-        /* Footer text and headings - force white color */
-        .email-footer {
-            color: #ffffff !important;
-        }
-        
-        .email-footer h1,
-        .email-footer h2,
-        .email-footer h3,
-        .email-footer h4,
-        .email-footer h5,
-        .email-footer h6 {
-            color: #ffffff !important;
-        }
-        
-        .email-footer p {
-            color: #ffffff !important;
-        }
-        
-        .email-footer div {
-            color: #ffffff !important;
-        }
-        
-        .email-footer span {
-            color: #ffffff !important;
-        }
-        
-        /* Buttons - Default Style Guide */
-        .primary-button {
-            display: inline-block !important;
-            background-color: #F02929 !important;
-            color: #ffffff !important;
-            padding: 12px 24px !important;
-            text-decoration: none !important;
-            border-radius: 4px !important;
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 600 !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            text-align: center !important;
-            margin: 10px 0 !important;
-        }
-        
-        .primary-button:hover {
-            background-color: #D91F1F !important;
-            text-decoration: none !important;
-        }
-        
-        .secondary-button {
-            display: inline-block !important;
-            background-color: #ffffff !important;
-            color: #4D4D4D !important;
-            padding: 12px 24px !important;
-            text-decoration: none !important;
-            border: 2px solid #4D4D4D !important;
-            border-radius: 4px !important;
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 600 !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            text-align: center !important;
-            margin: 10px 0 !important;
-        }
-        
-        .secondary-button:hover {
-            background-color: #F2F2F2 !important;
-            text-decoration: none !important;
-        }
-        
-        /* Lists */
-        ul, ol {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
-            margin: 0 0 15px 0 !important;
-            padding-left: 20px !important;
-        }
-        
-        li {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
-            margin: 0 0 8px 0 !important;
-        }
-        
-        /* Tables */
-        table {
-            border-collapse: collapse !important;
-            width: 100% !important;
-        }
-        
-        /* Content sections */
-        .content-section {
-            margin: 20px 0 !important;
-            padding: 20px !important;
-            background-color: #ffffff !important;
-            border-left: 4px solid #F02929 !important;
-        }
-        
-        .news-item {
-            margin: 20px 0 !important;
-            padding: 15px !important;
-            background-color: #F2F2F2 !important;
-            border-radius: 4px !important;
-        }
-        
-        .news-item h3 {
-            margin: 0 0 10px 0 !important;
-            color: #01228C !important;
-        }
-        
-        .news-item p {
-            margin: 0 0 10px 0 !important;
-        }
-        
-        /* Mobile Responsive */
-        @media only screen and (max-width: 600px) {
-            .email-container {
-                width: 100% !important;
-                max-width: 100% !important;
-            }
-            
-            .email-content {
-                padding: 20px 15px !important;
-            }
-            
-            .email-header,
-            .email-footer {
-                padding: 15px !important;
-            }
-            
-            h1 {
-                font-size: 24px !important;
-                line-height: 28px !important;
-            }
-            
-            h2 {
-                font-size: 32px !important;
-                line-height: 36px !important;
-            }
-            
-            h3 {
-                font-size: 20px !important;
-                line-height: 24px !important;
-            }
-            
-            .primary-button,
-            .secondary-button {
-                display: block !important;
-                width: 100% !important;
-                text-align: center !important;
-                padding: 15px 20px !important;
-            }
-        }
-        
-        /* Dark mode support */
-        @media (prefers-color-scheme: dark) {
-            .email-content {
-                background-color: #1a1a1a !important;
-            }
-            
-            body, p, li {
-                color: #ffffff !important;
-            }
-            
-            h1, h2, h3, h4, h5, h6 {
-                color: #A5EAF7 !important;
-            }
-        }
-        ';
     }
     
     /**
@@ -1316,32 +985,6 @@ class SubscriberNotifications_Admin {
     }
     
     /**
-     * Get global header content
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->get_global_header_content() instead
-     * @param object|null $subscriber Subscriber object for shortcode processing
-     * @return string Header HTML
-     */
-    private function get_global_header_content($subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->get_global_header_content()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->get_global_header_content($subscriber);
-    }
-    
-    /**
-     * Get global footer content
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->get_global_footer_content() instead
-     * @param object|null $subscriber Subscriber object for shortcode processing
-     * @return string Footer HTML
-     */
-    private function get_global_footer_content($subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->get_global_footer_content()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->get_global_footer_content($subscriber);
-    }
-    
-    /**
      * Dashboard page
      */
     public function dashboard_page() {
@@ -1426,9 +1069,10 @@ class SubscriberNotifications_Admin {
      * Create notification page
      */
     public function create_notification_page() {
-        $news_categories = get_categories(array('hide_empty' => false));
-        $meeting_categories = $this->get_meeting_categories();
-        
+        $is_configured     = SubscriberNotifications_Content_Config::is_configured();
+        $enabled_post_types = SubscriberNotifications_Content_Config::get_enabled_post_types();
+        $selected_targets   = array();
+
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-create-notification.php';
     }
     
@@ -1454,14 +1098,11 @@ class SubscriberNotifications_Admin {
         
         // Allow editing of all notifications (pending, sent, cancelled)
         // This allows admins to reuse content and make corrections
-        
-        $news_categories = get_categories(array('hide_empty' => false));
-        $meeting_categories = $this->get_meeting_categories();
-        
-        // Parse existing categories
-        $selected_news_categories = $notification->news_categories ? explode(',', $notification->news_categories) : array();
-        $selected_meeting_categories = $notification->meeting_categories ? explode(',', $notification->meeting_categories) : array();
-        
+
+        $is_configured      = SubscriberNotifications_Content_Config::is_configured();
+        $enabled_post_types = SubscriberNotifications_Content_Config::get_enabled_post_types();
+        $selected_targets   = SubscriberNotifications_Preferences::decode($notification->target_preferences ?? '');
+
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-edit-notification.php';
     }
     
@@ -1628,7 +1269,8 @@ class SubscriberNotifications_Admin {
         $tabs = array(
             'general' => array(
                 'test_email',
-                'delete_data_on_uninstall'
+                'delete_data_on_uninstall',
+                'hide_terms_without_published_content'
             ),
             'email-templates' => array(
                 'welcome_email_subject',
@@ -1653,10 +1295,19 @@ class SubscriberNotifications_Admin {
                 'global_header_logo',
                 'global_header_content',
                 'global_footer',
-                'email_css'
+                'email_css',
+                'email_font_body',
+                'email_font_heading',
+                'email_color_text',
+                'email_color_link',
+                'email_color_background',
+                'email_color_content_bg',
+                'email_color_link_hover',
+                'email_color_footer_bg',
+                'email_color_footer_text'
             )
         );
-        
+
         // Register all settings with sanitization callbacks
         foreach ($tabs as $tab => $options) {
             foreach ($options as $option) {
@@ -1736,7 +1387,15 @@ class SubscriberNotifications_Admin {
             'subscriber-notifications-settings',
             'subscriber_notifications_general'
         );
-        
+
+        add_settings_field(
+            'hide_terms_without_published_content',
+            __('Hide Empty Terms on Subscription Form', 'subscriber-notifications'),
+            array($this, 'render_hide_terms_without_published_content_field'),
+            'subscriber-notifications-settings',
+            'subscriber_notifications_general'
+        );
+
         // Email Templates tab fields
         add_settings_field(
             'welcome_email_subject',
@@ -1954,11 +1613,81 @@ class SubscriberNotifications_Admin {
         // Just strip slashes if WordPress added them during POST processing
         return stripslashes($value);
     }
-    
+
+    public function sanitize_setting_email_font_body($value) {
+        return $this->sanitize_font_stack($value, 'Arial, Helvetica, sans-serif');
+    }
+
+    public function sanitize_setting_email_font_heading($value) {
+        $value = is_string($value) ? trim(wp_strip_all_tags($value)) : '';
+        if ($value === '') {
+            return '';
+        }
+        if (!preg_match('/^[A-Za-z0-9 ,\'"\-]+$/', $value)) {
+            return '';
+        }
+        return $value;
+    }
+
+    public function sanitize_setting_email_color_text($value) {
+        return $this->sanitize_hex_color_with_default($value, '#333333');
+    }
+
+    public function sanitize_setting_email_color_link($value) {
+        return $this->sanitize_hex_color_with_default($value, '#0066cc');
+    }
+
+    public function sanitize_setting_email_color_background($value) {
+        return $this->sanitize_hex_color_with_default($value, '#f5f5f5');
+    }
+
+    public function sanitize_setting_email_color_content_bg($value) {
+        return $this->sanitize_hex_color_with_default($value, '#ffffff');
+    }
+
+    public function sanitize_setting_email_color_link_hover($value) {
+        return $this->sanitize_hex_color_with_default($value, '#004499');
+    }
+
+    public function sanitize_setting_email_color_footer_bg($value) {
+        return $this->sanitize_hex_color_with_default($value, '#1d2327');
+    }
+
+    public function sanitize_setting_email_color_footer_text($value) {
+        return $this->sanitize_hex_color_with_default($value, '#ffffff');
+    }
+
+    /**
+     * Validate a CSS font stack. Allows letters, digits, spaces, quotes, commas, hyphens.
+     */
+    private function sanitize_font_stack($value, $default) {
+        $value = is_string($value) ? trim(wp_strip_all_tags($value)) : '';
+        if ($value === '') {
+            return $default;
+        }
+        if (!preg_match('/^[A-Za-z0-9 ,\'"\-]+$/', $value)) {
+            return $default;
+        }
+        return $value;
+    }
+
+    /**
+     * Sanitize a hex color value, falling back to the default when invalid.
+     */
+    private function sanitize_hex_color_with_default($value, $default) {
+        $value = is_string($value) ? trim($value) : '';
+        $sanitized = sanitize_hex_color($value);
+        return $sanitized ?: $default;
+    }
+
     public function sanitize_setting_delete_data_on_uninstall($value) {
         return isset($value) ? 1 : 0;
     }
-    
+
+    public function sanitize_setting_hide_terms_without_published_content($value) {
+        return !empty($value) ? 1 : 0;
+    }
+
     /**
      * Field render methods - General tab
      */
@@ -1994,6 +1723,20 @@ class SubscriberNotifications_Admin {
         </p>
         <?php
     }
+
+    public function render_hide_terms_without_published_content_field() {
+        $name_opt = subscriber_notifications_option_name('hide_terms_without_published_content');
+        $value    = (int) subscriber_notifications_get_option('hide_terms_without_published_content', 1);
+        ?>
+        <label>
+            <input type="checkbox" name="<?php echo esc_attr($name_opt); ?>" value="1" <?php checked($value, 1); ?>>
+            <?php esc_html_e('Hide terms with no published posts from the public subscription form', 'subscriber-notifications'); ?>
+        </label>
+        <p class="description">
+            <?php esc_html_e('When enabled, only terms attached to at least one published post of the configured post type appear in the subscribe and preferences forms. Admin notification targets always show every configured term.', 'subscriber-notifications'); ?>
+        </p>
+        <?php
+    }
     
     /**
      * Field render methods - Email Templates tab
@@ -2009,7 +1752,7 @@ class SubscriberNotifications_Admin {
     
     public function render_welcome_email_content_field() {
         $name_opt = subscriber_notifications_option_name('welcome_email_content');
-        $value = subscriber_notifications_get_option('welcome_email_content', __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
+        $value = subscriber_notifications_get_option('welcome_email_content', __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_subscriptions].', 'subscriber-notifications'));
         wp_editor(
             wp_unslash($value),
             'welcome_email_content',
@@ -2024,8 +1767,7 @@ class SubscriberNotifications_Admin {
         <p class="description">
             <?php _e('Welcome email content. Available shortcodes:', 'subscriber-notifications'); ?><br>
             <code>[subscriber_name]</code> - <?php _e('Subscriber\'s name', 'subscriber-notifications'); ?><br>
-            <code>[selected_news_categories]</code> - <?php _e('Selected news categories', 'subscriber-notifications'); ?><br>
-            <code>[selected_meeting_categories]</code> - <?php _e('Selected meeting categories', 'subscriber-notifications'); ?><br>
+            <code>[selected_subscriptions]</code> - <?php _e('All selected post type / taxonomy / term labels', 'subscriber-notifications'); ?><br>
             <code>[delivery_frequency]</code> - <?php _e('Delivery frequency', 'subscriber-notifications'); ?><br>
             <code>[site_title]</code> - <?php _e('Site title', 'subscriber-notifications'); ?><br>
             <code>[manage_preferences_link]</code> - <?php _e('Manage preferences link', 'subscriber-notifications'); ?><br>
@@ -2045,7 +1787,7 @@ class SubscriberNotifications_Admin {
     
     public function render_welcome_back_email_content_field() {
         $name_opt = subscriber_notifications_option_name('welcome_back_email_content');
-        $value = subscriber_notifications_get_option('welcome_back_email_content', __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
+        $value = subscriber_notifications_get_option('welcome_back_email_content', __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_subscriptions].', 'subscriber-notifications'));
         wp_editor(
             wp_unslash($value),
             'welcome_back_email_content',
@@ -2060,8 +1802,7 @@ class SubscriberNotifications_Admin {
         <p class="description">
             <?php _e('Welcome back email content sent when an inactive subscriber resubscribes. Available shortcodes:', 'subscriber-notifications'); ?><br>
             <code>[subscriber_name]</code> - <?php _e('Subscriber\'s name', 'subscriber-notifications'); ?><br>
-            <code>[selected_news_categories]</code> - <?php _e('Selected news categories', 'subscriber-notifications'); ?><br>
-            <code>[selected_meeting_categories]</code> - <?php _e('Selected meeting categories', 'subscriber-notifications'); ?><br>
+            <code>[selected_subscriptions]</code> - <?php _e('All selected post type / taxonomy / term labels', 'subscriber-notifications'); ?><br>
             <code>[delivery_frequency]</code> - <?php _e('Delivery frequency', 'subscriber-notifications'); ?><br>
             <code>[site_title]</code> - <?php _e('Site title', 'subscriber-notifications'); ?><br>
             <code>[manage_preferences_link]</code> - <?php _e('Manage preferences link', 'subscriber-notifications'); ?><br>
@@ -2081,7 +1822,7 @@ class SubscriberNotifications_Admin {
     
     public function render_preferences_update_email_content_field() {
         $name_opt = subscriber_notifications_option_name('preferences_update_email_content');
-        $value = subscriber_notifications_get_option('preferences_update_email_content', __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('News Categories: [selected_news_categories]', 'subscriber-notifications') . "\n" . __('Meeting Categories: [selected_meeting_categories]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'));
+        $value = subscriber_notifications_get_option('preferences_update_email_content', __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('Subscriptions: [selected_subscriptions]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'));
         wp_editor(
             wp_unslash($value),
             'preferences_update_email_content',
@@ -2096,8 +1837,7 @@ class SubscriberNotifications_Admin {
         <p class="description">
             <?php _e('Email content sent when a subscriber updates their preferences. Available shortcodes:', 'subscriber-notifications'); ?><br>
             <code>[subscriber_name]</code> - <?php _e('Subscriber\'s name', 'subscriber-notifications'); ?><br>
-            <code>[selected_news_categories]</code> - <?php _e('Selected news categories', 'subscriber-notifications'); ?><br>
-            <code>[selected_meeting_categories]</code> - <?php _e('Selected meeting categories', 'subscriber-notifications'); ?><br>
+            <code>[selected_subscriptions]</code> - <?php _e('All selected post type / taxonomy / term labels', 'subscriber-notifications'); ?><br>
             <code>[delivery_frequency]</code> - <?php _e('Delivery frequency', 'subscriber-notifications'); ?><br>
             <code>[site_title]</code> - <?php _e('Site title', 'subscriber-notifications'); ?><br>
             <code>[manage_preferences_link]</code> - <?php _e('Manage preferences link', 'subscriber-notifications'); ?><br>
@@ -2280,10 +2020,87 @@ class SubscriberNotifications_Admin {
         ?>
         <textarea id="email_css" name="<?php echo esc_attr($name_opt); ?>" rows="10" class="large-text code" style="font-family: monospace;"><?php echo esc_textarea($value); ?></textarea>
         <p class="description">
-            <?php _e('Custom CSS styles for email notifications. These styles will be applied to all notification emails.', 'subscriber-notifications'); ?><br>
-            <strong><?php _e('Note:', 'subscriber-notifications'); ?></strong> <?php _e('The plugin includes default styling. Leave this field empty to use the default styles, or add custom CSS to override specific elements.', 'subscriber-notifications'); ?><br>
-            <strong><?php _e('CSS Inlining:', 'subscriber-notifications'); ?></strong> <?php _e('Your CSS is automatically converted to inline styles for maximum email client compatibility. You can use stylesheet CSS (not just inline styles) - the plugin handles the conversion automatically.', 'subscriber-notifications'); ?>
+            <?php _e('Custom CSS appended after the generated branding CSS. Useful for fine-tuning when the brand tokens above are not enough.', 'subscriber-notifications'); ?>
         </p>
+        <?php
+    }
+
+    /**
+     * Render a brand color picker bound to the given short option key.
+     */
+    private function render_brand_color_field($short_key, $default, $description = '') {
+        $name_opt = subscriber_notifications_option_name($short_key);
+        $value = subscriber_notifications_get_option($short_key, $default);
+        ?>
+        <input type="text" id="<?php echo esc_attr($short_key); ?>" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="subscriber-notifications-color-field" data-default-color="<?php echo esc_attr($default); ?>" />
+        <?php if ($description) : ?>
+            <p class="description"><?php echo esc_html($description); ?></p>
+        <?php endif; ?>
+        <?php
+    }
+
+    public function render_email_color_text_field() {
+        $this->render_brand_color_field('email_color_text', '#333333', __('Body text color.', 'subscriber-notifications'));
+    }
+
+    public function render_email_color_link_field() {
+        $this->render_brand_color_field('email_color_link', '#0066cc', __('Hyperlink color.', 'subscriber-notifications'));
+    }
+
+    public function render_email_color_background_field() {
+        $this->render_brand_color_field('email_color_background', '#f5f5f5', __('Email outer background color.', 'subscriber-notifications'));
+    }
+
+    public function render_email_color_content_bg_field() {
+        $this->render_brand_color_field('email_color_content_bg', '#ffffff', __('Background color of the main content card.', 'subscriber-notifications'));
+    }
+
+    public function render_email_color_link_hover_field() {
+        $this->render_brand_color_field(
+            'email_color_link_hover',
+            '#004499',
+            __('Link color on hover (in clients that support :hover).', 'subscriber-notifications')
+        );
+    }
+
+    public function render_email_color_footer_bg_field() {
+        $this->render_brand_color_field('email_color_footer_bg', '#1d2327', __('Footer background color.', 'subscriber-notifications'));
+    }
+
+    public function render_email_color_footer_text_field() {
+        $this->render_brand_color_field('email_color_footer_text', '#ffffff', __('Footer text color.', 'subscriber-notifications'));
+    }
+
+    public function render_email_font_body_field() {
+        $name_opt = subscriber_notifications_option_name('email_font_body');
+        $value = subscriber_notifications_get_option('email_font_body', 'Arial, Helvetica, sans-serif');
+        ?>
+        <input type="text" id="email_font_body" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
+        <p class="description"><?php esc_html_e('Font stack for body text (paragraphs, lists, links).', 'subscriber-notifications'); ?></p>
+        <?php
+    }
+
+    public function render_email_font_heading_field() {
+        $name_opt = subscriber_notifications_option_name('email_font_heading');
+        $value = subscriber_notifications_get_option('email_font_heading', '');
+        ?>
+        <input type="text" id="email_font_heading" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
+        <p class="description"><?php esc_html_e('Font stack for headings (h1–h6). Leave blank to use the body font.', 'subscriber-notifications'); ?></p>
+        <?php
+    }
+
+    /**
+     * Inline init for the WP color picker on the Email Design tab.
+     */
+    public function render_color_picker_init_script() {
+        ?>
+        <script>
+        jQuery(function ($) {
+            if ($.fn.wpColorPicker) {
+                $('.subscriber-notifications-color-field').wpColorPicker();
+            }
+        });
+        </script>
         <?php
     }
     
@@ -2410,29 +2227,6 @@ class SubscriberNotifications_Admin {
     }
     
     /**
-     * Get meeting categories
-     * 
-     * @return array Array of meeting category objects
-     */
-    private function get_meeting_categories() {
-        if (!class_exists('Tribe__Events__Main')) {
-            return array();
-        }
-        
-        $meetings_parent = get_term_by('slug', 'meetings', 'tribe_events_cat');
-        if (!$meetings_parent) {
-            return array();
-        }
-        
-        return get_terms(array(
-            'taxonomy' => 'tribe_events_cat',
-            'parent' => $meetings_parent->term_id,
-            'hide_empty' => false
-        ));
-    }
-    
-    
-    /**
      * Send preview email via AJAX
      */
     public function send_preview_email() {
@@ -2465,8 +2259,7 @@ class SubscriberNotifications_Admin {
             $sample_subscriber = (object) array(
                 'name' => 'Preview User',
                 'email' => $email,
-                'news_categories' => '1,2,3',
-                'meeting_categories' => '4,5,6',
+                'subscription_preferences' => '{}',
                 'frequency' => 'weekly'
             );
             
@@ -2505,12 +2298,11 @@ class SubscriberNotifications_Admin {
         // since we control the shortcodes and they don't execute arbitrary code
         $allowed_shortcodes = array(
             'subscriber_name',
-            'subscriber_email', 
-            'selected_news_categories',
-            'selected_meeting_categories',
+            'subscriber_email',
+            'selected_subscriptions',
+            'selected_terms',
+            'content_feed',
             'delivery_frequency',
-            'news_feed',
-            'meetings_feed',
             'site_title',
             'manage_preferences_link'
         );
@@ -2636,10 +2428,36 @@ class SubscriberNotifications_Admin {
      * Import/Export page
      */
     public function import_export_page() {
-        // Get available categories for reference
-        $news_categories = get_categories(array('hide_empty' => false));
-        $meeting_categories = $this->get_meeting_categories();
-        
+        // Build a reference list of configured post type + taxonomy term IDs for the import help text.
+        $reference_lists = array();
+        foreach (SubscriberNotifications_Content_Config::get_enabled_post_types() as $post_type) {
+            foreach (SubscriberNotifications_Content_Config::get_form_taxonomies($post_type) as $taxonomy) {
+                $terms = SubscriberNotifications_Term_Resolver::get_terms_for_form($post_type, $taxonomy);
+                if (empty($terms)) {
+                    continue;
+                }
+                $term_rows = array();
+                foreach ($terms as $term) {
+                    $term_rows[] = array(
+                        'term'                    => $term,
+                        'hidden_from_public_form' => SubscriberNotifications_Term_Resolver::is_term_hidden_from_public_form(
+                            $post_type,
+                            $taxonomy,
+                            (int) $term->term_id
+                        ),
+                    );
+                }
+
+                $reference_lists[] = array(
+                    'post_type'       => $post_type,
+                    'post_type_label' => SubscriberNotifications_Content_Config::get_post_type_label($post_type),
+                    'taxonomy'        => $taxonomy,
+                    'taxonomy_label'  => SubscriberNotifications_Content_Config::get_taxonomy_label($post_type, $taxonomy),
+                    'terms'           => $term_rows,
+                );
+            }
+        }
+
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-import-export.php';
     }
     

@@ -131,17 +131,16 @@ jQuery(document).ready(function($) {
             return false;
         }
         
-        // Check if at least one category is selected
-        var newsCategories = $('input[name="news_categories[]"]:checked').length;
-        var meetingCategories = $('input[name="meeting_categories[]"]:checked').length;
-        
-        if (newsCategories === 0 && meetingCategories === 0) {
-            alert('Please select at least one category.');
+        // Check that at least one term is selected across configured taxonomies.
+        var selectedTerms = $('input[name^="target_preferences["]:checked').length;
+
+        if (selectedTerms === 0) {
+            alert('Please select at least one term across the configured taxonomies.');
             e.preventDefault();
             return false;
         }
     });
-    
+
     // Handle notification preview
     $('#notification_content').on('input', function() {
         var content = $(this).val();
@@ -149,8 +148,9 @@ jQuery(document).ready(function($) {
             // Replace shortcodes with sample data
             content = content.replace(/\[subscriber_name\]/g, 'John Doe');
             content = content.replace(/\[subscriber_email\]/g, 'john@example.com');
-            content = content.replace(/\[selected_news_categories\]/g, 'Announcements, News');
-            content = content.replace(/\[selected_meeting_categories\]/g, 'City Council, Planning Commission');
+            content = content.replace(/\[selected_subscriptions\]/g, 'Sample selections across configured taxonomies');
+            content = content.replace(/\[selected_terms[^\]]*\]/g, 'Sample term, Another term');
+            content = content.replace(/\[content_feed[^\]]*\]/g, '<ul><li>Sample feed item</li></ul>');
             content = content.replace(/\[delivery_frequency\]/g, 'Weekly');
             content = content.replace(/\[site_title\]/g, subscriberNotifications.siteTitle || 'Site Title');
             content = content.replace(/\[manage_preferences_link\]/g, '<a href="#">Manage Preferences</a>');
@@ -221,75 +221,73 @@ jQuery(document).ready(function($) {
         $('#notification-options').hide();
     });
     
-    // Handle "Select All" functionality for admin forms
-    $(document).on('change', '#select-all-news-admin, #select-all-news-admin-edit', function() {
-        var isChecked = $(this).is(':checked');
-        $('.news-category-checkbox').prop('checked', isChecked);
-    });
-    
-    $(document).on('change', '#select-all-meetings-admin, #select-all-meetings-admin-edit', function() {
-        var isChecked = $(this).is(':checked');
-        $('.meeting-category-checkbox').prop('checked', isChecked);
-    });
-    
-    // Update "Select All" checkboxes when individual categories are changed
-    $(document).on('change', '.news-category-checkbox', function() {
-        var $allNewsCheckboxes = $('.news-category-checkbox');
-        var $checkedNewsCheckboxes = $('.news-category-checkbox:checked');
-        var $selectAllNews = $('#select-all-news-admin, #select-all-news-admin-edit');
-        
-        if ($checkedNewsCheckboxes.length === 0) {
-            $selectAllNews.prop('indeterminate', false).prop('checked', false);
-        } else if ($checkedNewsCheckboxes.length === $allNewsCheckboxes.length) {
-            $selectAllNews.prop('indeterminate', false).prop('checked', true);
-        } else {
-            $selectAllNews.prop('indeterminate', true);
-        }
-    });
-    
-    $(document).on('change', '.meeting-category-checkbox', function() {
-        var $allMeetingCheckboxes = $('.meeting-category-checkbox');
-        var $checkedMeetingCheckboxes = $('.meeting-category-checkbox:checked');
-        var $selectAllMeetings = $('#select-all-meetings-admin, #select-all-meetings-admin-edit');
-        
-        if ($checkedMeetingCheckboxes.length === 0) {
-            $selectAllMeetings.prop('indeterminate', false).prop('checked', false);
-        } else if ($checkedMeetingCheckboxes.length === $allMeetingCheckboxes.length) {
-            $selectAllMeetings.prop('indeterminate', false).prop('checked', true);
-        } else {
-            $selectAllMeetings.prop('indeterminate', true);
-        }
-    });
-    
-    // Initialize "Select All" state on page load for edit forms
-    function initializeSelectAllState() {
-        // News categories
-        var $allNewsCheckboxes = $('.news-category-checkbox');
-        var $checkedNewsCheckboxes = $('.news-category-checkbox:checked');
-        var $selectAllNews = $('#select-all-news-admin, #select-all-news-admin-edit');
-        
-        if ($checkedNewsCheckboxes.length === 0) {
-            $selectAllNews.prop('indeterminate', false).prop('checked', false);
-        } else if ($checkedNewsCheckboxes.length === $allNewsCheckboxes.length) {
-            $selectAllNews.prop('indeterminate', false).prop('checked', true);
-        } else {
-            $selectAllNews.prop('indeterminate', true);
-        }
-        
-        // Meeting categories
-        var $allMeetingCheckboxes = $('.meeting-category-checkbox');
-        var $checkedMeetingCheckboxes = $('.meeting-category-checkbox:checked');
-        var $selectAllMeetings = $('#select-all-meetings-admin, #select-all-meetings-admin-edit');
-        
-        if ($checkedMeetingCheckboxes.length === 0) {
-            $selectAllMeetings.prop('indeterminate', false).prop('checked', false);
-        } else if ($checkedMeetingCheckboxes.length === $allMeetingCheckboxes.length) {
-            $selectAllMeetings.prop('indeterminate', false).prop('checked', true);
-        } else {
-            $selectAllMeetings.prop('indeterminate', true);
-        }
+    // Generic "Select all" for v3 target/preference checklists.
+    //
+    // Markup pattern (admin + frontend):
+    //   <input type="checkbox" class="sn-select-all" data-target="target_preferences[post][category]">
+    //   <input type="checkbox" name="target_preferences[post][category][]" value="...">
+    //
+    // The select-all box toggles every term input whose name begins with
+    // "<data-target>[". Individual changes update the parent indeterminate state.
+
+    function snFindTermInputs($scope, target) {
+        return $scope.find('input[type="checkbox"]').filter(function () {
+            var name = $(this).attr('name') || '';
+            return name.indexOf(target + '[') === 0;
+        });
     }
-    
-    // Initialize on page load
-    initializeSelectAllState();
+
+    function snSyncSelectAll($scope) {
+        $scope.find('.sn-select-all').each(function () {
+            var $box = $(this);
+            var target = $box.data('target');
+            if (!target) {
+                return;
+            }
+            var $terms = snFindTermInputs($scope, target);
+            var $checked = $terms.filter(':checked');
+            if ($terms.length === 0) {
+                return;
+            }
+            if ($checked.length === 0) {
+                $box.prop('indeterminate', false).prop('checked', false);
+            } else if ($checked.length === $terms.length) {
+                $box.prop('indeterminate', false).prop('checked', true);
+            } else {
+                $box.prop('indeterminate', true);
+            }
+        });
+    }
+
+    $(document).on('change', '.sn-select-all', function () {
+        var $box = $(this);
+        var target = $box.data('target');
+        if (!target) {
+            return;
+        }
+        var $scope = $box.closest('form');
+        if ($scope.length === 0) {
+            $scope = $box.closest('.sn-targets');
+        }
+        if ($scope.length === 0) {
+            $scope = $(document);
+        }
+        snFindTermInputs($scope, target).prop('checked', $box.prop('checked'));
+        $box.prop('indeterminate', false);
+    });
+
+    $(document).on('change', 'input[type="checkbox"][name^="target_preferences["], input[type="checkbox"][name^="preferences["]', function () {
+        var $scope = $(this).closest('form');
+        if ($scope.length === 0) {
+            $scope = $(this).closest('.sn-targets');
+        }
+        if ($scope.length === 0) {
+            $scope = $(document);
+        }
+        snSyncSelectAll($scope);
+    });
+
+    $('form, .sn-targets').each(function () {
+        snSyncSelectAll($(this));
+    });
 });

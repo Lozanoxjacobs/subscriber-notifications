@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
- * Description: Enterprise-grade email notification system featuring personalized content delivery, unique engagement analytics, flexible scheduling options, recurring notifications, and comprehensive subscriber management with preference controls.
- * Version: 2.7.0
+ * Description: Configurable subscriber notification system with per-site Content Types (any public post type and taxonomy), JSON preferences, theme-native form, and brandable emails.
+ * Version: 3.1.1
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '2.7.0');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.1.1');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -43,6 +43,7 @@ class SubscriberNotifications {
      */
     private $database;
     private $admin;
+    private $content_types_admin;
     private $frontend;
     private $notifications;
     private $sendgrid;
@@ -76,12 +77,9 @@ class SubscriberNotifications {
         register_activation_hook(__FILE__, array($this, 'activate'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate'));
         register_uninstall_hook(__FILE__, array('SubscriberNotifications', 'uninstall'));
-        
+
         // Initialize when WordPress is ready
         add_action('plugins_loaded', array($this, 'init'));
-        
-        // Check dependencies
-        add_action('admin_init', array($this, 'check_dependencies'));
     }
     
     /**
@@ -111,6 +109,12 @@ class SubscriberNotifications {
         if (function_exists('subscriber_notifications_migrate_prefixed_options')) {
             subscriber_notifications_migrate_prefixed_options();
         }
+
+        if (function_exists('subscriber_notifications_migrate_email_design_options')) {
+            subscriber_notifications_migrate_email_design_options();
+        }
+
+        $this->maybe_upgrade_database();
 
         // Initialize components
         $this->init_components();
@@ -196,14 +200,35 @@ class SubscriberNotifications {
     }
     
     /**
+     * Run database migrations when the plugin version is newer than the stored DB version.
+     */
+    private function maybe_upgrade_database() {
+        if (version_compare(get_option('subscriber_notifications_db_version', '0'), SUBSCRIBER_NOTIFICATIONS_VERSION, '>=')) {
+            return;
+        }
+
+        if (!class_exists('SubscriberNotifications_Database')) {
+            return;
+        }
+
+        $database = new SubscriberNotifications_Database();
+        $database->run_migrations();
+        $database->create_tables();
+    }
+
+    /**
      * Load plugin dependencies
      */
     private function load_dependencies() {
-        
-        // Load helpers first (prefixed options, migration).
+
         $files = array(
+            // Core config + preferences must load before consumers.
+            'includes/class-content-config.php',
+            'includes/class-term-resolver.php',
+            'includes/class-preferences.php',
             'includes/class-database.php',
             'includes/class-email-formatter.php',
+            'includes/class-content-types-admin.php',
             'includes/class-admin.php',
             'includes/class-frontend.php',
             'includes/class-notifications.php',
@@ -213,12 +238,16 @@ class SubscriberNotifications {
             'includes/class-csv-handler.php',
             'includes/class-analytics.php'
         );
-        
+
         foreach ($files as $file) {
             $file_path = SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . $file;
             if (file_exists($file_path)) {
                 require_once $file_path;
             }
+        }
+
+        if (class_exists('SubscriberNotifications_Content_Config')) {
+            SubscriberNotifications_Content_Config::register();
         }
     }
     
@@ -229,9 +258,10 @@ class SubscriberNotifications {
         try {
             // Initialize database
             $this->database = new SubscriberNotifications_Database();
-            
+
             // Initialize other components
             $this->admin = new SubscriberNotifications_Admin($this->database);
+            $this->content_types_admin = new SubscriberNotifications_Content_Types_Admin();
             $this->frontend = new SubscriberNotifications_Frontend($this->database);
             $this->notifications = new SubscriberNotifications_Notifications($this->database);
             $this->sendgrid = new SubscriberNotifications_SendGrid();
@@ -239,33 +269,14 @@ class SubscriberNotifications {
             $this->scheduler = new SubscriberNotifications_Scheduler($this->database);
             $this->csv_handler = new SubscriberNotifications_CSV_Handler($this->database);
             $this->analytics = new SubscriberNotifications_Analytics($this->database);
-            
+
         } catch (Exception $e) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Subscriber Notifications initialization error: ' . $e->getMessage());
             }
         }
     }
-    
-    /**
-     * Check plugin dependencies
-     */
-    public function check_dependencies() {
-        if (!class_exists('Tribe__Events__Main')) {
-            add_action('admin_notices', array($this, 'events_calendar_notice'));
-        }
-    }
-    
-    /**
-     * Events Calendar notice
-     */
-    public function events_calendar_notice() {
-        ?>
-        <div class="notice notice-error">
-            <p><?php _e('Subscriber Notifications requires The Events Calendar plugin to be installed and activated.', 'subscriber-notifications'); ?></p>
-        </div>
-        <?php
-    }
+
     
     /**
      * Plugin activation
@@ -294,19 +305,24 @@ class SubscriberNotifications {
             // Then create/update tables (dbDelta will see correct schema after migration)
             $database->create_tables();
         }
-        
+
+        // Ensure Content Types config option exists (greenfield default = empty array).
+        if (get_option(SubscriberNotifications_Content_Config::OPTION_KEY, null) === null) {
+            add_option(SubscriberNotifications_Content_Config::OPTION_KEY, array(), '', 'no');
+        }
+
         // Set default options
         $this->set_default_options();
-        
+
         // Clean up obsolete options
         $this->cleanup_obsolete_options();
-        
+
         // Auto-populate global footer if empty
         $this->auto_populate_global_footer();
-        
+
         // Schedule events
         $this->schedule_events();
-        
+
         // Flush rewrite rules
         flush_rewrite_rules();
     }
@@ -382,6 +398,15 @@ class SubscriberNotifications {
             'global_header_content',
             'global_footer',
             'email_css',
+            'email_font_body',
+            'email_font_heading',
+            'email_color_text',
+            'email_color_link',
+            'email_color_background',
+            'email_color_content_bg',
+            'email_color_link_hover',
+            'email_color_footer_bg',
+            'email_color_footer_text',
             'daily_send_time',
             'weekly_send_time',
             'weekly_send_day',
@@ -389,6 +414,7 @@ class SubscriberNotifications {
             'monthly_send_day',
             'test_email',
             'delete_data_on_uninstall',
+            'hide_terms_without_published_content',
         );
         $options_to_delete = array_merge(
             array(
@@ -398,6 +424,16 @@ class SubscriberNotifications {
                 'subscriber_notifications_phone_removal_version',
                 'subscriber_notifications_settings',
                 'subscriber_notifications_prefixed_options_migrated',
+                'subscriber_notifications_content_config',
+                'subscriber_notifications_email_design_options_migrated',
+            ),
+            array_map(
+                'subscriber_notifications_option_name',
+                array(
+                    'email_color_accent',
+                    'email_color_button_bg',
+                    'email_color_button_text',
+                )
             ),
             array_map(
                 'subscriber_notifications_option_name',
@@ -454,15 +490,25 @@ class SubscriberNotifications {
     private function set_default_options() {
         $default_options = array(
             'welcome_email_subject'           => __('Welcome! Your subscription is confirmed', 'subscriber-notifications'),
-            'welcome_email_content'            => __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'),
+            'welcome_email_content'            => __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_subscriptions].', 'subscriber-notifications'),
             'welcome_back_email_subject'      => __('Welcome back! Your subscription has been reactivated', 'subscriber-notifications'),
-            'welcome_back_email_content'      => __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'),
+            'welcome_back_email_content'      => __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_subscriptions].', 'subscriber-notifications'),
             'preferences_update_email_subject' => __('Your preferences have been updated', 'subscriber-notifications'),
-            'preferences_update_email_content' => __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('News Categories: [selected_news_categories]', 'subscriber-notifications') . "\n" . __('Meeting Categories: [selected_meeting_categories]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'),
-            'captcha_site_key'               => '',
-            'captcha_secret_key'             => '',
+            'preferences_update_email_content' => __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('Subscriptions: [selected_subscriptions]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'),
+            'captcha_site_key'                => '',
+            'captcha_secret_key'              => '',
+            'hide_terms_without_published_content' => 1,
             'global_header_logo'              => '',
             'global_header_content'           => '',
+            'email_font_body'                 => 'Arial, Helvetica, sans-serif',
+            'email_font_heading'              => '',
+            'email_color_text'                => '#333333',
+            'email_color_link'                => '#0066cc',
+            'email_color_background'          => '#f5f5f5',
+            'email_color_content_bg'          => '#ffffff',
+            'email_color_link_hover'          => '#004499',
+            'email_color_footer_bg'           => '#1d2327',
+            'email_color_footer_text'         => '#ffffff',
         );
 
         foreach ($default_options as $short_key => $value) {

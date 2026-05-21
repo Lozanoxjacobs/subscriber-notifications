@@ -5,46 +5,28 @@ A comprehensive WordPress plugin for managing subscriber notifications with imme
 ## Features
 
 ### Core Functionality
-- **Subscriber Registration Form** - Frontend form with CAPTCHA protection
+- **Subscriber Registration Form** - Frontend form with CAPTCHA protection; guests enter name and email, logged-in users use readonly account fields
+- **WordPress account linking** - Logged-in signups store the subscriber's WordPress `user_id` for admin visibility and reliable identity on resubscribe
 - **Immediate Subscription** - Subscribers are activated immediately upon form submission
 - **Notification Management** - WYSIWYG editor for creating notifications
 - **Email Delivery** - Sends through WordPress `wp_mail()` (use your SMTP or mail plugin); open/click logging preserved
 - **Smart Scheduling System** - Daily, weekly and monthly email scheduling
 - **Recurring Notifications** - Send notifications repeatedly based on frequency schedule
 - **Analytics Tracking** - Email open/click tracking
-- **CSV Import/Export** - Bulk subscriber management
+- **CSV Import/Export** - Bulk subscriber management; exports include `user_id` when linked to a WordPress account
 - **Rate Limiting** - Prevents email flooding for frequent notifications
 
 ### Admin Features
 - **Dashboard** - Overview of subscribers, email statistics, and current settings
 - **Notification Management** - View, edit, cancel, resend, and delete notifications
 - **Recurring Notification Support** - Create and manage notifications that send repeatedly
-- **Subscriber Management** - View, edit, activate/deactivate subscribers
+- **Subscriber Management** - View subscribers (including **WP User** link and ID), search, activate/deactivate, delete, and CSV import/export
 - **Notification Creation** - Rich text editor with shortcodes and live preview
 - **Email Logs** - Track all email activity with detailed analytics
-- **Settings** - Configure scheduling, CAPTCHA, templates, global footer, and custom CSS
+- **Content Types** - Enable public post types and taxonomies, term display rules (all / children of / include / exclude), and form labels
+- **Settings** - Scheduling, CAPTCHA, email templates, Email Design branding, and general options (test email, hide empty terms on form, delete on uninstall)
 - **Test email** - Send a test message to verify mail delivery (`wp_mail()`)
 - **Migration Tools** - Convert existing notifications to recurring format
-
-### Shortcodes
-- `[subscriber_name]` - Subscriber's name
-- `[subscriber_email]` - Subscriber's email
-- `[selected_news_categories]` - Selected news categories
-- `[selected_meeting_categories]` - Selected meeting categories
-- `[delivery_frequency]` - Delivery frequency preference
-- `[news_feed duration="1day|1week|1month"]` - **Personalized news feed** (shows only subscriber's selected categories)
-- `[meetings_feed duration="1day|1week|1month"]` - **Personalized events feed** (shows only subscriber's selected categories)
-- `[site_title]` - Site title
-- `[manage_preferences_link]` - Manage preferences link
-- `[manage_preferences_link text="Custom Text"]` - Manage preferences link with custom text
-
-#### **Personalized Content Behavior:**
-The `[news_feed]` and `[meetings_feed]` shortcodes automatically show content based on each subscriber's selected categories, not the notification's target categories. This means:
-
-- **Universal Notifications**: You can create notifications targeting all categories
-- **Personalized Results**: Each subscriber sees only content from their selected categories
-- **Efficient Management**: One notification reaches everyone with personalized content
-- **Better User Experience**: No irrelevant content for subscribers
 
 ## Installation
 
@@ -58,9 +40,64 @@ The `[news_feed]` and `[meetings_feed]` shortcodes automatically show content ba
 - WordPress 5.0+
 - PHP 7.4+
 - MySQL 5.6+ (or MariaDB equivalent)
-- The Events Calendar plugin (for meeting categories)
 - Google reCAPTCHA v2 account (optional)
 - **Tested up to WordPress 6.8**
+
+> Subscriber Notifications is now content-type agnostic. Configure which public post types and taxonomies subscribers can choose from under **Notifications > Content Types** before publishing the subscription form. Any post type plugin (including The Events Calendar) is supported out of the box — there is no longer a hard dependency on a specific plugin.
+
+## How it works
+
+1. **Content Types** — You enable post types and taxonomies; that drives the subscribe form, notification target checklists, CSV import/export columns, and matching rules.
+2. **Subscriber choices** — Each person’s selected terms and delivery frequency are saved when they subscribe or update preferences. Each notification stores which terms that send is about.
+3. **Who gets an email** — Active subscribers are matched by frequency (daily, weekly, or monthly), then filtered to those who share at least one targeted term with the notification.
+4. **What they see** — Email content uses shortcodes. `[content_feed]` builds a personalized list of posts per recipient. Global header, footer, and styling come from **Email Design** settings.
+5. **Delivery** — Mail is sent through WordPress (use SMTP or a mail plugin on your host if needed). Opens and clicks can be logged when tracking is enabled.
+
+Posts can be marked **Notify subscribers** in the editor; that sets feed meta so digests pick them up on the next scheduled run.
+
+## Shortcodes
+
+Use in notification **subject** and **body**, welcome/preference emails, and global header/footer (Email Design).
+
+| Shortcode | Use |
+|-----------|-----|
+| `[subscriber_name]` | Subscriber name |
+| `[subscriber_email]` | Subscriber email |
+| `[delivery_frequency]` | Daily / weekly / monthly label |
+| `[selected_subscriptions]` | Formatted list of all selections (HTML in body; use `format="plain"` in **subject** only) |
+| `[selected_terms post_type="…" taxonomy="…"]` | Comma-separated term names for one taxonomy |
+| `[site_title]` | Site name |
+| `[manage_preferences_link]` | Preferences URL (optional `text="…"`) |
+| `[subscriber_notifications_form]` | Public subscribe form (`title="…"` optional) |
+
+### `[content_feed]` (personalized post lists)
+
+Only includes **published** posts flagged for the feed, notified within the `duration` window (`1day`, `1week`, `1month`).
+
+| Attribute | Notes |
+|-----------|--------|
+| `post_type` | Required. Must be enabled in Content Types. |
+| `taxonomy` | Optional. **One taxonomy** — filter on that dimension only. **Omit** — match the subscriber in **any** form taxonomy for that post type (OR). |
+| `duration` | Default `1month`. |
+| `limit` | Default `10`. |
+| `format` | `list` (default) = bulleted title links; `summary` = linked title + short excerpt. |
+| `terms` | Optional comma-separated **term slugs**; **requires** `taxonomy`. Alias: `term` (same value). Scopes the feed block; each subscriber sees only slugs they subscribed to (intersection). Unknown slugs skipped. |
+
+**Slugs:** Use the exact slug from WordPress for each taxonomy and term (Posts → Categories / your taxonomy; edit a term to see its slug). Taxonomy slugs and term slugs may use different punctuation (e.g. `tribe_events_cat` vs `family-events`) — always copy from WordPress, do not guess.
+
+**Personalization:** Without `terms`, the feed uses the subscriber’s selections and the notification’s targets together. With `terms`, the feed uses only the listed slugs that the subscriber also selected (notification targets still control who receives the email). Create one notification with broad targets; each subscriber sees only matching posts.
+
+**Examples:**
+
+```
+[content_feed post_type="post" taxonomy="category" duration="1week" format="list"]
+[content_feed post_type="tribe_events" taxonomy="tribe_events_cat" terms="family-events,concerts,kids-events" duration="1week" format="list"]
+[content_feed post_type="project" duration="1day" limit="10" format="summary"]
+```
+
+**Community events example:** Notification targets Family Events, Concerts, and Kids Events (who receives the email). Shortcode `terms="family-events,concerts,kids-events"` scopes the feed. A subscriber who chose Family Events and Concerts only sees those two — not Kids Events.
+
+**Multi-taxonomy example:** A subscriber excludes status “On Hold” but includes type “Commerce”. `[content_feed post_type="project" duration="1day"]` can still show a project tagged On Hold + Commerce, because Commerce matches.
 
 ## Configuration
 
@@ -77,20 +114,31 @@ The `[news_feed]` and `[meetings_feed]` shortcodes automatically show content ba
 
 ### CAPTCHA Setup
 1. Create a Google reCAPTCHA v2 site (the "I'm not a robot" checkbox version)
-2. Enter your site key and secret key in Settings
+2. Enter your site key and secret key in **Notifications > Settings > Security**
 3. The CAPTCHA checkbox will appear on the subscription form
+
+### Content Types
+1. Go to **Notifications > Content Types**
+2. Enable one or more public post types and set a display label for each
+3. For each post type, enable taxonomies that should appear on the subscription form and choose how terms are listed:
+   - **All** — every term in the taxonomy
+   - **Children of** — terms under a parent (hierarchical taxonomies only)
+   - **Include** — only selected term IDs
+   - **Exclude** — all terms except selected IDs
+4. Save via **options.php** (Settings API). The public form will not render until at least one post type and one taxonomy are enabled.
+
+### General Settings
+Under **Notifications > Settings > General**:
+
+- **Test Email Address** — address used by **Send Test Email** (`wp_mail()`)
+- **Hide Empty Terms on Subscription Form** (default **on**) — on the public subscribe and preferences forms, hide terms that have zero **published** posts for the configured post type (e.g. empty `Uncategorized`). Admin notification targets, Content Types configuration, and CSV import reference lists always show every configured term. Uncheck to show all configured terms on the public form regardless of post count.
+- **Delete Data on Uninstall** — when checked, uninstall removes subscribers, logs, queue, and plugin options
 
 ### Email Templates
 - Customize welcome email subject and content
 - Welcome emails are sent immediately after subscription
 - Customize welcome back email for reactivated subscribers
 - Customize preferences update confirmation email
-
-### Data Management
-- **Delete Data on Uninstall** - Option to preserve or delete all plugin data when uninstalling
-  - Default: Data is preserved (checkbox unchecked)
-  - Check the box to delete all data when uninstalling
-  - Includes: Subscribers, notifications, logs, and all settings
 
 ## Usage
 
@@ -103,19 +151,28 @@ Add the subscription form to any page or post:
 Optional parameters:
 - `title="Custom Title"` - Custom form title
 
-#### Form Features:
-- **Select All Functionality**: "Select All" checkboxes for both news and meeting categories
-- **Smart Selection**: Select all categories at once, then uncheck the ones you don't want
-- **Visual Feedback**: "Select All" checkbox shows indeterminate state when some (but not all) categories are selected
-- **Responsive Design**: Works perfectly on mobile devices
-- **Accessibility**: Full keyboard navigation and screen reader support
+#### Form layout and behavior:
+- **Collapsible sections** — one block per enabled post type; checklists per enabled taxonomy
+- **Select all** — per-taxonomy control with indeterminate state when partially selected
+- **Theme-native markup** — minimal plugin CSS; the active theme styles most of the form
+- **Empty terms** — by default, terms with no published posts for that post type are hidden on the public form (see **Hide Empty Terms on Subscription Form** under General settings)
+- **Validation** — at least one term must be selected across all sections; frequency is required
+
+#### Logged-in users:
+- **Name and email** are prefilled from the WordPress profile (`first_name`, `last_name`, `user_email`) and shown as **read-only** on the form
+- **Server-side enforcement** — on submit, the plugin uses the account identity and ignores POSTed name/email for logged-in users
+- **Account linking** — the subscriber row stores `user_id`; existing rows are matched by `user_id` first, then by email for legacy guest signups
+- **Preferences form** — same term/frequency UI as subscribe (including hide-empty behavior); name/email on that form are not locked to the WP account
+- **CAPTCHA** — still required when CAPTCHA is enabled (same as guests)
+
+Guests continue to enter and edit name and email normally.
 
 ### Managing Notifications
 1. **View All Notifications** - Go to Notifications > Notifications
 2. **Search & Filter** - Find specific notifications by title, content, or status
 3. **Notification Actions**:
    - **View** - Complete email preview with subject, content, footer, and styling
-   - **Edit** - Edit any notification (title, content, categories, frequency)
+   - **Edit** - Edit any notification (title, content, target terms, frequency)
    - **Cancel** - Cancel pending notifications
    - **Resend** - Resend sent notifications
    - **Delete** - Permanently delete notifications
@@ -125,10 +182,7 @@ Optional parameters:
 ### Creating Notifications
 1. Go to Notifications > Create Notification
 2. Enter title, email subject, and content using the WYSIWYG editor
-3. Select target categories and frequency:
-   - **Select All Categories**: Use "Select All" checkboxes to quickly select all categories, then uncheck unwanted ones
-   - **Smart Selection**: Visual feedback shows indeterminate state when partially selected
-   - **Efficient Management**: Perfect for sites with many categories
+3. Select target terms and frequency (same Content Types as the public form; admin lists include empty terms)
 4. Choose notification type:
    - **One-time Notification**: Sent once based on subscriber frequency preferences
    - **Recurring Notification**: Sent repeatedly based on frequency schedule
@@ -173,7 +227,7 @@ Recurring notifications are sent repeatedly based on your frequency schedule set
 ### Managing Large Subscriber Bases (Thousands of Subscribers)
 
 #### **Universal Notification Strategy:**
-For thousands of subscribers, create notifications that target all categories but use personalized shortcodes:
+For thousands of subscribers, create notifications that target broad term sets but use personalized shortcodes:
 
 ```
 Title: Weekly City Updates
@@ -183,18 +237,19 @@ Hello [subscriber_name],
 
 Here are this week's updates based on your interests:
 
-[news_feed duration="1week"]
-[meetings_feed duration="1week"]
+[content_feed post_type="post" taxonomy="category" duration="1week"]
+[content_feed post_type="project" duration="1week"]
+[content_feed post_type="tribe_events" taxonomy="tribe_events_cat" duration="1week"]
 
-Your selected categories: [selected_news_categories] and [selected_meeting_categories]
+Your subscriptions: [selected_subscriptions]
 Delivery frequency: [delivery_frequency]
 
 [manage_preferences_link]
 ```
 
 #### **How It Works:**
-- **Target All Categories**: Select all news and meeting categories when creating the notification
-- **Personalized Content**: Each subscriber automatically receives only content from their selected categories
+- **Target All Terms**: Select all relevant terms when creating the notification
+- **Personalized Content**: Each subscriber automatically receives only content from their selected terms
 - **Efficient Management**: One notification reaches everyone with personalized content
 - **No Irrelevant Content**: Subscribers never see content they didn't subscribe to
 
@@ -204,17 +259,13 @@ Delivery frequency: [delivery_frequency]
 - **Efficient**: No need to create individual notifications for each subscriber
 - **Better Engagement**: Relevant content reduces unsubscribe rates
 
-### Global Email Settings
-1. Go to Notifications > Settings
-2. Scroll to "Global Email Settings" section
-3. **Global Header Logo**: Upload a logo for email headers (JPG, PNG, GIF only, max 700x200px, 200KB)
-4. **Global Header Content**: Add header content using WYSIWYG editor (appears on left, logo on right)
-5. **Global Footer Content**: Add footer content using WYSIWYG editor
-6. **Custom Email CSS**: Add custom CSS for email formatting
-7. Use shortcodes like [site_title], [manage_preferences_link], [subscriber_name], etc.
-8. Header and footer are automatically added to all notification emails
-9. Default footer auto-populated with `[site_title] | [manage_preferences_link]` if empty
-10. Recommended: Include manage preferences link, contact info, and legal disclaimers in footer
+### Email Design (Settings tab)
+1. Go to **Notifications > Settings** and open the **Email Design** tab
+2. **Header & Footer** — global header logo (JPG, PNG, GIF; max 700×200px, 200KB), header content (WYSIWYG), and footer content (WYSIWYG). Header/footer are added to every notification email. Default footer: `[site_title] | [manage_preferences_link]` if empty
+3. **Brand Colors** — body text, link, link hover (`a:hover` in clients that support it), outer background, content card background, footer background, footer text. CTAs use text links (e.g. `[manage_preferences_link]`), not button styles
+4. **Typography** — body font and optional heading font (leave heading blank to use body font)
+5. **Advanced** — custom CSS appended after generated branding CSS for fine-tuning
+6. Shortcodes work in header/footer content: `[site_title]`, `[manage_preferences_link]`, `[subscriber_name]`, etc.
 
 ### Preview Functionality
 1. **Live Preview** - Preview updates automatically as you type in create form
@@ -224,18 +275,28 @@ Delivery frequency: [delivery_frequency]
 5. **Realistic Preview** - Shows exactly what subscribers will receive
 
 ### Managing Subscribers
-1. View all subscribers in Notifications > Subscribers
-2. Filter by status, search by name/email
-3. Activate/deactivate or delete subscribers
-4. Import/export CSV files
+1. View all subscribers in **Notifications > Subscribers**
+2. Filter by status; search by **name**, **email**, or a numeric **WordPress user ID**
+3. **WP User** column — login linked to the user profile when `user_id` is set; em dash (—) for guests; **ID {n} (user not found)** if the linked WordPress user was deleted but the subscriber row still has `user_id`
+4. Activate, deactivate, or delete subscribers from the list (admin actions do not set or change `user_id`; linking happens on logged-in frontend subscribe/reactivate only)
+5. **Import/export** — see [CSV import and export](#csv-import-and-export) below
+
+### CSV import and export
+**Export** (Notifications > Import/Export):
+- Includes columns: `id`, `name`, `email`, `user_id`, `frequency`, `status`, `date_added`, `last_notified`, followed by one column per configured `post_type:taxonomy` pair (e.g. `post:category`, `tribe_events:tribe_events_cat`).
+- Term values are comma-separated term names. `user_id` is the WordPress user ID when the subscriber signed up while logged in; empty for guests.
+
+**Import**:
+- Required columns: `name`, `email`
+- Optional: `frequency`, plus any `post_type:taxonomy` columns matching configured content types. Each subscriber row must select at least one term across the configured taxonomies.
+- **Imports ignore `user_id`** even if present in the file (prevents incorrect account links from spreadsheets). Link accounts only via the public subscription form when the user is logged in.
 
 ### Subscriber Preference Management
 1. Subscribers can manage their own preferences using a token-based link
 2. Access preferences page via `?action=manage&token={management_token}`
 3. Subscribers can update:
    - Name
-   - News categories
-   - Meeting categories
+   - Their selected terms for each configured post type / taxonomy
    - Delivery frequency
 4. Unsubscribe option available on preferences page
 5. Confirmation email sent after preference updates
@@ -269,82 +330,24 @@ To customize for your theme's sticky header height:
 ```
 
 ### Post/Event Updates
-1. Edit any post or event
-2. Check "Notify subscribers of update" in the meta box
-3. Add custom message (optional)
-4. Save to send immediate notifications
+1. Edit any post in an enabled content type
+2. Check **Notify subscribers** in the meta box (includes the post in feed-flagged digests; does not send an immediate blast)
+3. Save — the post is eligible for the next scheduled notification that matches subscriber preferences
 
-## Database Schema
+## Data storage
 
-### Subscribers Table
-- `id` - Primary key
-- `name` - Subscriber name
-- `email` - Email address (unique)
-- `news_categories` - Comma-separated category IDs
-- `meeting_categories` - Comma-separated category IDs
-- `frequency` - daily, weekly, monthly
-- `status` - active, inactive
-- `management_token` - Management token (used for preferences and unsubscribe)
-- `date_added` - Registration date
-- `last_notified` - Last email sent date
+The plugin stores subscribers, scheduled notifications, and email logs in the WordPress database. Data is created when the plugin is activated. You can optionally delete all plugin data on uninstall under **Settings > General**.
 
-### Notifications Queue Table
-- `id` - Primary key
-- `title` - Notification title
-- `subject` - Email subject line
-- `content` - Email content
-- `news_categories` - Comma-separated news category IDs
-- `meeting_categories` - Comma-separated meeting category IDs
-- `frequency_target` - daily, weekly, monthly
-- `status` - pending, sent, cancelled
-- `created_by` - User ID who created the notification
-- `created_date` - When notification was created
-- `sent_date` - When notification was sent
-- `is_recurring` - Whether notification repeats (0 or 1)
-- `next_send_date` - Next scheduled send date for recurring notifications
-- `last_sent_date` - Last time notification was sent
-- `recurrence_count` - Number of times notification has been sent
+## Security and performance
 
-### Logs Table
-- `id` - Primary key
-- `subscriber_id` - Foreign key to subscribers
-- `notification_id` - Notification ID
-- `email_type` - Type of email sent
-- `sent_date` - When email was sent
-- `status` - sent, failed, pending
-- `open_count` - Number of opens
-- `click_count` - Number of clicks
-- `tracking_id` - Unique tracking identifier
-
-## Security Features
-
-- **Nonce Verification** - All forms protected with WordPress nonces
-- **Data Sanitization** - All input sanitized and validated using WordPress sanitization functions
-- **CAPTCHA Protection** - Prevents spam registrations
-- **Rate Limiting** - Prevents email flooding (100 requests per hour per IP)
-- **SQL Injection Prevention** - Prepared statements used throughout with table/column name validation
-- **Input Sanitization** - All `$_SERVER` and user input properly sanitized using `sanitize_text_field()`, `wp_unslash()`, and validation
-- **IP Address Validation** - Remote IP addresses validated using `filter_var()` with `FILTER_VALIDATE_IP`
-- **Capability Checks** - Admin functions require proper permissions (`manage_options`)
-- **Access Controls** - Debug tools restricted to super administrators or when `WP_DEBUG` is enabled
-- **URL Validation** - Redirect URLs validated to prevent open redirect vulnerabilities
-
-## Performance Features
-
-- **Batch Processing** - Large subscriber lists processed in batches (10 notifications per batch)
-- **Queue System** - Email sending queued for better performance
-- **Database Optimization** - Proper indexing for fast queries
-- **Caching** - Category queries cached using WordPress transients
-- **Background Processing** - Scheduled emails sent via WordPress cron
-- **Cron Scheduling** - Uses "every_minute" schedule for precise email delivery timing
-- **Efficient Queries** - Optimized database queries with proper WHERE clauses and indexes
+Nonces, capability checks (`manage_options`), sanitized input, optional reCAPTCHA, rate limiting, and prepared SQL. Digests run on WordPress cron with batched sends for large lists; term lists are cached where appropriate.
 
 ## Analytics
 
 - **Open Tracking** - Track email opens with tracking pixels
 - **Click Tracking** - Track link clicks
 - **Engagement Metrics** - Per-subscriber engagement statistics
-- **Category Performance** - See which categories perform best
+- **Term performance** - See which configured terms perform best
 - **Daily Statistics** - Track performance over time
 
 ## Troubleshooting
@@ -366,16 +369,21 @@ To customize for your theme's sticky header height:
    - Check domain configuration in reCAPTCHA v2 settings
    - Ensure you're using reCAPTCHA v2 (not v3) keys
 
-4. **Categories not showing**
-   - Ensure The Events Calendar is active
-   - Check for "meetings" parent category
-   - Verify child categories exist
+4. **No terms (or too few) on the subscription form**
+   - Visit **Notifications > Content Types** and confirm at least one post type is enabled
+   - For each enabled post type, enable the taxonomies you want subscribers to choose from and set a valid term display mode (all, children of, include, or exclude)
+   - Ensure the parent term (for "children of" mode) or each listed term still exists
+   - If terms exist but have no published posts, they are hidden when **Hide Empty Terms on Subscription Form** is enabled (default). Uncheck that option under **Settings > General**, or publish content in those terms, or adjust Content Types include/exclude rules
 
-5. **Shortcodes not working**
+5. **Unwanted terms still visible on the public form**
+   - A term with at least one **published** post of that post type will always appear when configured. To hide it anyway, use **Content Types** exclude (or include-only) rules
+   - Terms with zero published posts for that post type are hidden automatically when **Hide Empty Terms on Subscription Form** is on
+
+6. **Shortcodes not working**
    - Ensure content is processed through the shortcode system
    - Check for proper subscriber context
 
-6. **WordPress mail test failing**
+7. **WordPress mail test failing**
    - Check server mail configuration
    - Verify SMTP settings if using SMTP plugin
    - Check server logs for mail errors
@@ -390,62 +398,32 @@ define('WP_DEBUG_LOG', true);
 
 ## Support
 
-For support and feature requests, please contact the plugin developer.
+For support and feature requests, please contact your site administrator or the plugin vendor.
 
 ## Changelog
 
+### Version 3.1.1
+
+- **`[content_feed]` `terms` attribute** — comma-separated **term slugs**; requires `taxonomy`. Use `terms=` (singular `term` is also accepted). Feed lists only scoped slugs the subscriber selected. Notification targets still control who receives the email
+
+### Version 3.1.0
+
+- **`[content_feed]` omit `taxonomy`** — personalized feed across all form taxonomies for a post type (OR match)
+- **`format="summary"`** — linked title + excerpt per post. `format="list"` unchanged (bulleted title links). Unknown format values fall back to `list`
+- **`[selected_subscriptions]`** — HTML in email body (bold post type and taxonomy labels, line breaks per taxonomy). `[selected_subscriptions format="plain"]` for subject lines
+
+### Version 3.0.0
+
+- **Configurable content types** — choose post types and taxonomies in admin; dynamic subscribe form and notification targeting
+- **Generic shortcodes** — `[selected_subscriptions]`, `[selected_terms]`, `[content_feed]`; removed v2 news/meetings shortcodes
+- **Email Design** — brand colors, typography, header/footer, custom CSS
+- **Hide empty terms on public form** (default on)
+- **No automatic migration** from older 2.x category-based storage
+
+### Version 2.8.0
+
+- Logged-in subscribe form (readonly name/email, `user_id` linking), WP User column, CSV `user_id` export
+
 ### Version 2.7.0
 
-- **Mail delivery:** All outbound mail uses **`wp_mail()`** with one HTML/logging path (`SubscriberNotifications_SendGrid` wraps core mail only; native SendGrid REST and plugin-stored API/from settings removed). Configure transport (SMTP, SendGrid WP plugin, etc.) site-wide.
-- **Prefixed options:** Settings use **`subscriber_notifications_*`** keys; one-time migration copies legacy flat keys then removes obsolete transport keys (`mail_method`, legacy SendGrid options, bundled settings array).
-- **Admin:** General settings simplified (test email, delete-on-uninstall); scheduling/templates/security/design read/write prefixed options.
-- **Frontend:** Conditional enqueue for form assets; **`frequency`** allowlist (`daily` | `weekly` | `monthly`); subscription AJAX nonce failures return JSON errors; transactional mail uses unified sender.
-- **Database:** Subscriber email updates use **`sanitize_email()`**; **`get_subscribers()`** whitelist for `orderby` / `ASC` | `DESC`.
-- **Notifications class:** Removed unused instant-send helpers (`send_update_notification`, category SQL helper, individual send path).
-- **Docs / compatibility:** README aligned with **`wp_mail()`**-only behavior; tested up to **WordPress 6.8**.
-
-### Version 2.6.0
-
-* **GitHub Repository**: Updated plugin URI to point to GitHub repository
-* **Code Cleanup**: Removed token-debug.php file
-
-### Version 2.5.1
-- **Security Enhancements**: Fixed SQL injection vulnerabilities in scheduler and database classes
-- **Input Sanitization**: Added proper sanitization for `$_SERVER['REMOTE_ADDR']` in analytics and frontend classes
-- **Table Name Validation**: Added validation for table and column names in database operations
-- **Code Quality**: Improved security checks and error handling
-
-### Version 2.2.0
-- **Email Formatter Class**: New dedicated `SubscriberNotifications_Email_Formatter` class for better code organization
-- **Code Refactoring**: Moved email formatting logic to separate singleton class
-- **Improved Maintainability**: Centralized email CSS and formatting functions
-
-### Version 2.1.0
-- **Daily Scheduling**: Added support for daily email scheduling
-- **Enhanced Scheduling**: Improved scheduling system with daily, weekly, and monthly options
-- **Settings Improvements**: Added daily send time configuration option
-
-### Version 2.0.0
-- **Recurring Notifications**: Send notifications repeatedly based on frequency schedule
-- **Enhanced Database Schema**: Added recurring notification support with new columns
-- **Settings Integration**: Changes to send day/time automatically update recurring notifications
-- **Migration Tools**: Convert existing notifications to recurring format
-- **Enhanced Admin Interface**: Recurring status display and management
-- **Improved Debug Tools**: Enhanced logging and debugging for recurring notifications
-- **Complete Recurring Support**: Full lifecycle management of recurring notifications
-
-### Version 1.0.0
-- Initial release
-- Complete subscriber management system
-- Email delivery via WordPress `wp_mail()` with logging
-- Smart scheduling system (weekly/monthly)
-- Notification management (view, edit, cancel, resend, delete)
-- Analytics tracking
-- CSV import/export
-- Shortcode system
-- Admin interface with dashboard
-- Email testing functionality
-- Rate limiting for frequent notifications
-- Edge case handling for monthly scheduling
-- Search and filter notifications
-- Modal preview functionality
+- All mail via WordPress mail; tested up to WordPress 6.8

@@ -37,7 +37,7 @@ if (!defined('ABSPATH')) {
                 <th scope="col" class="manage-column column-subject"><?php _e('Subject', 'subscriber-notifications'); ?></th>
                 <th scope="col" class="manage-column column-frequency"><?php _e('Frequency', 'subscriber-notifications'); ?></th>
                 <th scope="col" class="manage-column column-recurring"><?php _e('Recurring', 'subscriber-notifications'); ?></th>
-                <th scope="col" class="manage-column column-categories"><?php _e('Categories', 'subscriber-notifications'); ?></th>
+                <th scope="col" class="manage-column column-categories"><?php _e('Targets', 'subscriber-notifications'); ?></th>
                 <th scope="col" class="manage-column column-status"><?php _e('Status', 'subscriber-notifications'); ?></th>
                 <th scope="col" class="manage-column column-created"><?php _e('Created', 'subscriber-notifications'); ?></th>
                 <th scope="col" class="manage-column column-sent"><?php _e('Sent', 'subscriber-notifications'); ?></th>
@@ -96,30 +96,12 @@ if (!defined('ABSPATH')) {
                         </td>
                         <td class="column-categories">
                             <?php
-                            $categories = array();
-                            if ($notification->news_categories) {
-                                $news_cats = explode(',', $notification->news_categories);
-                                foreach ($news_cats as $cat_id) {
-                                    if ($cat_id) {
-                                        $cat = get_category($cat_id);
-                                        if ($cat) {
-                                            $categories[] = $cat->name;
-                                        }
-                                    }
-                                }
-                            }
-                            if ($notification->meeting_categories) {
-                                $meeting_cats = explode(',', $notification->meeting_categories);
-                                foreach ($meeting_cats as $cat_id) {
-                                    if ($cat_id) {
-                                        $cat = get_term($cat_id, 'tribe_events_cat');
-                                        if ($cat) {
-                                            $categories[] = $cat->name;
-                                        }
-                                    }
-                                }
-                            }
-                            echo esc_html(implode(', ', $categories));
+                            $targets_summary = SubscriberNotifications_Preferences::human_readable(
+                                $notification->target_preferences ?? ''
+                            );
+                            echo $targets_summary !== ''
+                                ? nl2br(esc_html($targets_summary), false)
+                                : '<span class="description">' . esc_html__('—', 'subscriber-notifications') . '</span>';
                             ?>
                         </td>
                         <td class="column-status">

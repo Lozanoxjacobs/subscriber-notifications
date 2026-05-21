@@ -1,7 +1,12 @@
 <?php
 /**
- * Frontend functionality class
- * 
+ * Frontend functionality class.
+ *
+ * Renders the subscribe form and preferences page using the configurable Content Types
+ * system introduced in v3.0. Markup leans on native HTML elements (`<details>` /
+ * `<summary>`, plain inputs and buttons) so the active theme controls the
+ * presentation. The plugin only contributes minimal layout CSS.
+ *
  * @package SubscriberNotifications
  * @since 1.0.0
  */
@@ -14,24 +19,26 @@ if (!defined('ABSPATH')) {
  * Frontend class for managing public-facing functionality
  */
 class SubscriberNotifications_Frontend {
-    
+
     /**
-     * Database instance
+     * Database instance.
+     *
+     * @var SubscriberNotifications_Database
      */
     private $database;
-    
+
     /**
-     * Constructor
-     * 
-     * @param SubscriberNotifications_Database $database Database instance
+     * Constructor.
+     *
+     * @param SubscriberNotifications_Database $database Database instance.
      */
     public function __construct($database) {
         $this->database = $database;
         $this->init_hooks();
     }
-    
+
     /**
-     * Initialize hooks
+     * Initialize hooks.
      */
     private function init_hooks() {
         add_action('wp_ajax_subscriber_notifications_subscribe', array($this, 'handle_subscription'));
@@ -43,7 +50,7 @@ class SubscriberNotifications_Frontend {
         add_action('template_redirect', array($this, 'handle_unsubscribe'));
         add_shortcode('subscriber_notifications_form', array($this, 'subscription_form_shortcode'));
     }
-    
+
     /**
      * Enqueue CSS/JS when subscription or preferences UI is rendered.
      */
@@ -75,6 +82,9 @@ class SubscriberNotifications_Frontend {
             true
         );
 
+        $logged_in_contact = $this->get_logged_in_contact_for_form();
+        $is_logged_in      = is_user_logged_in();
+
         wp_localize_script(
             'subscriber-notifications-frontend',
             'subscriberNotifications',
@@ -84,6 +94,24 @@ class SubscriberNotifications_Frontend {
                 'nonce'            => wp_create_nonce('subscriber_notifications_nonce'),
                 'unsubscribeNonce' => wp_create_nonce('subscriber_notifications_unsubscribe'),
                 'siteKey'          => $site_key,
+                'isLoggedIn'       => $is_logged_in,
+                'lockedName'       => $logged_in_contact ? $logged_in_contact['name'] : '',
+                'lockedEmail'      => $logged_in_contact ? $logged_in_contact['email'] : '',
+                'i18n'             => array(
+                    'subscribing'         => __('Subscribing...', 'subscriber-notifications'),
+                    'subscribe'           => __('Subscribe', 'subscriber-notifications'),
+                    'updating'            => __('Updating...', 'subscriber-notifications'),
+                    'update'              => __('Update Preferences', 'subscriber-notifications'),
+                    'unsubscribing'       => __('Unsubscribing...', 'subscriber-notifications'),
+                    'unsubscribe'         => __('Unsubscribe', 'subscriber-notifications'),
+                    'confirmUnsubscribe'  => __('Are you sure you want to unsubscribe? You will no longer receive any notifications.', 'subscriber-notifications'),
+                    'genericError'        => __('An error occurred. Please try again.', 'subscriber-notifications'),
+                    'errorAtLeastOneTerm' => __('Please select at least one option to subscribe to.', 'subscriber-notifications'),
+                    'errorNameLength'     => __('Name must be at least 2 characters long.', 'subscriber-notifications'),
+                    'errorEmail'          => __('Please enter a valid email address.', 'subscriber-notifications'),
+                    'errorFrequency'      => __('Please select a frequency preference.', 'subscriber-notifications'),
+                    'errorMissingProfileName' => __('Please add your name to your account profile before subscribing.', 'subscriber-notifications'),
+                ),
             )
         );
 
@@ -96,282 +124,374 @@ class SubscriberNotifications_Frontend {
     }
 
     /**
-     * Subscription form shortcode
-     * 
-     * @param array $atts Shortcode attributes
-     * @return string Form HTML
+     * Subscription form shortcode.
+     *
+     * @param array $atts Shortcode attributes.
+     * @return string Form HTML.
      */
     public function subscription_form_shortcode($atts) {
-        $this->enqueue_subscription_form_assets();
         $atts = shortcode_atts(array(
-            'title' => __('Subscribe to Notifications', 'subscriber-notifications')
+            'title' => __('Subscribe to Notifications', 'subscriber-notifications'),
         ), $atts);
-        
+
+        if (!SubscriberNotifications_Content_Config::is_configured()) {
+            return $this->render_not_configured_message();
+        }
+
+        $this->enqueue_subscription_form_assets();
+
         ob_start();
         $this->render_subscription_form($atts);
         return ob_get_clean();
     }
-    
+
     /**
-     * Render subscription form
-     * 
-     * @param array $atts Form attributes
+     * Render a friendly placeholder when Content Types has no enabled post type + taxonomy.
+     */
+    private function render_not_configured_message() {
+        $message = current_user_can('manage_options')
+            ? __('Subscriptions are not configured. Visit Notifications → Content Types to enable post types and taxonomies for subscription.', 'subscriber-notifications')
+            : __('Subscriptions are not available at this time. Please check back soon.', 'subscriber-notifications');
+
+        return '<div class="subscriber-notifications-form subscriber-notifications-empty"><p>' . esc_html($message) . '</p></div>';
+    }
+
+    /**
+     * Render the subscription form (logged-in or anonymous).
+     *
+     * @param array $atts Form attributes.
      */
     private function render_subscription_form($atts) {
-        $news_categories = get_categories(array('hide_empty' => false));
-        $meeting_categories = $this->get_meeting_categories();
+        $logged_in_contact = $this->get_logged_in_contact_for_form();
+        $is_locked         = is_user_logged_in() && null !== $logged_in_contact;
+        $name_value        = $is_locked ? $logged_in_contact['name'] : '';
+        $email_value       = $is_locked ? $logged_in_contact['email'] : '';
+        $locked_class      = $is_locked ? 'subscriber-notifications-field--locked' : '';
         ?>
         <div class="subscriber-notifications-form">
-            
             <form id="subscriber-notifications-form" method="post">
                 <?php wp_nonce_field('subscriber_notifications_subscribe', 'subscriber_nonce'); ?>
-                
-                <h3><?php _e('Contact Information', 'subscriber-notifications'); ?></h3>
-                
-                <div class="form-group">
-                    <label for="subscriber_name"><?php _e('Name', 'subscriber-notifications'); ?> <span class="required">*</span></label>
-                    <input type="text" id="subscriber_name" name="subscriber_name" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="subscriber_email"><?php _e('Email', 'subscriber-notifications'); ?> <span class="required">*</span></label>
-                    <input type="email" id="subscriber_email" name="subscriber_email" required>
-                </div>
-                
-                <div class="form-group">
-                    <h3><?php _e('News Alert Preferences', 'subscriber-notifications'); ?></h3>
-                    <?php if (!empty($news_categories)): ?>
-                        <label class="checkbox-label select-all-label">
-                            <input type="checkbox" id="select-all-news" class="select-all-checkbox" data-target="news_categories">
-                            <strong><?php _e('Select All News Categories', 'subscriber-notifications'); ?></strong>
-                        </label>
-                        <div class="category-checkboxes">
-                            <?php foreach ($news_categories as $category): ?>
-                                <label class="checkbox-label">
-                                    <input type="checkbox" name="news_categories[]" value="<?php echo esc_attr($category->term_id); ?>" class="news-category-checkbox">
-                                    <?php echo esc_html($category->name); ?>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php else: ?>
-                        <p><?php _e('No news categories available.', 'subscriber-notifications'); ?></p>
+
+                <h3><?php esc_html_e('Contact Information', 'subscriber-notifications'); ?></h3>
+
+                <p>
+                    <label for="subscriber_name"><?php esc_html_e('Name', 'subscriber-notifications'); ?> <span class="required">*</span></label>
+                    <input type="text" id="subscriber_name" name="subscriber_name"
+                        value="<?php echo esc_attr($name_value); ?>"
+                        class="<?php echo esc_attr($locked_class); ?>"
+                        <?php echo $is_locked ? 'readonly' : ''; ?> required>
+                    <?php if ($is_locked) : ?>
+                        <small class="description"><?php esc_html_e('Taken from your account profile.', 'subscriber-notifications'); ?></small>
                     <?php endif; ?>
-                </div>
-                
-                <div class="form-group">
-                    <h3><?php _e('Meeting Alert Preferences', 'subscriber-notifications'); ?></h3>
-                    <?php if (!empty($meeting_categories)): ?>
-                        <label class="checkbox-label select-all-label">
-                            <input type="checkbox" id="select-all-meetings" class="select-all-checkbox" data-target="meeting_categories">
-                            <strong><?php _e('Select All Meeting Categories', 'subscriber-notifications'); ?></strong>
-                        </label>
-                        <div class="category-checkboxes">
-                            <?php foreach ($meeting_categories as $category): ?>
-                                <label class="checkbox-label">
-                                    <input type="checkbox" name="meeting_categories[]" value="<?php echo esc_attr($category->term_id); ?>" class="meeting-category-checkbox">
-                                    <?php echo esc_html($category->name); ?>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php else: ?>
-                        <p><?php _e('No meeting categories available.', 'subscriber-notifications'); ?></p>
+                </p>
+
+                <p>
+                    <label for="subscriber_email"><?php esc_html_e('Email', 'subscriber-notifications'); ?> <span class="required">*</span></label>
+                    <input type="email" id="subscriber_email" name="subscriber_email"
+                        value="<?php echo esc_attr($email_value); ?>"
+                        class="<?php echo esc_attr($locked_class); ?>"
+                        <?php echo $is_locked ? 'readonly' : ''; ?> required>
+                    <?php if ($is_locked) : ?>
+                        <small class="description"><?php esc_html_e('Taken from your account email address.', 'subscriber-notifications'); ?></small>
                     <?php endif; ?>
-                </div>
-                
-                <div class="form-group">
-                    <h3><?php _e('How often would you like to receive alerts?', 'subscriber-notifications'); ?></h3>
-                    <label class="radio-label">
-                        <input type="radio" name="frequency" value="daily" required>
-                        <?php _e('Daily', 'subscriber-notifications'); ?>
-                    </label>
-                    <label class="radio-label">
-                        <input type="radio" name="frequency" value="weekly" required>
-                        <?php _e('Weekly', 'subscriber-notifications'); ?>
-                    </label>
-                    <label class="radio-label">
-                        <input type="radio" name="frequency" value="monthly" required>
-                        <?php _e('Monthly', 'subscriber-notifications'); ?>
-                    </label>
-                </div>
-                
+                </p>
+
+                <h3><?php esc_html_e('Choose your subscriptions', 'subscriber-notifications'); ?></h3>
+                <?php $this->render_preferences_sections(array()); ?>
+
+                <h3><?php esc_html_e('How often would you like to receive notifications?', 'subscriber-notifications'); ?></h3>
+                <?php $this->render_frequency_fieldset(''); ?>
+
                 <?php if (!empty(subscriber_notifications_get_option('captcha_site_key', ''))): ?>
-                <div class="form-group">
-                    <div class="g-recaptcha" data-sitekey="<?php echo esc_attr(subscriber_notifications_get_option('captcha_site_key')); ?>"></div>
-                </div>
+                    <p>
+                        <div class="g-recaptcha" data-sitekey="<?php echo esc_attr(subscriber_notifications_get_option('captcha_site_key')); ?>"></div>
+                    </p>
                 <?php endif; ?>
-                
-                <div class="form-group">
-                    <button type="submit" class="button button-primary">
-                        <?php _e('Subscribe', 'subscriber-notifications'); ?>
+
+                <p>
+                    <button type="submit" class="subscriber-notifications-submit wp-element-button">
+                        <?php esc_html_e('Subscribe', 'subscriber-notifications'); ?>
                     </button>
-                </div>
-                
+                </p>
+
                 <div id="subscriber-message" class="subscriber-message" style="display: none;"></div>
             </form>
         </div>
         <?php
     }
-    
+
     /**
-     * Handle subscription form submission
+     * Render one `<details>` block per enabled post type with a checklist per
+     * `enabled_on_form` taxonomy inside.
+     *
+     * @param array $current_prefs Existing subscriber preferences (preferences shape).
+     */
+    private function render_preferences_sections(array $current_prefs) {
+        $enabled_post_types = SubscriberNotifications_Content_Config::get_enabled_post_types();
+        foreach ($enabled_post_types as $post_type) {
+            $form_taxonomies = SubscriberNotifications_Content_Config::get_form_taxonomies($post_type);
+            if (empty($form_taxonomies)) {
+                continue;
+            }
+            $post_type_label = SubscriberNotifications_Content_Config::get_post_type_label($post_type);
+            ?>
+            <details class="sn-section" open>
+                <summary><strong><?php echo esc_html($post_type_label); ?></strong></summary>
+                <div class="sn-section__body">
+                <?php foreach ($form_taxonomies as $taxonomy) :
+                    $tax_label = SubscriberNotifications_Content_Config::get_taxonomy_label($post_type, $taxonomy);
+                    $terms = SubscriberNotifications_Term_Resolver::get_terms_for_public_form($post_type, $taxonomy);
+                    if (empty($terms)) {
+                        continue;
+                    }
+                    $field_name = 'preferences[' . $post_type . '][' . $taxonomy . '][]';
+                    $select_all_target = 'preferences[' . $post_type . '][' . $taxonomy . ']';
+                    $selected_ids = isset($current_prefs[$post_type][$taxonomy]) && is_array($current_prefs[$post_type][$taxonomy])
+                        ? array_map('intval', $current_prefs[$post_type][$taxonomy])
+                        : array();
+                ?>
+                    <fieldset class="sn-taxonomy" data-target="<?php echo esc_attr($select_all_target); ?>">
+                        <legend><?php echo esc_html($tax_label); ?></legend>
+                        <label class="sn-select-all-label">
+                            <input type="checkbox" class="sn-select-all" data-target="<?php echo esc_attr($select_all_target); ?>" />
+                            <?php
+                            /* translators: %s: Taxonomy label */
+                            printf(esc_html__('Select all %s', 'subscriber-notifications'), esc_html($tax_label));
+                            ?>
+                        </label>
+                        <ul class="sn-term-list">
+                            <?php foreach ($terms as $term) : ?>
+                                <li>
+                                    <label>
+                                        <input type="checkbox"
+                                            name="<?php echo esc_attr($field_name); ?>"
+                                            value="<?php echo esc_attr((int) $term->term_id); ?>"
+                                            <?php checked(in_array((int) $term->term_id, $selected_ids, true)); ?> />
+                                        <?php echo esc_html($term->name); ?>
+                                    </label>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </fieldset>
+                <?php endforeach; ?>
+                </div>
+            </details>
+            <?php
+        }
+    }
+
+    /**
+     * Render the frequency field label and radio fieldset.
+     *
+     * @param string $current Current frequency value.
+     */
+    private function render_frequency_fieldset($current) {
+        $options = array(
+            'daily'   => __('Daily', 'subscriber-notifications'),
+            'weekly'  => __('Weekly', 'subscriber-notifications'),
+            'monthly' => __('Monthly', 'subscriber-notifications'),
+        );
+        $is_first = true;
+        ?>
+        <p>
+            <label id="sn-frequency-label"><?php esc_html_e('Delivery Frequency', 'subscriber-notifications'); ?> <span class="required">*</span></label>
+        </p>
+        <fieldset class="sn-frequency" aria-required="true" aria-labelledby="sn-frequency-label">
+            <legend class="screen-reader-text"><?php esc_html_e('Delivery Frequency', 'subscriber-notifications'); ?></legend>
+            <?php foreach ($options as $value => $label) : ?>
+                <label>
+                    <input type="radio" name="frequency" value="<?php echo esc_attr($value); ?>"
+                        <?php checked($current, $value); ?>
+                        <?php echo $is_first ? 'required aria-required="true"' : ''; ?>>
+                    <?php echo esc_html($label); ?>
+                </label>
+                <?php
+                $is_first = false;
+            endforeach;
+            ?>
+        </fieldset>
+        <?php
+    }
+
+    /**
+     * Handle subscription form submission.
      */
     public function handle_subscription() {
-        // Verify nonce
-        if (!wp_verify_nonce($_POST['subscriber_nonce'], 'subscriber_notifications_subscribe')) {
+        $nonce = isset($_POST['subscriber_nonce']) ? sanitize_text_field(wp_unslash($_POST['subscriber_nonce'])) : '';
+        if (!wp_verify_nonce($nonce, 'subscriber_notifications_subscribe')) {
             wp_send_json_error(__('Security check failed.', 'subscriber-notifications'));
             return;
         }
-        
-        // Verify CAPTCHA if enabled
+
+        if (!SubscriberNotifications_Content_Config::is_configured()) {
+            wp_send_json_error(__('Subscriptions are not configured.', 'subscriber-notifications'));
+            return;
+        }
+
         if (!empty(subscriber_notifications_get_option('captcha_site_key', ''))) {
-            if (!$this->verify_captcha($_POST['g-recaptcha-response'])) {
+            $captcha = isset($_POST['g-recaptcha-response']) ? wp_unslash($_POST['g-recaptcha-response']) : '';
+            if (!$this->verify_captcha($captcha)) {
                 wp_send_json_error(__('CAPTCHA verification failed.', 'subscriber-notifications'));
                 return;
             }
         }
-        
-        // Sanitize and validate data
-        $name = sanitize_text_field($_POST['subscriber_name']);
-        $email = sanitize_email($_POST['subscriber_email']);
-        $news_categories = isset($_POST['news_categories']) ? array_map('intval', $_POST['news_categories']) : array();
-        $meeting_categories = isset($_POST['meeting_categories']) ? array_map('intval', $_POST['meeting_categories']) : array();
-        $frequency = sanitize_text_field($_POST['frequency']);
-        
-        // Validate required fields
+
+        $raw_prefs = isset($_POST['preferences']) ? wp_unslash($_POST['preferences']) : array();
+        $prefs     = SubscriberNotifications_Preferences::sanitize_from_post($raw_prefs);
+        $prefs     = SubscriberNotifications_Preferences::prune_to_allowed_terms($prefs, 'public');
+
+        if (!SubscriberNotifications_Preferences::has_at_least_one_term($prefs)) {
+            wp_send_json_error(__('Please select at least one option to subscribe to.', 'subscriber-notifications'));
+            return;
+        }
+
+        $frequency = sanitize_text_field(wp_unslash($_POST['frequency'] ?? ''));
         if (!in_array($frequency, array('daily', 'weekly', 'monthly'), true)) {
-            wp_send_json_error(__('Please select a valid notification frequency.', 'subscriber-notifications'));
+            wp_send_json_error(__('Please select a frequency preference.', 'subscriber-notifications'));
             return;
         }
-        
-        if (empty($name) || empty($email) || !is_email($email)) {
-            wp_send_json_error(__('Please provide a valid name and email address.', 'subscriber-notifications'));
-            return;
+
+        $wp_user_id = 0;
+
+        if (is_user_logged_in()) {
+            $contact = $this->get_logged_in_contact_for_form();
+            if (!$contact) {
+                wp_send_json_error(__('Unable to load your account information. Please try again.', 'subscriber-notifications'));
+                return;
+            }
+            if ('' === $contact['name']) {
+                wp_send_json_error(__('Please add your first or last name to your profile before subscribing.', 'subscriber-notifications'));
+                return;
+            }
+            if (empty($contact['email']) || !is_email($contact['email'])) {
+                wp_send_json_error(__('Your account does not have a valid email address.', 'subscriber-notifications'));
+                return;
+            }
+            $name       = $contact['name'];
+            $email      = $contact['email'];
+            $wp_user_id = $contact['user_id'];
+        } else {
+            $name  = sanitize_text_field(wp_unslash($_POST['subscriber_name'] ?? ''));
+            $email = sanitize_email(wp_unslash($_POST['subscriber_email'] ?? ''));
+
+            if (empty($name) || empty($email) || !is_email($email)) {
+                wp_send_json_error(__('Please provide a valid name and email address.', 'subscriber-notifications'));
+                return;
+            }
         }
-        
-        // Check if email already exists
-        $existing_subscriber = $this->database->get_subscriber_by_email($email);
+
+        $existing_subscriber = $this->find_existing_subscriber_for_subscription($email, $wp_user_id);
+
         if ($existing_subscriber) {
-            // Check if subscriber is inactive (can resubscribe)
             if ($existing_subscriber->status === 'inactive') {
-                // Reactivate subscriber and update preferences
                 $update_data = array(
-                    'name' => $name,
-                    'news_categories' => implode(',', $news_categories),
-                    'meeting_categories' => implode(',', $meeting_categories),
-                    'frequency' => $frequency,
-                    'status' => 'active',
-                    'management_token' => wp_generate_password(32, false)
-                    // Note: date_added is NOT included to preserve original subscription date
+                    'name'                     => $name,
+                    'email'                    => $email,
+                    'subscription_preferences' => $prefs,
+                    'frequency'                => $frequency,
+                    'status'                   => 'active',
+                    'management_token'         => wp_generate_password(32, false),
                 );
-                
+
+                if ($wp_user_id > 0) {
+                    $update_data['user_id'] = $wp_user_id;
+                }
+
                 $updated = $this->database->update_subscriber($existing_subscriber->id, $update_data);
-                
+
                 if ($updated !== false) {
-                    // Get updated subscriber object
                     $subscriber = $this->database->get_subscriber($existing_subscriber->id);
-                    
                     if ($subscriber) {
-                        // Send welcome back email
                         $this->send_welcome_back_email($subscriber);
                     }
-                    
                     wp_send_json_success(__('Welcome back! Your subscription has been reactivated.', 'subscriber-notifications'));
                 } else {
                     wp_send_json_error(__('An error occurred. Please try again.', 'subscriber-notifications'));
                 }
                 return;
-            } else {
-                // Subscriber is already active
-                wp_send_json_error(__('This email address is already subscribed.', 'subscriber-notifications'));
-                return;
             }
+
+            wp_send_json_error(__('This email address is already subscribed.', 'subscriber-notifications'));
+            return;
         }
-        
-        // Prepare subscriber data for new subscriber
+
         $subscriber_data = array(
-            'name' => $name,
-            'email' => $email,
-            'news_categories' => implode(',', $news_categories),
-            'meeting_categories' => implode(',', $meeting_categories),
-            'frequency' => $frequency,
-            'status' => 'active',
-            'management_token' => wp_generate_password(32, false)
+            'name'                     => $name,
+            'email'                    => $email,
+            'subscription_preferences' => $prefs,
+            'frequency'                => $frequency,
+            'status'                   => 'active',
+            'management_token'         => wp_generate_password(32, false),
         );
-        
-        // Add subscriber to database
+
+        if ($wp_user_id > 0) {
+            $subscriber_data['user_id'] = $wp_user_id;
+        }
+
         $subscriber_id = $this->database->add_subscriber($subscriber_data);
-        
+
         if ($subscriber_id) {
-            // Get the subscriber object for welcome email
             $subscriber = $this->database->get_subscriber($subscriber_id);
-            
             if ($subscriber) {
-                // Send welcome email immediately
                 $this->send_welcome_email($subscriber);
             }
-            
             wp_send_json_success(__('Thank you for subscribing! You will now receive notifications according to your preferences.', 'subscriber-notifications'));
         } else {
             wp_send_json_error(__('An error occurred. Please try again.', 'subscriber-notifications'));
         }
     }
-    
+
     /**
-     * Verify CAPTCHA
-     * 
-     * @param string $response CAPTCHA response
-     * @return bool True if valid, false otherwise
+     * Verify reCAPTCHA response.
+     *
+     * @param string $response CAPTCHA response token.
+     * @return bool
      */
     private function verify_captcha($response) {
         $secret_key = subscriber_notifications_get_option('captcha_secret_key', '');
         if (empty($secret_key)) {
-            return true; // No CAPTCHA configured
+            return true;
         }
-        
+
         $url = 'https://www.google.com/recaptcha/api/siteverify';
-        // Sanitize and validate IP address
         $remote_ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
-        // Validate IP format
         if (!empty($remote_ip) && !filter_var($remote_ip, FILTER_VALIDATE_IP)) {
             $remote_ip = '';
         }
         $data = array(
-            'secret' => $secret_key,
+            'secret'   => $secret_key,
             'response' => $response,
-            'remoteip' => $remote_ip
+            'remoteip' => $remote_ip,
         );
-        
-        $response = wp_remote_post($url, array(
-            'body' => $data,
-            'timeout' => 30
+
+        $http = wp_remote_post($url, array(
+            'body'    => $data,
+            'timeout' => 30,
         ));
-        
-        if (is_wp_error($response)) {
+
+        if (is_wp_error($http)) {
             return false;
         }
-        
-        $body = wp_remote_retrieve_body($response);
+
+        $body   = wp_remote_retrieve_body($http);
         $result = json_decode($body, true);
-        
+
         return isset($result['success']) && $result['success'] === true;
     }
-    
-    
-    
-    
+
     /**
-     * Send welcome email after verification
+     * Send welcome email after subscribe.
+     *
+     * @param object $subscriber Subscriber row.
      */
     private function send_welcome_email($subscriber) {
         $subject = subscriber_notifications_get_option('welcome_email_subject', __('Welcome! Your subscription is confirmed', 'subscriber-notifications'));
-        $content = subscriber_notifications_get_option('welcome_email_content', __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
-        
-        // Process shortcodes
+        $content = subscriber_notifications_get_option('welcome_email_content', __('Thank you for subscribing! You will receive [delivery_frequency] updates about [selected_subscriptions].', 'subscriber-notifications'));
+
         $shortcodes = new SubscriberNotifications_Shortcodes();
         $processed_subject = $shortcodes->process_shortcodes($subject, $subscriber);
         $processed_content = $shortcodes->process_shortcodes($content, $subscriber);
-        
-        // Apply custom CSS if set
+
         $email_css = subscriber_notifications_get_option('email_css', '');
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
@@ -379,22 +499,20 @@ class SubscriberNotifications_Frontend {
         $mailer = new SubscriberNotifications_SendGrid();
         $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
     }
-    
+
     /**
-     * Send welcome back email for resubscribing users
+     * Send welcome-back email after reactivating a subscription.
      *
-     * @param object $subscriber Subscriber object
+     * @param object $subscriber Subscriber row.
      */
     private function send_welcome_back_email($subscriber) {
         $subject = subscriber_notifications_get_option('welcome_back_email_subject', __('Welcome back! Your subscription has been reactivated', 'subscriber-notifications'));
-        $content = subscriber_notifications_get_option('welcome_back_email_content', __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_news_categories] and [selected_meeting_categories].', 'subscriber-notifications'));
-        
-        // Process shortcodes
+        $content = subscriber_notifications_get_option('welcome_back_email_content', __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_subscriptions].', 'subscriber-notifications'));
+
         $shortcodes = new SubscriberNotifications_Shortcodes();
         $processed_subject = $shortcodes->process_shortcodes($subject, $subscriber);
         $processed_content = $shortcodes->process_shortcodes($content, $subscriber);
-        
-        // Apply custom CSS if set
+
         $email_css = subscriber_notifications_get_option('email_css', '');
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
@@ -402,347 +520,226 @@ class SubscriberNotifications_Frontend {
         $mailer = new SubscriberNotifications_SendGrid();
         $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
     }
-    
+
     /**
-     * Wrap content with CSS
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->wrap_content_with_css() instead
-     * @param string $content Email content
-     * @param string $css Custom CSS
-     * @param object|null $subscriber Subscriber object for shortcode processing
-     * @return string Wrapped content with CSS
-     */
-    private function wrap_content_with_css($content, $css, $subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->wrap_content_with_css()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->wrap_content_with_css($content, $css, $subscriber);
-    }
-    
-    /**
-     * Wrap content with proper email structure
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->wrap_with_email_structure() instead
-     * @param string $content Email content
-     * @param string $css CSS styles
-     * @param object|null $subscriber Subscriber object for shortcode processing
-     * @return string Wrapped content with email structure
-     */
-    private function wrap_with_email_structure($content, $css, $subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->wrap_with_email_structure()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->wrap_with_email_structure($content, $css, $subscriber);
-    }
-    
-    /**
-     * Get default CSS
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->get_default_css() instead
-     * @return string Default CSS for emails
-     */
-    private function get_default_css() {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->get_default_css()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->get_default_css();
-    }
-    
-    /**
-     * Get global header content
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->get_global_header_content() instead
-     * @param object|null $subscriber Subscriber object for shortcode processing
-     * @return string Header HTML
-     */
-    private function get_global_header_content($subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->get_global_header_content()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->get_global_header_content($subscriber);
-    }
-    
-    /**
-     * Get global footer content
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->get_global_footer_content() instead
-     * @param object|null $subscriber Subscriber object for shortcode processing
-     * @return string Footer HTML
-     */
-    private function get_global_footer_content($subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->get_global_footer_content()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->get_global_footer_content($subscriber);
-    }
-    
-    /**
-     * Handle unsubscribe and manage preferences routes
+     * Handle unsubscribe and manage preferences routes.
      */
     public function handle_unsubscribe() {
         if (isset($_GET['action']) && isset($_GET['token'])) {
-            $action = sanitize_text_field($_GET['action']);
-            $token = sanitize_text_field($_GET['token']);
-            
+            $action = sanitize_text_field(wp_unslash($_GET['action']));
+            $token  = sanitize_text_field(wp_unslash($_GET['token']));
+
             if ($action === 'unsubscribe') {
-                // Redirect old unsubscribe links to manage page
                 wp_redirect(add_query_arg(array(
                     'action' => 'manage',
-                    'token' => $token
+                    'token'  => $token,
                 ), home_url()));
                 exit;
             } elseif ($action === 'manage') {
-                // Show preferences management form
                 $this->render_preferences_form($token);
                 exit;
             }
         }
     }
-    
+
     /**
-     * Render preferences management form
-     * 
-     * @param string $token Management token
+     * Render preferences management form.
+     *
+     * @param string $token Management token.
      */
     private function render_preferences_form($token) {
         $this->enqueue_subscription_form_assets();
         $token = trim($token);
-        
+
         if (empty($token)) {
-            wp_die(__('Invalid management link.', 'subscriber-notifications'), __('Error', 'subscriber-notifications'), array('response' => 404));
+            wp_die(esc_html__('Invalid management link.', 'subscriber-notifications'), esc_html__('Error', 'subscriber-notifications'), array('response' => 404));
         }
-        
+
         $subscriber = $this->database->get_subscriber_by_management_token($token);
-        
+
         if (!$subscriber) {
-            wp_die(__('Invalid management link.', 'subscriber-notifications'), __('Error', 'subscriber-notifications'), array('response' => 404));
+            wp_die(esc_html__('Invalid management link.', 'subscriber-notifications'), esc_html__('Error', 'subscriber-notifications'), array('response' => 404));
         }
-        
-        // Security check: Re-fetch subscriber to ensure we have the latest token
-        // This prevents issues with stale data if token was recently changed
+
         $fresh_subscriber = $this->database->get_subscriber($subscriber->id);
         if (!$fresh_subscriber || $fresh_subscriber->management_token !== $token) {
             get_header();
             ?>
-            <div class="subscriber-notifications-form" style="max-width: 600px; margin: 140px auto 20px auto; padding: 20px; background: #F2F2F2;">
-                <h2><?php _e('Link Expired', 'subscriber-notifications'); ?></h2>
-                <p><?php _e('This management link has expired. Please use the most recent link from your email, or subscribe again using the form below.', 'subscriber-notifications'); ?></p>
+            <div class="subscriber-notifications-form">
+                <h2><?php esc_html_e('Link Expired', 'subscriber-notifications'); ?></h2>
+                <p><?php esc_html_e('This management link has expired. Please use the most recent link from your email, or subscribe again using the form below.', 'subscriber-notifications'); ?></p>
                 <?php echo do_shortcode('[subscriber_notifications_form]'); ?>
             </div>
             <?php
             get_footer();
             exit;
         }
-        
-        // Use fresh subscriber data to ensure we show current preferences
+
         $subscriber = $fresh_subscriber;
-        
-        $news_categories = get_categories(array('hide_empty' => false));
-        $meeting_categories = $this->get_meeting_categories();
-        
-        // Get current selections
-        $current_news_categories = !empty($subscriber->news_categories) ? explode(',', $subscriber->news_categories) : array();
-        $current_meeting_categories = !empty($subscriber->meeting_categories) ? explode(',', $subscriber->meeting_categories) : array();
-        
-        // Get WordPress header and footer
+
+        $current_prefs = SubscriberNotifications_Preferences::decode($subscriber->subscription_preferences ?? '');
+
         get_header();
         ?>
         <div class="subscriber-notifications-form">
-            <h2><?php _e('Manage Your Preferences', 'subscriber-notifications'); ?></h2>
-            
+            <h2><?php esc_html_e('Manage Your Preferences', 'subscriber-notifications'); ?></h2>
+
+            <?php if (!SubscriberNotifications_Content_Config::is_configured()) : ?>
+                <p><?php esc_html_e('Subscriptions are not currently configured. You can still unsubscribe below.', 'subscriber-notifications'); ?></p>
+            <?php endif; ?>
+
             <form id="subscriber-preferences-form" method="post">
                 <?php wp_nonce_field('subscriber_notifications_update_preferences', 'preferences_nonce'); ?>
                 <input type="hidden" name="token" value="<?php echo esc_attr($token); ?>">
-                
-                <h3><?php _e('Contact Information', 'subscriber-notifications'); ?></h3>
-                
-                <div class="form-group">
-                    <label for="subscriber_name"><?php _e('Name', 'subscriber-notifications'); ?> <span class="required">*</span></label>
+
+                <h3><?php esc_html_e('Contact Information', 'subscriber-notifications'); ?></h3>
+
+                <p>
+                    <label for="subscriber_name"><?php esc_html_e('Name', 'subscriber-notifications'); ?> <span class="required">*</span></label>
                     <input type="text" id="subscriber_name" name="subscriber_name" value="<?php echo esc_attr($subscriber->name); ?>" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="subscriber_email"><?php _e('Email', 'subscriber-notifications'); ?></label>
+                </p>
+
+                <p>
+                    <label for="subscriber_email"><?php esc_html_e('Email', 'subscriber-notifications'); ?></label>
                     <input type="email" id="subscriber_email" name="subscriber_email" value="<?php echo esc_attr($subscriber->email); ?>" disabled>
-                    <p class="description"><?php _e('Email address cannot be changed.', 'subscriber-notifications'); ?></p>
-                </div>
-                
-                <div class="form-group">
-                    <h3><?php _e('News Alert Preferences', 'subscriber-notifications'); ?></h3>
-                    <?php if (!empty($news_categories)): ?>
-                        <label class="checkbox-label select-all-label">
-                            <input type="checkbox" id="select-all-news-prefs" class="select-all-checkbox" data-target="news_categories">
-                            <strong><?php _e('Select All News Categories', 'subscriber-notifications'); ?></strong>
-                        </label>
-                        <div class="category-checkboxes">
-                            <?php foreach ($news_categories as $category): ?>
-                                <label class="checkbox-label">
-                                    <input type="checkbox" name="news_categories[]" value="<?php echo esc_attr($category->term_id); ?>" class="news-category-checkbox" <?php checked(in_array($category->term_id, $current_news_categories)); ?>>
-                                    <?php echo esc_html($category->name); ?>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php else: ?>
-                        <p><?php _e('No news categories available.', 'subscriber-notifications'); ?></p>
-                    <?php endif; ?>
-                </div>
-                
-                <div class="form-group">
-                    <h3><?php _e('Meeting Alert Preferences', 'subscriber-notifications'); ?></h3>
-                    <?php if (!empty($meeting_categories)): ?>
-                        <label class="checkbox-label select-all-label">
-                            <input type="checkbox" id="select-all-meetings-prefs" class="select-all-checkbox" data-target="meeting_categories">
-                            <strong><?php _e('Select All Meeting Categories', 'subscriber-notifications'); ?></strong>
-                        </label>
-                        <div class="category-checkboxes">
-                            <?php foreach ($meeting_categories as $category): ?>
-                                <label class="checkbox-label">
-                                    <input type="checkbox" name="meeting_categories[]" value="<?php echo esc_attr($category->term_id); ?>" class="meeting-category-checkbox" <?php checked(in_array($category->term_id, $current_meeting_categories)); ?>>
-                                    <?php echo esc_html($category->name); ?>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php else: ?>
-                        <p><?php _e('No meeting categories available.', 'subscriber-notifications'); ?></p>
-                    <?php endif; ?>
-                </div>
-                
-                <div class="form-group">
-                    <h3><?php _e('How often would you like to receive alerts?', 'subscriber-notifications'); ?></h3>
-                    <label class="radio-label">
-                        <input type="radio" name="frequency" value="daily" <?php checked($subscriber->frequency, 'daily'); ?> required>
-                        <?php _e('Daily', 'subscriber-notifications'); ?>
-                    </label>
-                    <label class="radio-label">
-                        <input type="radio" name="frequency" value="weekly" <?php checked($subscriber->frequency, 'weekly'); ?> required>
-                        <?php _e('Weekly', 'subscriber-notifications'); ?>
-                    </label>
-                    <label class="radio-label">
-                        <input type="radio" name="frequency" value="monthly" <?php checked($subscriber->frequency, 'monthly'); ?> required>
-                        <?php _e('Monthly', 'subscriber-notifications'); ?>
-                    </label>
-                </div>
-                
-                <div class="form-group">
-                    <button type="submit" class="button button-primary">
-                        <?php _e('Update Preferences', 'subscriber-notifications'); ?>
+                    <small class="description"><?php esc_html_e('Email address cannot be changed.', 'subscriber-notifications'); ?></small>
+                </p>
+
+                <?php if (SubscriberNotifications_Content_Config::is_configured()) : ?>
+                    <h3><?php esc_html_e('Your subscriptions', 'subscriber-notifications'); ?></h3>
+                    <?php $this->render_preferences_sections($current_prefs); ?>
+                <?php endif; ?>
+
+                <h3><?php esc_html_e('How often would you like to receive notifications?', 'subscriber-notifications'); ?></h3>
+                <?php $this->render_frequency_fieldset($subscriber->frequency); ?>
+
+                <p>
+                    <button type="submit" class="subscriber-notifications-submit wp-element-button">
+                        <?php esc_html_e('Update Preferences', 'subscriber-notifications'); ?>
                     </button>
-                </div>
-                
+                </p>
+
                 <div id="preferences-message" class="subscriber-message" style="display: none;"></div>
             </form>
-            
+
             <div class="unsubscribe-section">
-                <hr style="margin: 30px 0; border: none; border-top: 2px solid #ddd;">
-                <h3><?php _e('Unsubscribe', 'subscriber-notifications'); ?></h3>
-                <p><?php _e('If you no longer wish to receive notifications, you can unsubscribe below.', 'subscriber-notifications'); ?></p>
-                <button type="button" id="unsubscribe-button" class="button button-secondary unsubscribe-button">
-                    <?php _e('Unsubscribe', 'subscriber-notifications'); ?>
+                <hr>
+                <h3><?php esc_html_e('Unsubscribe', 'subscriber-notifications'); ?></h3>
+                <p><?php esc_html_e('If you no longer wish to receive notifications, you can unsubscribe below.', 'subscriber-notifications'); ?></p>
+                <button type="button" id="unsubscribe-button" class="subscriber-notifications-submit wp-element-button unsubscribe-button">
+                    <?php esc_html_e('Unsubscribe', 'subscriber-notifications'); ?>
                 </button>
             </div>
         </div>
         <?php
         get_footer();
     }
-    
+
     /**
-     * Handle preferences update AJAX request
+     * Handle preferences update AJAX request.
      */
     public function handle_preferences_update() {
-        // Verify nonce
-        if (!wp_verify_nonce($_POST['preferences_nonce'], 'subscriber_notifications_update_preferences')) {
+        $nonce = isset($_POST['preferences_nonce']) ? sanitize_text_field(wp_unslash($_POST['preferences_nonce'])) : '';
+        if (!wp_verify_nonce($nonce, 'subscriber_notifications_update_preferences')) {
             wp_send_json_error(__('Security check failed.', 'subscriber-notifications'));
             return;
         }
-        
-        $token = sanitize_text_field($_POST['token']);
+
+        $token      = isset($_POST['token']) ? sanitize_text_field(wp_unslash($_POST['token'])) : '';
         $subscriber = $this->database->get_subscriber_by_management_token($token);
-        
+
         if (!$subscriber) {
             wp_send_json_error(__('Invalid management link.', 'subscriber-notifications'));
             return;
         }
-        
-        // Sanitize and validate data
-        $name = sanitize_text_field($_POST['subscriber_name']);
-        $news_categories = isset($_POST['news_categories']) ? array_map('intval', $_POST['news_categories']) : array();
-        $meeting_categories = isset($_POST['meeting_categories']) ? array_map('intval', $_POST['meeting_categories']) : array();
-        $frequency = sanitize_text_field($_POST['frequency']);
-        
-        // Validate required fields
+
+        $name      = isset($_POST['subscriber_name']) ? sanitize_text_field(wp_unslash($_POST['subscriber_name'])) : '';
+        $frequency = isset($_POST['frequency']) ? sanitize_text_field(wp_unslash($_POST['frequency'])) : '';
+
         if (!in_array($frequency, array('daily', 'weekly', 'monthly'), true)) {
-            wp_send_json_error(__('Please select a valid notification frequency.', 'subscriber-notifications'));
+            wp_send_json_error(__('Please select a frequency preference.', 'subscriber-notifications'));
             return;
         }
-        
-        if (empty($name) || empty($frequency)) {
-            wp_send_json_error(__('Please provide a valid name and frequency preference.', 'subscriber-notifications'));
+
+        if (empty($name)) {
+            wp_send_json_error(__('Please provide a valid name.', 'subscriber-notifications'));
             return;
         }
-        
-        // Update subscriber data
+
+        $raw_prefs = isset($_POST['preferences']) ? wp_unslash($_POST['preferences']) : array();
+        $prefs     = SubscriberNotifications_Preferences::sanitize_from_post($raw_prefs);
+        $prefs     = SubscriberNotifications_Preferences::prune_to_allowed_terms($prefs, 'public');
+
+        if (SubscriberNotifications_Content_Config::is_configured() && !SubscriberNotifications_Preferences::has_at_least_one_term($prefs)) {
+            wp_send_json_error(__('Please select at least one option, or use the Unsubscribe button below.', 'subscriber-notifications'));
+            return;
+        }
+
         $update_data = array(
-            'name' => $name,
-            'news_categories' => implode(',', $news_categories),
-            'meeting_categories' => implode(',', $meeting_categories),
-            'frequency' => $frequency
+            'name'                     => $name,
+            'subscription_preferences' => $prefs,
+            'frequency'                => $frequency,
         );
-        
+
         $result = $this->database->update_subscriber($subscriber->id, $update_data);
-        
+
         if ($result !== false) {
-            // Get updated subscriber for email
             $updated_subscriber = $this->database->get_subscriber($subscriber->id);
-            
             if ($updated_subscriber) {
-                // Send confirmation email
                 $this->send_preferences_update_email($updated_subscriber);
             }
-            
             wp_send_json_success(__('Your preferences have been updated successfully.', 'subscriber-notifications'));
         } else {
             wp_send_json_error(__('An error occurred while updating your preferences. Please try again.', 'subscriber-notifications'));
         }
     }
-    
+
     /**
-     * Handle unsubscribe AJAX request
+     * Handle unsubscribe AJAX request.
      */
     public function handle_unsubscribe_action() {
-        // Verify nonce
-        if (!wp_verify_nonce($_POST['unsubscribe_nonce'], 'subscriber_notifications_unsubscribe')) {
+        $nonce = isset($_POST['unsubscribe_nonce']) ? sanitize_text_field(wp_unslash($_POST['unsubscribe_nonce'])) : '';
+        if (!wp_verify_nonce($nonce, 'subscriber_notifications_unsubscribe')) {
             wp_send_json_error(__('Security check failed.', 'subscriber-notifications'));
             return;
         }
-        
-        $token = sanitize_text_field($_POST['token']);
+
+        $token      = isset($_POST['token']) ? sanitize_text_field(wp_unslash($_POST['token'])) : '';
         $subscriber = $this->database->get_subscriber_by_management_token($token);
-        
+
         if (!$subscriber) {
             wp_send_json_error(__('Invalid management link.', 'subscriber-notifications'));
             return;
         }
-        
-        // Update subscriber status to inactive
+
         $result = $this->database->update_subscriber($subscriber->id, array('status' => 'inactive'));
-        
+
         if ($result !== false) {
             wp_send_json_success(__('You have been successfully unsubscribed from our notifications.', 'subscriber-notifications'));
         } else {
             wp_send_json_error(__('An error occurred while unsubscribing. Please try again.', 'subscriber-notifications'));
         }
     }
-    
+
     /**
-     * Send preferences update confirmation email
-     * 
-     * @param object $subscriber Subscriber object
+     * Send preferences update confirmation email.
+     *
+     * @param object $subscriber Subscriber row.
      */
     private function send_preferences_update_email($subscriber) {
         $subject = subscriber_notifications_get_option('preferences_update_email_subject', __('Your preferences have been updated', 'subscriber-notifications'));
-        $content = subscriber_notifications_get_option('preferences_update_email_content', __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('News Categories: [selected_news_categories]', 'subscriber-notifications') . "\n" . __('Meeting Categories: [selected_meeting_categories]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'));
-        
-        // Process shortcodes
+        $default_content = __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n"
+            . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n"
+            . __('Your current preferences:', 'subscriber-notifications') . "\n"
+            . __('Subscriptions: [selected_subscriptions]', 'subscriber-notifications') . "\n"
+            . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n"
+            . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications');
+        $content = subscriber_notifications_get_option('preferences_update_email_content', $default_content);
+
         $shortcodes = new SubscriberNotifications_Shortcodes();
         $processed_subject = $shortcodes->process_shortcodes($subject, $subscriber);
         $processed_content = $shortcodes->process_shortcodes($content, $subscriber);
-        
-        // Apply custom CSS if set
+
         $email_css = subscriber_notifications_get_option('email_css', '');
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
@@ -750,26 +747,81 @@ class SubscriberNotifications_Frontend {
         $mailer = new SubscriberNotifications_SendGrid();
         $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
     }
-    
+
     /**
-     * Get meeting categories
-     * 
-     * @return array Array of meeting category objects
+     * Build display name from WordPress first_name / last_name user meta.
+     *
+     * @param int|WP_User $user User ID or object.
+     * @return string Trimmed display name (may be empty).
      */
-    private function get_meeting_categories() {
-        if (!class_exists('Tribe__Events__Main')) {
-            return array();
+    private function build_display_name_from_user($user) {
+        if (is_numeric($user)) {
+            $user = get_userdata((int) $user);
         }
-        
-        $meetings_parent = get_term_by('slug', 'meetings', 'tribe_events_cat');
-        if (!$meetings_parent) {
-            return array();
+
+        if (!$user instanceof WP_User) {
+            return '';
         }
-        
-        return get_terms(array(
-            'taxonomy' => 'tribe_events_cat',
-            'parent' => $meetings_parent->term_id,
-            'hide_empty' => false
-        ));
+
+        $first = trim((string) get_user_meta($user->ID, 'first_name', true));
+        $last  = trim((string) get_user_meta($user->ID, 'last_name', true));
+
+        if ('' !== $first && '' !== $last) {
+            return trim($first . ' ' . $last);
+        }
+
+        if ('' !== $first) {
+            return $first;
+        }
+
+        return $last;
+    }
+
+    /**
+     * Contact fields for the subscription form when the visitor is logged in.
+     *
+     * @return array{user_id: int, name: string, email: string}|null Null when not logged in.
+     */
+    private function get_logged_in_contact_for_form() {
+        if (!is_user_logged_in()) {
+            return null;
+        }
+
+        $user_id = get_current_user_id();
+        $user    = get_userdata($user_id);
+
+        if (!$user instanceof WP_User) {
+            return null;
+        }
+
+        $email = sanitize_email($user->user_email);
+
+        return array(
+            'user_id' => $user_id,
+            'name'    => $this->build_display_name_from_user($user),
+            'email'   => $email,
+        );
+    }
+
+    /**
+     * Find an existing subscriber row for a subscription attempt.
+     *
+     * @param string $email     Account or submitted email.
+     * @param int    $wp_user_id WordPress user ID when logged in (0 for guests).
+     * @return object|null
+     */
+    private function find_existing_subscriber_for_subscription($email, $wp_user_id) {
+        if ($wp_user_id > 0) {
+            $by_user = $this->database->get_subscriber_by_user_id($wp_user_id);
+            if ($by_user) {
+                return $by_user;
+            }
+        }
+
+        if (!empty($email) && is_email($email)) {
+            return $this->database->get_subscriber_by_email($email);
+        }
+
+        return null;
     }
 }

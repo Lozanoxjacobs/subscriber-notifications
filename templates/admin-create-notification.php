@@ -28,7 +28,7 @@ if (!defined('ABSPATH')) {
                 <td>
                     <input type="text" id="notification_subject" name="notification_subject" class="regular-text" required>
                     <p class="description">
-                        <?php _e('Email subject line. You can use shortcodes like [subscriber_name], [selected_news_categories], etc.', 'subscriber-notifications'); ?>
+                        <?php _e('Email subject line. You can use shortcodes like [subscriber_name], [selected_subscriptions], etc.', 'subscriber-notifications'); ?>
                     </p>
                 </td>
             </tr>
@@ -50,65 +50,30 @@ if (!defined('ABSPATH')) {
                         <?php _e('Available shortcodes:', 'subscriber-notifications'); ?><br>
                         <code>[subscriber_name]</code> - <?php _e('Subscriber\'s name', 'subscriber-notifications'); ?><br>
                         <code>[subscriber_email]</code> - <?php _e('Subscriber\'s email', 'subscriber-notifications'); ?><br>
-                        <code>[selected_news_categories]</code> - <?php _e('Selected news categories', 'subscriber-notifications'); ?><br>
-                        <code>[selected_meeting_categories]</code> - <?php _e('Selected meeting categories', 'subscriber-notifications'); ?><br>
+                        <code>[selected_subscriptions]</code> - <?php _e('Formatted list of selections (HTML in body). Use format="plain" in subject lines only.', 'subscriber-notifications'); ?><br>
+                        <code>[selected_terms taxonomy="..."]</code> - <?php _e('Term names from a specific taxonomy', 'subscriber-notifications'); ?><br>
                         <code>[delivery_frequency]</code> - <?php _e('Delivery frequency', 'subscriber-notifications'); ?><br>
-                        <code>[news_feed duration="1day|1week|1month"]</code> - <?php _e('Personalized news feed (shows only subscriber\'s selected categories)', 'subscriber-notifications'); ?><br>
-                        <code>[meetings_feed duration="1day|1week|1month"]</code> - <?php _e('Personalized events feed (shows only subscriber\'s selected categories)', 'subscriber-notifications'); ?><br>
+                        <code>[content_feed post_type="..." taxonomy="..." terms="term-slug,other-slug" duration="1day|1week|1month" format="list|summary"]</code> - <?php _e('Personalized feed. Optional terms (plural) = comma-separated term slugs; requires taxonomy. Omit taxonomy to match any form taxonomy for that post type.', 'subscriber-notifications'); ?><br>
                         <code>[site_title]</code> - <?php _e('Site title', 'subscriber-notifications'); ?><br>
                         <code>[manage_preferences_link]</code> - <?php _e('Manage preferences link', 'subscriber-notifications'); ?><br>
                         <code>[manage_preferences_link text="Custom Text"]</code> - <?php _e('Manage preferences link with custom text', 'subscriber-notifications'); ?>
                     </p>
                 </td>
             </tr>
-            
+
             <tr>
-                <th scope="row">
-                    <label for="news_categories"><?php _e('Target News Categories', 'subscriber-notifications'); ?></label>
-                </th>
+                <th scope="row"><?php esc_html_e('Target Content', 'subscriber-notifications'); ?></th>
                 <td>
-                    <?php if (!empty($news_categories)): ?>
-                        <label class="select-all-label" style="display: block; margin-bottom: 10px; padding: 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px;">
-                            <input type="checkbox" id="select-all-news-admin" class="select-all-checkbox" data-target="news_categories">
-                            <strong><?php _e('Select All News Categories', 'subscriber-notifications'); ?></strong>
-                        </label>
-                        <div class="category-checkboxes" style="margin-left: 20px; border-left: 2px solid #e0e0e0; padding-left: 15px;">
-                            <?php foreach ($news_categories as $category): ?>
-                                <label style="display: block; margin-bottom: 5px;">
-                                    <input type="checkbox" name="news_categories[]" value="<?php echo esc_attr($category->term_id); ?>" class="news-category-checkbox">
-                                    <?php echo esc_html($category->name); ?>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php else: ?>
-                        <p><?php _e('No news categories found.', 'subscriber-notifications'); ?></p>
-                    <?php endif; ?>
+                    <?php
+                    if (empty($is_configured)) {
+                        echo '<p>' . esc_html__('Content Types are not configured. Set them up to define notification targets.', 'subscriber-notifications') . '</p>';
+                    } else {
+                        require SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/partials/admin-notification-targets.php';
+                    }
+                    ?>
                 </td>
             </tr>
-            
-            <tr>
-                <th scope="row">
-                    <label for="meeting_categories"><?php _e('Target Meeting Categories', 'subscriber-notifications'); ?></label>
-                </th>
-                <td>
-                    <?php if (!empty($meeting_categories)): ?>
-                        <label class="select-all-label" style="display: block; margin-bottom: 10px; padding: 8px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px;">
-                            <input type="checkbox" id="select-all-meetings-admin" class="select-all-checkbox" data-target="meeting_categories">
-                            <strong><?php _e('Select All Meeting Categories', 'subscriber-notifications'); ?></strong>
-                        </label>
-                        <div class="category-checkboxes" style="margin-left: 20px; border-left: 2px solid #e0e0e0; padding-left: 15px;">
-                            <?php foreach ($meeting_categories as $category): ?>
-                                <label style="display: block; margin-bottom: 5px;">
-                                    <input type="checkbox" name="meeting_categories[]" value="<?php echo esc_attr($category->term_id); ?>" class="meeting-category-checkbox">
-                                    <?php echo esc_html($category->name); ?>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php else: ?>
-                        <p><?php _e('No meeting categories found. Make sure The Events Calendar is active and you have a "meetings" category with child categories.', 'subscriber-notifications'); ?></p>
-                    <?php endif; ?>
-                </td>
-            </tr>
+
             
             <tr>
                 <th scope="row">

@@ -258,251 +258,159 @@ class SubscriberNotifications_Scheduler {
     }
     
     /**
-     * Wrap email content with custom CSS
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->wrap_content_with_css() instead
-     * @param string $content Email content
-     * @param string $css Custom CSS
-     * @param object $subscriber Subscriber object for shortcode processing
-     * @return string Wrapped content with CSS
+     * Get target subscribers for a notification.
+     *
+     * SQL pre-filters active subscribers by frequency. The fine-grained term
+     * overlap test is done in PHP against the JSON preferences columns.
+     *
+     * @param object $notification Notification row.
+     * @return array<int, object> Subscriber rows.
      */
-    private function wrap_content_with_css($content, $css, $subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->wrap_content_with_css()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->wrap_content_with_css($content, $css, $subscriber);
-    }
-    
-    /**
-     * Wrap content with proper email structure
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->wrap_with_email_structure() instead
-     * @param string $content Email content
-     * @param string $css CSS styles
-     * @param object|null $subscriber Subscriber object for shortcode processing
-     * @return string Wrapped content with email structure
-     */
-    private function wrap_with_email_structure($content, $css, $subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->wrap_with_email_structure()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->wrap_with_email_structure($content, $css, $subscriber);
-    }
-    
-    /**
-     * Get default CSS
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->get_default_css() instead
-     * @return string Default CSS for emails
-     */
-    private function get_default_css() {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->get_default_css()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->get_default_css();
-    }
-    
-    /**
-     * Get global header content
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->get_global_header_content() instead
-     * @param object|null $subscriber Subscriber object for shortcode processing
-     * @return string Header HTML
-     */
-    private function get_global_header_content($subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->get_global_header_content()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->get_global_header_content($subscriber);
-    }
-    
-    /**
-     * Get global footer content
-     * 
-     * @deprecated 2.2.0 Use SubscriberNotifications_Email_Formatter::get_instance()->get_global_footer_content() instead
-     * @param object|null $subscriber Subscriber object for shortcode processing
-     * @return string Footer HTML
-     */
-    private function get_global_footer_content($subscriber = null) {
-        _deprecated_function(__METHOD__, '2.2.0', 'SubscriberNotifications_Email_Formatter::get_instance()->get_global_footer_content()');
-        $formatter = SubscriberNotifications_Email_Formatter::get_instance();
-        return $formatter->get_global_footer_content($subscriber);
-    }
-    
-    /**
-     * Get target subscribers for notification
-     * 
-     * @param object $notification Notification object
-     * @return array Array of subscriber objects
-     */
-        private function get_target_subscribers($notification) {
-            global $wpdb;
-            
-            $subscribers_table = $wpdb->prefix . 'subscriber_notifications';
-            $where_conditions = array("status = 'active'");
-            $where_values = array();
-            
-            // Build conditions for news OR meeting categories (not both)
-            $category_conditions = array();
-            
-            // Filter by news categories
-            if (!empty($notification->news_categories)) {
-                $news_categories = explode(',', $notification->news_categories);
-                $news_categories = array_map('trim', $news_categories); // Remove whitespace
-                foreach ($news_categories as $cat_id) {
-                    if (empty($cat_id)) continue;
-                    // Use FIND_IN_SET for better compatibility
-                    $category_conditions[] = "FIND_IN_SET(%s, news_categories) > 0";
-                    $where_values[] = $cat_id;
-                }
-            }
-            
-            // Filter by meeting categories
-            if (!empty($notification->meeting_categories)) {
-                $meeting_categories = explode(',', $notification->meeting_categories);
-                $meeting_categories = array_map('trim', $meeting_categories); // Remove whitespace
-                foreach ($meeting_categories as $cat_id) {
-                    if (empty($cat_id)) continue;
-                    // Use FIND_IN_SET for better compatibility
-                    $category_conditions[] = "FIND_IN_SET(%s, meeting_categories) > 0";
-                    $where_values[] = $cat_id;
-                }
-            }
-            
-            // If we have category conditions, add them with OR logic
-            if (!empty($category_conditions)) {
-                $where_conditions[] = "(" . implode(' OR ', $category_conditions) . ")";
-            }
-            
-            // Filter by frequency
-            if (!empty($notification->frequency_target)) {
-                $where_conditions[] = "frequency = %s";
-                $where_values[] = $notification->frequency_target;
-            }
-            
-            $where_clause = implode(' AND ', $where_conditions);
-            
-            // Use prepare() with FIND_IN_SET instead of LIKE patterns
-            $sql = $wpdb->prepare("
-                SELECT * FROM {$subscribers_table} 
-                WHERE {$where_clause}
-            ", $where_values);
-            
-            $subscribers = $wpdb->get_results($sql);
-            
-            return $subscribers;
+    private function get_target_subscribers($notification) {
+        global $wpdb;
+
+        $subscribers_table = $wpdb->prefix . 'subscriber_notifications';
+        $where_conditions  = array("status = 'active'");
+        $where_values      = array();
+
+        if (!empty($notification->frequency_target)) {
+            $where_conditions[] = 'frequency = %s';
+            $where_values[]     = $notification->frequency_target;
         }
+
+        $where_clause = implode(' AND ', $where_conditions);
+
+        if (!empty($where_values)) {
+            $sql = $wpdb->prepare(
+                "SELECT * FROM {$subscribers_table} WHERE {$where_clause}",
+                $where_values
+            );
+        } else {
+            $sql = "SELECT * FROM {$subscribers_table} WHERE {$where_clause}";
+        }
+
+        $subscribers = $wpdb->get_results($sql);
+        if (empty($subscribers)) {
+            return array();
+        }
+
+        $target_prefs = isset($notification->target_preferences) ? $notification->target_preferences : '';
+        $target_prefs = SubscriberNotifications_Preferences::decode($target_prefs);
+
+        // If a notification has no target preferences (misconfigured), block sending.
+        if (empty($target_prefs)) {
+            return array();
+        }
+
+        $matched = array();
+        foreach ($subscribers as $subscriber) {
+            $subscriber_prefs = SubscriberNotifications_Preferences::decode($subscriber->subscription_preferences ?? '');
+            if (SubscriberNotifications_Preferences::terms_overlap($subscriber_prefs, $target_prefs)) {
+                $matched[] = $subscriber;
+            }
+        }
+        return $matched;
+    }
     
     /**
-     * Check if subscriber has relevant content for this notification
-     * 
-     * @param object $subscriber Subscriber object
-     * @param string $frequency Notification frequency (daily, weekly, monthly)
-     * @param object $notification Notification object
-     * @return bool True if content exists, false otherwise
+     * Check if a subscriber has relevant feed-flagged content for this notification.
+     *
+     * Walks the subscriber's preferences ∩ notification target preferences, scoped to
+     * the configured post types/taxonomies, and probes each post_type with a generic
+     * `tax_query` for any feed-included post within the digest window.
+     *
+     * @param object $subscriber  Subscriber row.
+     * @param string $frequency   Notification frequency (daily, weekly, monthly).
+     * @param object $notification Notification row.
+     * @return bool True if at least one matching post is found across all post types.
      */
     private function has_relevant_content($subscriber, $frequency, $notification) {
-        // Determine time period based on frequency and convert to MySQL datetime format
-        $cutoff_timestamp = 0;
         switch ($frequency) {
             case 'daily':
                 $cutoff_timestamp = strtotime('1 day ago');
                 break;
-            case 'weekly':
-                $cutoff_timestamp = strtotime('1 week ago');
-                break;
             case 'monthly':
                 $cutoff_timestamp = strtotime('1 month ago');
                 break;
+            case 'weekly':
             default:
                 $cutoff_timestamp = strtotime('1 week ago');
+                break;
         }
         $cutoff_date = date('Y-m-d H:i:s', $cutoff_timestamp);
-        
-        // Get intersection of notification target categories and subscriber's categories
-        $news_cat_ids = array();
-        $meeting_cat_ids = array();
-        
-        // Check news categories intersection
-        if (!empty($notification->news_categories) && !empty($subscriber->news_categories)) {
-            $notification_news = explode(',', $notification->news_categories);
-            $subscriber_news = explode(',', $subscriber->news_categories);
-            $news_cat_ids = array_intersect($notification_news, $subscriber_news);
-            $news_cat_ids = array_map('trim', $news_cat_ids); // Remove any whitespace
-            $news_cat_ids = array_filter($news_cat_ids); // Remove empty values
+
+        $subscriber_prefs = SubscriberNotifications_Preferences::decode($subscriber->subscription_preferences ?? '');
+        $target_prefs     = SubscriberNotifications_Preferences::decode($notification->target_preferences ?? '');
+
+        if (empty($subscriber_prefs) || empty($target_prefs)) {
+            return false;
         }
-        
-        // Check meeting categories intersection
-        if (!empty($notification->meeting_categories) && !empty($subscriber->meeting_categories)) {
-            $notification_meetings = explode(',', $notification->meeting_categories);
-            $subscriber_meetings = explode(',', $subscriber->meeting_categories);
-            $meeting_cat_ids = array_intersect($notification_meetings, $subscriber_meetings);
-            $meeting_cat_ids = array_map('trim', $meeting_cat_ids); // Remove any whitespace
-            $meeting_cat_ids = array_filter($meeting_cat_ids); // Remove empty values
-        }
-        
-        // Check for news posts
-        $has_news = false;
-        if (!empty($news_cat_ids)) {
-            $news_args = array(
-                'post_type' => 'post',
-                'post_status' => 'publish',
+
+        $enabled_post_types = SubscriberNotifications_Content_Config::get_enabled_post_types();
+        foreach ($enabled_post_types as $post_type) {
+            if (empty($subscriber_prefs[$post_type]) || empty($target_prefs[$post_type])) {
+                continue;
+            }
+
+            $allowed_taxonomies = SubscriberNotifications_Content_Config::get_form_taxonomies($post_type);
+            $tax_query = array('relation' => 'OR');
+            $has_tax_clause = false;
+
+            foreach ($allowed_taxonomies as $taxonomy) {
+                if (empty($subscriber_prefs[$post_type][$taxonomy]) || empty($target_prefs[$post_type][$taxonomy])) {
+                    continue;
+                }
+                $allowed_ids   = SubscriberNotifications_Term_Resolver::get_allowed_term_ids($post_type, $taxonomy);
+                $intersect_ids = array_values(array_intersect(
+                    array_map('intval', $subscriber_prefs[$post_type][$taxonomy]),
+                    array_map('intval', $target_prefs[$post_type][$taxonomy]),
+                    $allowed_ids
+                ));
+                if (empty($intersect_ids)) {
+                    continue;
+                }
+                $tax_query[] = array(
+                    'taxonomy' => $taxonomy,
+                    'field'    => 'term_id',
+                    'terms'    => $intersect_ids,
+                );
+                $has_tax_clause = true;
+            }
+
+            if (!$has_tax_clause) {
+                continue;
+            }
+
+            $args = array(
+                'post_type'      => $post_type,
+                'post_status'    => 'publish',
                 'posts_per_page' => 1,
-                'category__in' => $news_cat_ids,
-                'meta_query' => array(
+                'fields'         => 'ids',
+                'tax_query'      => $tax_query,
+                'meta_query'     => array(
                     'relation' => 'AND',
                     array(
-                        'key' => '_subscriber_notifications_include_in_feed',
-                        'value' => '1',
-                        'compare' => '='
+                        'key'     => '_subscriber_notifications_include_in_feed',
+                        'value'   => '1',
+                        'compare' => '=',
                     ),
                     array(
-                        'key' => '_subscriber_notifications_last_notification_date',
-                        'value' => $cutoff_date,
+                        'key'     => '_subscriber_notifications_last_notification_date',
+                        'value'   => $cutoff_date,
                         'compare' => '>=',
-                        'type' => 'DATETIME'
-                    )
-                ),
-                'fields' => 'ids'
-            );
-            $news_posts = get_posts($news_args);
-            $has_news = !empty($news_posts);
-        }
-        
-        // Check for events
-        $has_events = false;
-        if (!empty($meeting_cat_ids) && class_exists('Tribe__Events__Main')) {
-            // Filter by notification date (when checkbox was checked), not event start date
-            // Suppress TEC's query filters so we can query by post metadata instead of event dates
-            $events_args = array(
-                'post_type' => 'tribe_events',
-                'post_status' => 'publish',
-                'posts_per_page' => 1,
-                'tribe_suppress_query_filters' => true,
-                'tax_query' => array(
-                    array(
-                        'taxonomy' => 'tribe_events_cat',
-                        'field' => 'term_id',
-                        'terms' => $meeting_cat_ids
-                    )
-                ),
-                'meta_query' => array(
-                    'relation' => 'AND',
-                    array(
-                        'key' => '_subscriber_notifications_include_in_feed',
-                        'value' => '1',
-                        'compare' => '='
+                        // Keep this as a plain string comparison for cross-DB compatibility.
+                        // Values are stored as Y-m-d H:i:s, which sorts lexicographically in date order.
                     ),
-                    array(
-                        'key' => '_subscriber_notifications_last_notification_date',
-                        'value' => $cutoff_date,
-                        'compare' => '>=',
-                        'type' => 'DATETIME'
-                    )
                 ),
-                'fields' => 'ids'
             );
-            $events = get_posts($events_args);
-            $has_events = !empty($events);
+
+            $found = get_posts($args);
+            if (!empty($found)) {
+                return true;
+            }
         }
-        
-        return $has_news || $has_events;
+
+        return false;
     }
     
     /**

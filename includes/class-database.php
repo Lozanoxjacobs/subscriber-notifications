@@ -62,8 +62,8 @@ class SubscriberNotifications_Database {
             id int(11) NOT NULL AUTO_INCREMENT,
             name varchar(255) NOT NULL,
             email varchar(255) NOT NULL,
-            news_categories text,
-            meeting_categories text,
+            user_id bigint(20) unsigned DEFAULT NULL,
+            subscription_preferences longtext,
             frequency enum('daily','weekly','monthly') NOT NULL,
             status enum('active','inactive') DEFAULT 'active',
             date_added datetime DEFAULT CURRENT_TIMESTAMP,
@@ -71,6 +71,7 @@ class SubscriberNotifications_Database {
             management_token varchar(255),
             PRIMARY KEY (id),
             UNIQUE KEY email (email),
+            UNIQUE KEY user_id (user_id),
             KEY status (status),
             KEY frequency (frequency),
             KEY management_token (management_token)
@@ -104,8 +105,7 @@ class SubscriberNotifications_Database {
             title varchar(255) NOT NULL,
             subject varchar(255) NOT NULL,
             content longtext NOT NULL,
-            news_categories text,
-            meeting_categories text,
+            target_preferences longtext,
             frequency_target varchar(50),
             status enum('pending','sent','cancelled') DEFAULT 'pending',
             created_date datetime DEFAULT CURRENT_TIMESTAMP,
@@ -209,34 +209,61 @@ class SubscriberNotifications_Database {
     }
     
     /**
-     * Run database migrations
-     * This can be called manually to update existing installations
+     * Run database migrations.
+     *
+     * v3 is greenfield. Most 2.x migration paths are unsafe to re-run against the
+     * new schema (e.g. they reference removed columns). They are intentionally
+     * skipped here. The retained calls are safe on both fresh v3 installs and
+     * partially-wiped dev installs.
      */
     public function run_migrations() {
-        // IMPORTANT: Token migration must run FIRST before create_tables() to avoid duplicate columns
+        // Token columns are needed by both v2 and v3; safe to keep.
         $this->migrate_unsubscribe_token_to_management_token();
-        
-        // Ensure all subscribers have management tokens
         $this->migrate_generate_missing_tokens();
-        
-        // Auto-populate global footer if empty
+
+        // Optional cosmetic default; safe.
         $this->migrate_auto_populate_global_footer();
-        
-        // Add subject column if it doesn't exist
+
+        // Defensive guards in case dbDelta hasn't run yet.
         $this->add_subject_column_if_missing();
-        
-        // Add recurring columns if they don't exist
         $this->add_recurring_columns_if_missing();
-        
-        // Convert existing weekly/monthly notifications to recurring if they haven't been sent
-        $this->convert_existing_notifications_to_recurring();
-        
-        // Run other existing migrations
-        $this->migrate_frequency_enum();
-        $this->migrate_feed_inclusion_meta();
-        
-        // Remove phone column if it exists
-        $this->remove_phone_column_if_exists();
+        $this->add_user_id_column_if_missing();
+    }
+    
+    /**
+     * Add user_id column and unique index on subscribers table if missing.
+     */
+    private function add_user_id_column_if_missing() {
+        $table_exists = $this->wpdb->get_var($this->wpdb->prepare(
+            'SHOW TABLES LIKE %s',
+            $this->subscribers_table
+        ));
+
+        if (!$table_exists) {
+            return;
+        }
+
+        $column_exists = $this->wpdb->get_results($this->wpdb->prepare(
+            "SHOW COLUMNS FROM {$this->subscribers_table} LIKE %s",
+            'user_id'
+        ));
+
+        if (empty($column_exists)) {
+            $this->wpdb->query(
+                "ALTER TABLE {$this->subscribers_table} ADD COLUMN user_id bigint(20) unsigned DEFAULT NULL AFTER email"
+            );
+        }
+
+        $index_exists = $this->wpdb->get_results($this->wpdb->prepare(
+            "SHOW INDEX FROM {$this->subscribers_table} WHERE Key_name = %s",
+            'user_id'
+        ));
+
+        if (empty($index_exists)) {
+            $this->wpdb->query(
+                "ALTER TABLE {$this->subscribers_table} ADD UNIQUE KEY user_id (user_id)"
+            );
+        }
     }
     
     /**
@@ -376,41 +403,10 @@ class SubscriberNotifications_Database {
     }
     
     /**
-     * Convert existing notifications to recurring format
-     */
-    private function convert_existing_notifications_to_recurring() {
-        global $wpdb;
-        
-        // Get notifications that are pending and have frequency_target but are not recurring
-        $notifications = $wpdb->get_results("
-            SELECT id, frequency_target, created_date 
-            FROM {$this->notifications_table} 
-            WHERE status = 'pending' 
-            AND frequency_target IN ('daily', 'weekly', 'monthly')
-            AND (is_recurring = 0 OR is_recurring IS NULL)
-        ");
-        
-        foreach ($notifications as $notification) {
-            // Calculate next send date
-            $next_send_date = $this->calculate_next_send_date_for_existing($notification->frequency_target, $notification->created_date);
-            
-            // Update the notification to be recurring
-            $wpdb->update(
-                $this->notifications_table,
-                array(
-                    'is_recurring' => 1,
-                    'next_send_date' => $next_send_date,
-                    'recurrence_count' => 0
-                ),
-                array('id' => $notification->id),
-                array('%d', '%s', '%d'),
-                array('%d')
-            );
-        }
-    }
-    
-    /**
-     * Calculate next send date for existing notifications
+     * Calculate next send date for an existing notification row.
+     *
+     * Currently unused by the v3 run_migrations() path but kept here as a helper
+     * for any one-off scripts that need it.
      */
     private function calculate_next_send_date_for_existing($frequency, $created_date) {
         $current_time = current_time('timestamp');
@@ -507,87 +503,34 @@ class SubscriberNotifications_Database {
         }
     }
     
+    
     /**
-     * Migrate frequency enum to include daily and remove as_available
+     * Build WHERE clause fragment for subscriber list search.
+     *
+     * @param string $search Search string from admin UI.
+     * @return array{0: string, 1: array<int, mixed>} SQL fragment (with leading AND) and values.
      */
-    private function migrate_frequency_enum() {
-        // Check current enum values
-        $current_enum = $this->wpdb->get_var("SHOW COLUMNS FROM {$this->subscribers_table} LIKE 'frequency'");
-        
-        // Check if we need to migrate (either has as_available or missing daily)
-        if (strpos($current_enum, 'as_available') !== false || strpos($current_enum, 'daily') === false) {
-            // Update any existing as_available subscribers to daily
-            $updated = $this->wpdb->update(
-                $this->subscribers_table,
-                array('frequency' => 'daily'),
-                array('frequency' => 'as_available'),
-                array('%s'),
-                array('%s')
+    private function get_subscriber_search_where(string $search): array {
+        $search = trim($search);
+        if ('' === $search) {
+            return array('', array());
+        }
+
+        $like_term = '%' . $this->wpdb->esc_like($search) . '%';
+
+        if (ctype_digit($search)) {
+            return array(
+                ' AND (name LIKE %s OR email LIKE %s OR user_id = %d)',
+                array($like_term, $like_term, absint($search)),
             );
-            
-            // Alter the enum to remove as_available and add daily
-            $sql = "ALTER TABLE {$this->subscribers_table} MODIFY COLUMN frequency enum('daily','weekly','monthly') NOT NULL";
-            $result = $this->wpdb->query($sql);
-            
-            if ($result === false && defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Subscriber Notifications: Failed to update frequency enum. Error: " . $this->wpdb->last_error);
-            }
         }
+
+        return array(
+            ' AND (name LIKE %s OR email LIKE %s)',
+            array($like_term, $like_term),
+        );
     }
-    
-    /**
-     * Migrate feed inclusion meta for existing posts
-     */
-    private function migrate_feed_inclusion_meta() {
-        $migration_version = get_option('subscriber_notifications_feed_migration_version', '0');
-        
-        if (version_compare($migration_version, '1.0.0', '<')) {
-            // Get all published posts without the meta field
-            $published_posts = get_posts(array(
-                'post_status' => 'publish',
-                'post_type' => array('post', 'tribe_events'),
-                'meta_query' => array(
-                    array(
-                        'key' => '_subscriber_notifications_include_in_feed',
-                        'compare' => 'NOT EXISTS'
-                    )
-                ),
-                'numberposts' => -1
-            ));
-            
-            foreach ($published_posts as $post) {
-                // Default existing posts to NOT included in feeds
-                update_post_meta($post->ID, '_subscriber_notifications_include_in_feed', 0);
-            }
-            
-            update_option('subscriber_notifications_feed_migration_version', '1.0.0');
-        }
-    }
-    
-    /**
-     * Remove phone column if it exists
-     */
-    private function remove_phone_column_if_exists() {
-        $migration_version = get_option('subscriber_notifications_phone_removal_version', '0');
-        
-        if (version_compare($migration_version, '1.0.0', '<')) {
-            // Check if phone column exists
-            $columns = $this->wpdb->get_col("DESCRIBE {$this->subscribers_table}");
-            
-            if (in_array('phone', $columns)) {
-                // Remove phone column
-                $sql = "ALTER TABLE {$this->subscribers_table} DROP COLUMN phone";
-                $result = $this->wpdb->query($sql);
-                
-                if ($result === false && defined('WP_DEBUG') && WP_DEBUG) {
-                    error_log('Subscriber Notifications: Failed to remove phone column: ' . $this->wpdb->last_error);
-                }
-            }
-            
-            update_option('subscriber_notifications_phone_removal_version', '1.0.0');
-        }
-    }
-    
+
     /**
      * Get subscribers with pagination and filtering
      * 
@@ -624,11 +567,10 @@ class SubscriberNotifications_Database {
             $where_values[] = $args['status'];
         }
         
-        if (!empty($args['search'])) {
-            $where_conditions[] = "(name LIKE %s OR email LIKE %s)";
-            $search_term = '%' . $this->wpdb->esc_like($args['search']) . '%';
-            $where_values[] = $search_term;
-            $where_values[] = $search_term;
+        list($search_sql, $search_values) = $this->get_subscriber_search_where((string) $args['search']);
+        if ('' !== $search_sql) {
+            $where_conditions[] = ltrim($search_sql, ' AND ');
+            $where_values     = array_merge($where_values, $search_values);
         }
         
         $where_clause = implode(' AND ', $where_conditions);
@@ -673,6 +615,24 @@ class SubscriberNotifications_Database {
     }
     
     /**
+     * Get subscriber by linked WordPress user ID.
+     *
+     * @param int $user_id WordPress user ID.
+     * @return object|null Subscriber object or null.
+     */
+    public function get_subscriber_by_user_id(int $user_id) {
+        $user_id = absint($user_id);
+        if ($user_id < 1) {
+            return null;
+        }
+
+        return $this->wpdb->get_row($this->wpdb->prepare(
+            "SELECT * FROM {$this->subscribers_table} WHERE user_id = %d",
+            $user_id
+        ));
+    }
+    
+    /**
      * Get subscriber by management token
      * 
      * @param string $token Management token
@@ -693,71 +653,81 @@ class SubscriberNotifications_Database {
     
     /**
      * Add new subscriber
-     * 
-     * @param array $data Subscriber data
+     *
+     * @param array $data Subscriber data. Accepts `subscription_preferences` as either an
+     *                    array (encoded to JSON here) or a JSON string.
      * @return int|false Subscriber ID on success, false on failure
      */
     public function add_subscriber(array $data) {
         $defaults = array(
-            'name' => '',
-            'email' => '',
-            'news_categories' => '',
-            'meeting_categories' => '',
-            'frequency' => 'daily',
-            'status' => 'active',
-            'management_token' => wp_generate_password(32, false)
+            'name'                    => '',
+            'email'                   => '',
+            'subscription_preferences' => '{}',
+            'frequency'               => 'daily',
+            'status'                  => 'active',
+            'management_token'        => wp_generate_password(32, false),
         );
-        
+
         $data = wp_parse_args($data, $defaults);
-        
-        // Sanitize data
-        $data['name'] = sanitize_text_field($data['name']);
-        $data['email'] = sanitize_email($data['email']);
-        $data['news_categories'] = sanitize_text_field($data['news_categories']);
-        $data['meeting_categories'] = sanitize_text_field($data['meeting_categories']);
-        $data['frequency'] = sanitize_text_field($data['frequency']);
-        $data['status'] = sanitize_text_field($data['status']);
-        
+
+        $data['name']                    = sanitize_text_field($data['name']);
+        $data['email']                   = sanitize_email($data['email']);
+        $data['subscription_preferences'] = $this->encode_preferences($data['subscription_preferences']);
+        $data['frequency']               = sanitize_text_field($data['frequency']);
+        $data['status']                  = sanitize_text_field($data['status']);
+
+        if (isset($data['user_id'])) {
+            $data['user_id'] = absint($data['user_id']);
+            if ($data['user_id'] < 1) {
+                unset($data['user_id']);
+            }
+        }
+
         $result = $this->wpdb->insert($this->subscribers_table, $data);
-        
+
         if ($result === false) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Subscriber Notifications: Database insert failed. Error: ' . $this->wpdb->last_error);
             }
             return false;
         }
-        
+
         return $this->wpdb->insert_id;
     }
-    
+
     /**
      * Update subscriber
-     * 
+     *
      * @param int $id Subscriber ID
-     * @param array $data Data to update
+     * @param array $data Data to update. `subscription_preferences` may be an array or JSON.
      * @return bool True on success, false on failure
      */
     public function update_subscriber(int $id, array $data): bool {
-        // Sanitize data appropriately based on field type
         $sanitized_data = array();
         $format = array();
-        
+
         foreach ($data as $key => $value) {
             switch ($key) {
                 case 'email':
-                    $sanitized_data[ $key ] = sanitize_email((string) $value);
+                    $sanitized_data[$key] = sanitize_email((string) $value);
+                    $format[] = '%s';
+                    break;
+                case 'user_id':
+                    $user_id = absint($value);
+                    $sanitized_data[$key] = $user_id > 0 ? $user_id : null;
+                    $format[] = '%d';
+                    break;
+                case 'subscription_preferences':
+                    $sanitized_data[$key] = $this->encode_preferences($value);
                     $format[] = '%s';
                     break;
                 case 'name':
-                case 'news_categories':
-                case 'meeting_categories':
                 case 'frequency':
                 case 'status':
                 case 'management_token':
-                    $sanitized_data[ $key ] = sanitize_text_field($value);
+                    $sanitized_data[$key] = sanitize_text_field($value);
                     $format[] = '%s';
                     break;
-                case 'date_verified':
                 case 'date_added':
                 case 'last_notified':
                     $sanitized_data[$key] = sanitize_text_field($value); // Keep as string for datetime
@@ -769,7 +739,7 @@ class SubscriberNotifications_Database {
                     break;
             }
         }
-        
+
         $result = $this->wpdb->update(
             $this->subscribers_table,
             $sanitized_data,
@@ -777,15 +747,35 @@ class SubscriberNotifications_Database {
             $format,
             array('%d')
         );
-        
+
         if ($result === false && !empty($this->wpdb->last_error)) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('Subscriber Notifications: Database update failed. Error: ' . $this->wpdb->last_error);
             }
             return false;
         }
-        
+
         return $result;
+    }
+
+    /**
+     * Encode a preferences value for storage. Accepts arrays or JSON strings.
+     *
+     * @param mixed $value Preferences as array or JSON string.
+     * @return string JSON-encoded preferences.
+     */
+    private function encode_preferences($value): string {
+        if (class_exists('SubscriberNotifications_Preferences')) {
+            if (is_array($value)) {
+                return SubscriberNotifications_Preferences::encode($value);
+            }
+            $decoded = SubscriberNotifications_Preferences::decode((string) $value);
+            return SubscriberNotifications_Preferences::encode($decoded);
+        }
+        if (is_array($value)) {
+            return wp_json_encode($value);
+        }
+        return (string) $value;
     }
     
     /**
@@ -1003,11 +993,10 @@ class SubscriberNotifications_Database {
             $where_values[] = $args['status'];
         }
         
-        if (!empty($args['search'])) {
-            $where_conditions[] = "(name LIKE %s OR email LIKE %s)";
-            $search_term = '%' . $this->wpdb->esc_like($args['search']) . '%';
-            $where_values[] = $search_term;
-            $where_values[] = $search_term;
+        list($search_sql, $search_values) = $this->get_subscriber_search_where((string) $args['search']);
+        if ('' !== $search_sql) {
+            $where_conditions[] = ltrim($search_sql, ' AND ');
+            $where_values     = array_merge($where_values, $search_values);
         }
         
         $where_clause = implode(' AND ', $where_conditions);
@@ -1080,62 +1069,4 @@ class SubscriberNotifications_Database {
         ) !== false;
     }
     
-    /**
-     * Migrate database to remove verification system
-     * 
-     * @return array Migration results
-     */
-    public function migrate_remove_verification() {
-        $results = array(
-            'success' => true,
-            'messages' => array(),
-            'errors' => array()
-        );
-        
-        // Check if verification columns exist
-        $columns = $this->wpdb->get_col("DESCRIBE {$this->subscribers_table}");
-        
-        // Remove verification_token column if it exists
-        if (in_array('verification_token', $columns)) {
-            $sql = "ALTER TABLE {$this->subscribers_table} DROP COLUMN verification_token";
-            $result = $this->wpdb->query($sql);
-            
-            if ($result === false) {
-                $results['success'] = false;
-                $results['errors'][] = 'Failed to remove verification_token column: ' . $this->wpdb->last_error;
-            } else {
-                $results['messages'][] = 'Removed verification_token column';
-            }
-        }
-        
-        // Remove date_verified column if it exists
-        if (in_array('date_verified', $columns)) {
-            $sql = "ALTER TABLE {$this->subscribers_table} DROP COLUMN date_verified";
-            $result = $this->wpdb->query($sql);
-            
-            if ($result === false) {
-                $results['success'] = false;
-                $results['errors'][] = 'Failed to remove date_verified column: ' . $this->wpdb->last_error;
-            } else {
-                $results['messages'][] = 'Removed date_verified column';
-            }
-        }
-        
-        // Update any pending subscribers to active
-        $updated = $this->wpdb->update(
-            $this->subscribers_table,
-            array('status' => 'active'),
-            array('status' => 'pending'),
-            array('%s'),
-            array('%s')
-        );
-        
-        if ($updated !== false) {
-            $results['messages'][] = "Updated {$updated} pending subscribers to active status";
-        } else {
-            $results['errors'][] = 'Failed to update pending subscribers: ' . $this->wpdb->last_error;
-        }
-        
-        return $results;
-    }
 }

@@ -27,6 +27,58 @@ function format_date_utc($date_value) {
         return mysql2date('M j, Y g:i A', $date_value) ?: '-';
     }
 }
+
+/**
+ * Admin table cell for linked WordPress account.
+ *
+ * @param object $subscriber Subscriber row.
+ * @return string Safe HTML.
+ */
+function subscriber_notifications_format_wp_user_cell($subscriber) {
+    $user_id = isset($subscriber->user_id) ? absint($subscriber->user_id) : 0;
+
+    if ($user_id < 1) {
+        return '<span class="description">' . esc_html__('—', 'subscriber-notifications') . '</span>';
+    }
+
+    $user = get_userdata($user_id);
+    if (!$user) {
+        return '<span class="description">' . esc_html(
+            sprintf(
+                /* translators: %d: WordPress user ID */
+                __('ID %d (user not found)', 'subscriber-notifications'),
+                $user_id
+            )
+        ) . '</span>';
+    }
+
+    $edit_link = get_edit_user_link($user_id);
+    $label   = $user->user_login;
+
+    if ($edit_link) {
+        return sprintf(
+            '<a href="%1$s">%2$s</a><br><span class="description">%3$s</span>',
+            esc_url($edit_link),
+            esc_html($label),
+            esc_html(
+                sprintf(
+                    /* translators: %d: WordPress user ID */
+                    __('User ID %d', 'subscriber-notifications'),
+                    $user_id
+                )
+            )
+        );
+    }
+
+    return esc_html(
+        sprintf(
+            /* translators: 1: login, 2: user ID */
+            __('%1$s (ID %2$d)', 'subscriber-notifications'),
+            $label,
+            $user_id
+        )
+    );
+}
 ?>
 
 <div class="wrap">
@@ -59,8 +111,8 @@ function format_date_utc($date_value) {
                 <tr>
                     <th><?php _e('Name', 'subscriber-notifications'); ?></th>
                     <th><?php _e('Email', 'subscriber-notifications'); ?></th>
-                    <th><?php _e('News Categories', 'subscriber-notifications'); ?></th>
-                    <th><?php _e('Meeting Categories', 'subscriber-notifications'); ?></th>
+                    <th><?php _e('WP User', 'subscriber-notifications'); ?></th>
+                    <th><?php _e('Subscriptions', 'subscriber-notifications'); ?></th>
                     <th><?php _e('Frequency', 'subscriber-notifications'); ?></th>
                     <th><?php _e('Status', 'subscriber-notifications'); ?></th>
                     <th><?php _e('Date Added', 'subscriber-notifications'); ?></th>
@@ -79,34 +131,11 @@ function format_date_utc($date_value) {
                     <tr>
                         <td><?php echo esc_html($subscriber->name); ?></td>
                         <td><?php echo esc_html($subscriber->email); ?></td>
+                        <td><?php echo subscriber_notifications_format_wp_user_cell($subscriber); ?></td>
                         <td>
-                            <?php 
-                            $news_cats = explode(',', $subscriber->news_categories);
-                            $news_cat_names = array();
-                            foreach ($news_cats as $cat_id) {
-                                if ($cat_id) {
-                                    $cat = get_category($cat_id);
-                                    if ($cat) {
-                                        $news_cat_names[] = $cat->name;
-                                    }
-                                }
-                            }
-                            echo esc_html(implode(', ', $news_cat_names));
-                            ?>
-                        </td>
-                        <td>
-                            <?php 
-                            $meeting_cats = explode(',', $subscriber->meeting_categories);
-                            $meeting_cat_names = array();
-                            foreach ($meeting_cats as $cat_id) {
-                                if ($cat_id) {
-                                    $cat = get_term($cat_id, 'tribe_events_cat');
-                                    if ($cat) {
-                                        $meeting_cat_names[] = $cat->name;
-                                    }
-                                }
-                            }
-                            echo esc_html(implode(', ', $meeting_cat_names));
+                            <?php
+                            $prefs_summary = SubscriberNotifications_Preferences::human_readable($subscriber->subscription_preferences ?? '');
+                            echo $prefs_summary !== '' ? nl2br(esc_html($prefs_summary), false) : '<span class="description">' . esc_html__('—', 'subscriber-notifications') . '</span>';
                             ?>
                         </td>
                         <td><?php echo esc_html(ucfirst(str_replace('_', ' ', $subscriber->frequency))); ?></td>

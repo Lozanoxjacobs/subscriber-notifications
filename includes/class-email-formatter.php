@@ -41,23 +41,58 @@ class SubscriberNotifications_Email_Formatter {
     }
     
     /**
-     * Get default CSS
-     * 
-     * @return string Default CSS for emails
+     * Get the configured branding tokens (with fallbacks).
+     *
+     * @return array
+     */
+    public function get_brand_tokens(): array {
+        $font_body = subscriber_notifications_get_option('email_font_body', 'Arial, Helvetica, sans-serif');
+        $font_heading_raw = subscriber_notifications_get_option('email_font_heading', '');
+        $font_heading = (is_string($font_heading_raw) && $font_heading_raw !== '') ? $font_heading_raw : $font_body;
+
+        return array(
+            'font_body'       => $font_body,
+            'font_heading'    => $font_heading,
+            'color_text'      => subscriber_notifications_get_option('email_color_text', '#333333'),
+            'color_link'       => subscriber_notifications_get_option('email_color_link', '#0066cc'),
+            'color_link_hover' => subscriber_notifications_get_option('email_color_link_hover', '#004499'),
+            'color_bg'         => subscriber_notifications_get_option('email_color_background', '#f5f5f5'),
+            'color_content'    => subscriber_notifications_get_option('email_color_content_bg', '#ffffff'),
+            'color_footer_bg'  => subscriber_notifications_get_option('email_color_footer_bg', '#1d2327'),
+            'color_footer_tx' => subscriber_notifications_get_option('email_color_footer_text', '#ffffff'),
+        );
+    }
+
+    /**
+     * Get default CSS, generated from configured brand tokens.
+     *
+     * @return string Default CSS for emails.
      */
     public function get_default_css(): string {
-        return '
+        $t = $this->get_brand_tokens();
+
+        $font_body    = esc_attr($t['font_body']);
+        $font_heading = esc_attr($t['font_heading']);
+        $color_text   = esc_attr($t['color_text']);
+        $color_link       = esc_attr($t['color_link']);
+        $color_link_hover = esc_attr($t['color_link_hover']);
+        $color_bg         = esc_attr($t['color_bg']);
+        $color_card       = esc_attr($t['color_content']);
+        $color_ftr_bg     = esc_attr($t['color_footer_bg']);
+        $color_ftr_tx = esc_attr($t['color_footer_tx']);
+
+        return "
         /* Reset styles for email clients */
         body, table, td, p, a, li, blockquote {
             -webkit-text-size-adjust: 100%;
             -ms-text-size-adjust: 100%;
         }
-        
+
         table, td {
             mso-table-lspace: 0pt;
             mso-table-rspace: 0pt;
         }
-        
+
         img {
             -ms-interpolation-mode: bicubic;
             border: 0;
@@ -66,333 +101,212 @@ class SubscriberNotifications_Email_Formatter {
             outline: none;
             text-decoration: none;
         }
-        
-        /* Email container */
+
+        body {
+            font-family: {$font_body} !important;
+            font-size: 16px !important;
+            line-height: 22px !important;
+            color: {$color_text} !important;
+            background-color: {$color_bg} !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
         .email-container {
             max-width: 600px !important;
             width: 100% !important;
             margin: 0 auto !important;
-            background-color: #F2F2F2 !important;
+            background-color: {$color_card} !important;
         }
-        
-        /* Email content area */
+
         .email-content {
-            background-color: #F2F2F2 !important;
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
+            background-color: {$color_card} !important;
+            font-family: {$font_body} !important;
             font-size: 16px !important;
             line-height: 22px !important;
-            color: #000000 !important;
+            color: {$color_text} !important;
         }
-        
-        /* Ensure all div and span elements default to body text size */
+
         .email-content div,
         .email-content span {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
+            font-family: {$font_body} !important;
             font-size: 16px !important;
             line-height: 22px !important;
-            color: #000000 !important;
+            color: {$color_text} !important;
         }
-        
-        /* Override any inline font-size styles that might be smaller */
+
         .email-content *:not(h1):not(h2):not(h3):not(h4):not(h5):not(h6) {
             font-size: 16px !important;
         }
-        
-        /* Typography - Default Style Guide */
-        body {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
+
+        .email-content h1,
+        .email-content h2,
+        .email-content h3,
+        .email-content h4,
+        .email-content h5,
+        .email-content h6 {
+            font-family: {$font_heading} !important;
+            font-weight: 700 !important;
+            color: {$color_text} !important;
+        }
+
+        .email-content h1 { font-size: 28px !important; line-height: 32px !important; margin: 0 0 20px 0 !important; }
+        .email-content h2 { font-size: 24px !important; line-height: 28px !important; margin: 0 0 20px 0 !important; }
+        .email-content h3 { font-size: 20px !important; line-height: 24px !important; margin: 0 0 15px 0 !important; }
+        .email-content h4 { font-size: 16px !important; line-height: 22px !important; margin: 0 0 15px 0 !important; }
+        .email-content h5 { font-size: 14px !important; line-height: 18px !important; margin: 0 0 10px 0 !important; }
+        .email-content h6 { font-size: 12px !important; line-height: 16px !important; margin: 0 0 10px 0 !important; }
+
+        .email-content p {
+            font-family: {$font_body} !important;
             font-size: 16px !important;
             line-height: 22px !important;
-            color: #000000 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        
-        h1 {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 28px !important;
-            line-height: 32px !important;
-            color: #000000 !important;
-            margin: 0 0 20px 0 !important;
-        }
-        
-        h2 {
-            font-family: "Kepler Std", "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 38px !important;
-            line-height: 39px !important;
-            color: #000000 !important;
-            margin: 0 0 20px 0 !important;
-        }
-        
-        h3 {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 22px !important;
-            line-height: 26px !important;
-            color: #000000 !important;
+            color: {$color_text} !important;
             margin: 0 0 15px 0 !important;
         }
-        
-        h4 {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
-            margin: 0 0 15px 0 !important;
-        }
-        
-        h5 {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 14px !important;
-            line-height: 18px !important;
-            color: #000000 !important;
-            margin: 0 0 10px 0 !important;
-        }
-        
-        h6 {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 700 !important;
-            font-size: 12px !important;
-            line-height: 16px !important;
-            color: #000000 !important;
-            margin: 0 0 10px 0 !important;
-        }
-        
-        p {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
-            margin: 0 0 15px 0 !important;
-        }
-        
-        /* Links */
-        a {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
+
+        .email-content a {
+            font-family: {$font_body} !important;
+            color: {$color_link} !important;
             text-decoration: underline !important;
         }
-        
-        a:hover {
-            color: #004EBE !important;
-            text-decoration: underline !important;
+
+        .email-content a:hover {
+            color: {$color_link_hover} !important;
         }
-        
-        /* Links on dark background */
-        .email-footer a {
-            color: #ffffff !important;
-            text-decoration: underline !important;
-        }
-        
-        .email-footer a:hover {
-            color: #A4EAFF !important;
-            text-decoration: underline !important;
-        }
-        
-        /* Header styling */
+
         .email-header {
-            background-color: #F2F2F2 !important;
-            color: #000000 !important;
+            background-color: {$color_card} !important;
+            color: {$color_text} !important;
         }
-        
-        .email-header h1 {
-            color: #000000 !important;
+
+        .email-header a,
+        .email-header .email-header-content a {
+            color: {$color_link} !important;
+            text-decoration: underline !important;
         }
-        
-        /* Footer text and headings - force white color */
+
+        .email-header .email-header-content,
+        .email-header .email-header-content p,
+        .email-header .email-header-content div,
+        .email-header .email-header-content span,
+        .email-header .email-header-content li {
+            color: {$color_text} !important;
+            font-family: {$font_body} !important;
+        }
+
+        .email-header h1,
+        .email-header h2,
+        .email-header h3,
+        .email-header h4,
+        .email-header h5,
+        .email-header h6,
+        .email-header .email-header-content h1,
+        .email-header .email-header-content h2,
+        .email-header .email-header-content h3,
+        .email-header .email-header-content h4,
+        .email-header .email-header-content h5,
+        .email-header .email-header-content h6 {
+            font-family: {$font_heading} !important;
+            font-weight: 700 !important;
+            color: {$color_text} !important;
+        }
+
+        .email-header h1,
+        .email-header .email-header-content h1 { font-size: 28px !important; line-height: 32px !important; margin: 0 0 20px 0 !important; }
+        .email-header h2,
+        .email-header .email-header-content h2 { font-size: 24px !important; line-height: 28px !important; margin: 0 0 20px 0 !important; }
+        .email-header h3,
+        .email-header .email-header-content h3 { font-size: 20px !important; line-height: 24px !important; margin: 0 0 15px 0 !important; }
+        .email-header h4,
+        .email-header .email-header-content h4 { font-size: 16px !important; line-height: 22px !important; margin: 0 0 15px 0 !important; }
+        .email-header h5,
+        .email-header .email-header-content h5 { font-size: 14px !important; line-height: 18px !important; margin: 0 0 10px 0 !important; }
+        .email-header h6,
+        .email-header .email-header-content h6 { font-size: 12px !important; line-height: 16px !important; margin: 0 0 10px 0 !important; }
+
         .email-footer {
-            color: #ffffff !important;
+            background-color: {$color_ftr_bg} !important;
+            color: {$color_ftr_tx} !important;
         }
-        
+
+        .email-footer a,
+        .email-footer .email-footer-content a {
+            color: {$color_ftr_tx} !important;
+            text-decoration: underline !important;
+        }
+
+        .email-footer .email-footer-content,
+        .email-footer .email-footer-content p,
+        .email-footer .email-footer-content div,
+        .email-footer .email-footer-content span,
+        .email-footer .email-footer-content li {
+            color: {$color_ftr_tx} !important;
+            font-family: {$font_body} !important;
+        }
+
         .email-footer h1,
         .email-footer h2,
         .email-footer h3,
         .email-footer h4,
         .email-footer h5,
-        .email-footer h6 {
-            color: #ffffff !important;
+        .email-footer h6,
+        .email-footer .email-footer-content h1,
+        .email-footer .email-footer-content h2,
+        .email-footer .email-footer-content h3,
+        .email-footer .email-footer-content h4,
+        .email-footer .email-footer-content h5,
+        .email-footer .email-footer-content h6 {
+            font-family: {$font_heading} !important;
+            font-weight: 700 !important;
+            color: {$color_ftr_tx} !important;
         }
-        
-        .email-footer p {
-            color: #ffffff !important;
-        }
-        
-        .email-footer div {
-            color: #ffffff !important;
-        }
-        
-        .email-footer span {
-            color: #ffffff !important;
-        }
-        
-        /* Buttons - Default Style Guide */
-        .primary-button {
-            display: inline-block !important;
-            background-color: #F02929 !important;
-            color: #ffffff !important;
-            padding: 12px 24px !important;
-            text-decoration: none !important;
-            border-radius: 4px !important;
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 600 !important;
+
+        .email-footer h1,
+        .email-footer .email-footer-content h1 { font-size: 28px !important; line-height: 32px !important; margin: 0 0 20px 0 !important; }
+        .email-footer h2,
+        .email-footer .email-footer-content h2 { font-size: 24px !important; line-height: 28px !important; margin: 0 0 20px 0 !important; }
+        .email-footer h3,
+        .email-footer .email-footer-content h3 { font-size: 20px !important; line-height: 24px !important; margin: 0 0 15px 0 !important; }
+        .email-footer h4,
+        .email-footer .email-footer-content h4 { font-size: 16px !important; line-height: 22px !important; margin: 0 0 15px 0 !important; }
+        .email-footer h5,
+        .email-footer .email-footer-content h5 { font-size: 14px !important; line-height: 18px !important; margin: 0 0 10px 0 !important; }
+        .email-footer h6,
+        .email-footer .email-footer-content h6 { font-size: 12px !important; line-height: 16px !important; margin: 0 0 10px 0 !important; }
+
+        .email-content ul,
+        .email-content ol {
+            font-family: {$font_body} !important;
             font-size: 16px !important;
             line-height: 22px !important;
-            text-align: center !important;
-            margin: 10px 0 !important;
-        }
-        
-        .primary-button:hover {
-            background-color: #D91F1F !important;
-            text-decoration: none !important;
-        }
-        
-        .secondary-button {
-            display: inline-block !important;
-            background-color: #ffffff !important;
-            color: #4D4D4D !important;
-            padding: 12px 24px !important;
-            text-decoration: none !important;
-            border: 2px solid #4D4D4D !important;
-            border-radius: 4px !important;
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-weight: 600 !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            text-align: center !important;
-            margin: 10px 0 !important;
-        }
-        
-        .secondary-button:hover {
-            background-color: #F2F2F2 !important;
-            text-decoration: none !important;
-        }
-        
-        /* Lists */
-        ul, ol {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
-            font-size: 16px !important;
-            line-height: 22px !important;
-            color: #000000 !important;
+            color: {$color_text} !important;
             margin: 0 0 15px 0 !important;
             padding-left: 20px !important;
         }
-        
-        li {
-            font-family: "Montserrat", Arial, Helvetica, sans-serif !important;
+
+        .email-content li {
+            font-family: {$font_body} !important;
             font-size: 16px !important;
             line-height: 22px !important;
-            color: #000000 !important;
+            color: {$color_text} !important;
             margin: 0 0 8px 0 !important;
         }
-        
-        /* Tables */
+
         table {
             border-collapse: collapse !important;
             width: 100% !important;
         }
-        
-        /* Content sections */
-        .content-section {
-            margin: 20px 0 !important;
-            padding: 20px !important;
-            background-color: #ffffff !important;
-            border-left: 4px solid #F02929 !important;
-        }
-        
-        .news-item {
-            margin: 20px 0 !important;
-            padding: 15px !important;
-            background-color: #F2F2F2 !important;
-            border-radius: 4px !important;
-        }
-        
-        .news-item h3 {
-            margin: 0 0 10px 0 !important;
-            color: #01228C !important;
-        }
-        
-        .news-item p {
-            margin: 0 0 10px 0 !important;
-        }
-        
-        /* Mobile Responsive */
+
         @media only screen and (max-width: 600px) {
-            .email-container {
-                width: 100% !important;
-                max-width: 100% !important;
-            }
-            
-            .email-content {
-                padding: 20px 15px !important;
-            }
-            
-            .email-header,
-            .email-footer {
-                padding: 15px !important;
-            }
-            
-            h1 {
-                font-size: 24px !important;
-                line-height: 28px !important;
-            }
-            
-            h2 {
-                font-size: 32px !important;
-                line-height: 36px !important;
-            }
-            
-            h3 {
-                font-size: 20px !important;
-                line-height: 24px !important;
-            }
-            
-            .primary-button,
-            .secondary-button {
-                display: block !important;
-                width: 100% !important;
-                text-align: center !important;
-                padding: 15px 20px !important;
-            }
+            .email-container { width: 100% !important; max-width: 100% !important; }
+            .email-content { padding: 20px 15px !important; }
+            .email-header, .email-footer { padding: 15px !important; }
+            .email-content h1, .email-header h1, .email-header .email-header-content h1 { font-size: 24px !important; line-height: 28px !important; }
+            .email-content h2, .email-header h2, .email-header .email-header-content h2 { font-size: 22px !important; line-height: 26px !important; }
+            .email-content h3, .email-header h3, .email-header .email-header-content h3 { font-size: 18px !important; line-height: 22px !important; }
         }
-        
-        /* Dark mode support */
-        @media (prefers-color-scheme: dark) {
-            .email-content {
-                background-color: #1a1a1a !important;
-            }
-            
-            body, p, li {
-                color: #ffffff !important;
-            }
-            
-            h1, h2, h3, h4, h5, h6 {
-                color: #A5EAF7 !important;
-            }
-        }
-        ';
-    }
-    
-    /**
-     * Process CSS for email
-     * 
-     * Note: CSS is kept in <style> tags rather than inlined. Most modern email clients
-     * support <style> tags. For clients that don't, the email will still be readable
-     * but may not have custom styling.
-     * 
-     * @param string $html HTML content with CSS in <style> tag
-     * @param string $css CSS styles (unused, kept for backward compatibility)
-     * @return string HTML with CSS in <style> tag
-     */
-    private function inline_css(string $html, string $css = ''): string {
-        // Simply return the HTML as-is - CSS is already in <style> tags
-        // Most email clients support <style> tags, so inlining is not necessary
-        return $html;
+        ";
     }
     
     /**
@@ -404,34 +318,23 @@ class SubscriberNotifications_Email_Formatter {
      * @return string Wrapped content with CSS
      */
     public function wrap_content_with_css(string $content, string $css = '', $subscriber = null): string {
-        // Strip any slashes that might have been added during storage/retrieval
+        // Strip any slashes that might have been added during storage/retrieval.
         $css = stripslashes($css);
-        
-        // Get default CSS if no custom CSS is provided
-        if (empty($css)) {
-            $css = $this->get_default_css();
-        }
-        
+
+        // Always start from the brand-token default CSS, then append any custom CSS as overrides.
+        $css = $this->get_default_css() . "\n" . $css;
+
         // Check if content already has HTML structure
         if (strpos($content, '<html') !== false || strpos($content, '<body') !== false) {
-            // Content already has HTML structure, just add CSS to head
             if (strpos($content, '<head>') !== false) {
                 $content = str_replace('<head>', '<head><style type="text/css">' . $css . '</style>', $content);
             } else {
                 $content = '<head><style type="text/css">' . $css . '</style></head>' . $content;
             }
-            
-            // Process CSS (kept in <style> tags for email client compatibility)
-            $content = $this->inline_css($content, $css);
-        } else {
-            // Wrap plain content with proper email structure and CSS
-            $content = $this->wrap_with_email_structure($content, $css, $subscriber);
-            
-            // Process CSS (kept in <style> tags for email client compatibility)
-            $content = $this->inline_css($content, $css);
+            return $content;
         }
 
-        return $content;
+        return $this->wrap_with_email_structure($content, $css, $subscriber);
     }
     
     /**
@@ -443,11 +346,19 @@ class SubscriberNotifications_Email_Formatter {
      * @return string Wrapped content with email structure
      */
     public function wrap_with_email_structure(string $content, string $css, $subscriber = null): string {
-        // Convert plain text line breaks to HTML paragraphs
-        // wpautop handles both plain text and existing HTML properly
-        // It won't double-wrap content that already has <p> tags
+        // Convert plain text line breaks to HTML paragraphs.
         $content = wpautop($content);
-        
+
+        $t = $this->get_brand_tokens();
+        $color_bg      = esc_attr($t['color_bg']);
+        $color_card    = esc_attr($t['color_content']);
+        $color_text    = esc_attr($t['color_text']);
+        $font_body     = esc_attr($t['font_body']);
+        $color_ftr_bg  = esc_attr($t['color_footer_bg']);
+        $color_ftr_tx  = esc_attr($t['color_footer_tx']);
+        $header_style  = 'padding: 20px; color: ' . $color_text . '; font-family: ' . $font_body . ';';
+        $footer_style  = 'background-color: ' . $color_ftr_bg . '; color: ' . $color_ftr_tx . '; padding: 20px; text-align: center; font-size: 14px; font-family: ' . $font_body . ';';
+
         return '<!DOCTYPE html>
 <html>
 <head>
@@ -459,27 +370,22 @@ class SubscriberNotifications_Email_Formatter {
     </style>
 </head>
 <body>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #ffffff;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: ' . $color_bg . ';">
         <tr>
             <td align="center" style="padding: 20px 0;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" class="email-container" style="max-width: 600px;">
-                    <!-- Header -->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" class="email-container" style="max-width: 600px; background-color: ' . $color_card . ';">
                     <tr>
-                        <td class="email-header" style="padding: 20px;">
+                        <td class="email-header" style="' . $header_style . '">
                             ' . $this->get_global_header_content($subscriber) . '
                         </td>
                     </tr>
-                    
-                    <!-- Content -->
                     <tr>
-                        <td class="email-content" style="padding: 30px 20px;">
+                        <td class="email-content" style="padding: 30px 20px; color: ' . $color_text . '; font-family: ' . $font_body . ';">
                             ' . $content . '
                         </td>
                     </tr>
-                    
-                    <!-- Footer -->
                     <tr>
-                        <td class="email-footer" style="background-color: #010371; color: #ffffff; padding: 20px; text-align: center; font-size: 14px;">
+                        <td class="email-footer" style="' . $footer_style . '">
                             ' . $this->get_global_footer_content($subscriber) . '
                         </td>
                     </tr>
@@ -514,12 +420,20 @@ class SubscriberNotifications_Email_Formatter {
             // Process shortcodes in header content with subscriber context
             $shortcodes = new SubscriberNotifications_Shortcodes();
             $processed_content = $shortcodes->process_shortcodes($header_content, $subscriber);
-            $content_html = '<div style="vertical-align: middle; text-align: left;">' . $processed_content . '</div>';
+            $t            = $this->get_brand_tokens();
+            $color_text   = esc_attr($t['color_text']);
+            $font_body    = esc_attr($t['font_body']);
+            $content_html = '<div class="email-header-content" style="color: ' . $color_text . '; vertical-align: middle; text-align: left;">'
+                . $processed_content
+                . '</div>';
         }
         
         // If no logo and no content, show site name as fallback
         if (empty($logo_html) && empty($content_html)) {
-            return '<h1 style="margin: 0; font-family: \'Montserrat\', Arial, sans-serif; font-weight: bold; font-size: 24px; line-height: 28px; color: #000000; text-align: center;">' . esc_html(get_bloginfo('name')) . '</h1>';
+            $t            = $this->get_brand_tokens();
+            $font_heading = esc_attr($t['font_heading']);
+            $color_text   = esc_attr($t['color_text']);
+            return '<h1 style="margin: 0; font-family: ' . $font_heading . '; font-weight: bold; font-size: 24px; line-height: 28px; color: ' . $color_text . '; text-align: center;">' . esc_html(get_bloginfo('name')) . '</h1>';
         }
         
         // If only logo, center it
@@ -561,11 +475,14 @@ class SubscriberNotifications_Email_Formatter {
         // Process shortcodes in footer content with subscriber context
         $shortcodes = new SubscriberNotifications_Shortcodes();
         $processed_footer = $shortcodes->process_shortcodes($global_footer, $subscriber);
-        
-        // Wrap footer content with white text styling
-        return '<div style="color: #ffffff !important; font-family: \'Montserrat\', Arial, sans-serif;">
-                    ' . $processed_footer . '
-                </div>';
+
+        $t            = $this->get_brand_tokens();
+        $color_ftr_tx = esc_attr($t['color_footer_tx']);
+        $font_body    = esc_attr($t['font_body']);
+
+        return '<div class="email-footer-content" style="color: ' . $color_ftr_tx . '; font-family: ' . $font_body . ';">'
+            . $processed_footer
+            . '</div>';
     }
 }
 
