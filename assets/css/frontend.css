@@ -64,16 +64,16 @@
     padding-top: 0.5em;
 }
 
-.sn-taxonomy {
+.sn-taxonomy,
+.sn-frequency {
     margin: 0.5em 0 0;
     padding: 0;
-    border: none;
+    border: 0;
+    min-width: 0;
 }
 
 .sn-taxonomy + .sn-taxonomy {
     margin-top: 1em;
-    padding-top: 0.75em;
-    border-top: 1px dashed rgba(0, 0, 0, 0.1);
 }
 
 .sn-taxonomy legend {
@@ -81,13 +81,20 @@
     padding: 0;
 }
 
-.sn-term-list {
+.sn-term-list,
+.sn-term-children {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 0.25em 1em;
+}
+
+.sn-term-children {
+    margin-top: 0.25em;
+    padding-left: 1.25em;
+}
+
+.sn-term-item {
+    margin: 0.15em 0;
 }
 
 .sn-select-all-label {

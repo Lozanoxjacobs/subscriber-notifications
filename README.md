@@ -402,6 +402,11 @@ For support and feature requests, please contact your site administrator or the 
 
 ## Changelog
 
+### Version 3.1.2
+
+- **Subscription form term lists** — subscribe, preferences, and notification target pickers use a single-column checklist. Hierarchical taxonomies show a nested tree (A–Z at each level); non-hierarchical taxonomies show a flat A–Z list. Post type sections start collapsed
+- **Form styling** — removed dashed separators between taxonomies on the same post type and removed the default fieldset border around taxonomy blocks
+
 ### Version 3.1.1
 
 - **`[content_feed]` `terms` attribute** — comma-separated **term slugs**; requires `taxonomy`. Use `terms=` (singular `term` is also accepted). Feed lists only scoped slugs the subscriber selected. Notification targets still control who receives the email

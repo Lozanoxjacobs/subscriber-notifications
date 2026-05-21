@@ -329,6 +329,66 @@ select:focus {
     outline-offset: 2px;
 }
 
+/* Notification target term checklists (shared with public form markup). */
+.sn-section {
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 0.5em 0.75em;
+    margin-bottom: 0.75em;
+}
+
+.sn-section[open] {
+    padding-bottom: 0.75em;
+}
+
+.sn-section > summary {
+    cursor: pointer;
+    padding: 0.25em 0;
+}
+
+.sn-section__body {
+    padding-top: 0.5em;
+}
+
+.sn-targets fieldset,
+.sn-taxonomy {
+    margin: 0.5em 0 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+.sn-taxonomy + .sn-taxonomy {
+    margin-top: 1em;
+}
+
+.sn-taxonomy legend {
+    font-weight: 600;
+    padding: 0;
+}
+
+.sn-term-list,
+.sn-term-children {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.sn-term-children {
+    margin-top: 0.25em;
+    padding-left: 1.25em;
+}
+
+.sn-term-item {
+    margin: 0.15em 0;
+}
+
+.sn-select-all-label {
+    display: inline-block;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+}
+
 /* Print styles */
 @media print {
     .subscriber-notifications-dashboard .dashboard-actions,

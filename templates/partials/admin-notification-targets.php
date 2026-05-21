@@ -26,7 +26,7 @@ $selected_targets   = isset($selected_targets) ? (array) $selected_targets : arr
         }
         $post_type_label = SubscriberNotifications_Content_Config::get_post_type_label($post_type);
     ?>
-        <details class="sn-section" open>
+        <details class="sn-section">
             <summary><strong><?php echo esc_html($post_type_label); ?></strong></summary>
             <div class="sn-section__body">
                 <?php foreach ($form_taxonomies as $taxonomy) :
@@ -35,8 +35,8 @@ $selected_targets   = isset($selected_targets) ? (array) $selected_targets : arr
                     if (empty($terms)) {
                         continue;
                     }
-                    $field_name        = 'target_preferences[' . esc_attr($post_type) . '][' . esc_attr($taxonomy) . '][]';
-                    $select_all_target = 'target_preferences[' . esc_attr($post_type) . '][' . esc_attr($taxonomy) . ']';
+                    $field_name        = 'target_preferences[' . $post_type . '][' . $taxonomy . '][]';
+                    $select_all_target = 'target_preferences[' . $post_type . '][' . $taxonomy . ']';
                     $selected_ids      = isset($selected_targets[$post_type][$taxonomy]) && is_array($selected_targets[$post_type][$taxonomy])
                         ? array_map('intval', $selected_targets[$post_type][$taxonomy])
                         : array();
@@ -50,19 +50,14 @@ $selected_targets   = isset($selected_targets) ? (array) $selected_targets : arr
                             printf(esc_html__('Select all %s', 'subscriber-notifications'), esc_html($tax_label));
                             ?>
                         </label>
-                        <ul class="sn-term-list">
-                            <?php foreach ($terms as $term) : ?>
-                                <li>
-                                    <label>
-                                        <input type="checkbox"
-                                            name="<?php echo $field_name; ?>"
-                                            value="<?php echo esc_attr((int) $term->term_id); ?>"
-                                            <?php checked(in_array((int) $term->term_id, $selected_ids, true)); ?> />
-                                        <?php echo esc_html($term->name); ?>
-                                    </label>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
+                        <?php
+                        SubscriberNotifications_Term_Checklist::render(
+                            $terms,
+                            $field_name,
+                            $selected_ids,
+                            $taxonomy
+                        );
+                        ?>
                     </fieldset>
                 <?php endforeach; ?>
             </div>
