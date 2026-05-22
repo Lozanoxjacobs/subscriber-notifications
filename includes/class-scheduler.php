@@ -196,7 +196,7 @@ class SubscriberNotifications_Scheduler {
      */
     private function send_to_subscribers(array $subscribers, $notification): int {
         $sent_count = 0;
-        $sendgrid = new SubscriberNotifications_SendGrid();
+        $email_sender = new SubscriberNotifications_Email_Sender();
         
         foreach ($subscribers as $subscriber) {
             // Check if subscriber has relevant content
@@ -208,7 +208,7 @@ class SubscriberNotifications_Scheduler {
             $prepared = $this->prepare_notification_content($notification, $subscriber);
             
             // Send email
-            if ($sendgrid->send_email($subscriber->email, $prepared['subject'], $prepared['content'], $subscriber->id, $notification->id)) {
+            if ($email_sender->send_email($subscriber->email, $prepared['subject'], $prepared['content'], $subscriber->id, $notification->id)) {
                 $sent_count++;
             } elseif (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log("Subscriber Notifications: Failed to send email to subscriber ID: " . $subscriber->id);

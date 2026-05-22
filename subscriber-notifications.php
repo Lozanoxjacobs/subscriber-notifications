@@ -46,7 +46,7 @@ class SubscriberNotifications {
     private $content_types_admin;
     private $frontend;
     private $notifications;
-    private $sendgrid;
+    private $email_sender;
     private $shortcodes;
     private $scheduler;
     private $csv_handler;
@@ -233,7 +233,7 @@ class SubscriberNotifications {
             'includes/class-admin.php',
             'includes/class-frontend.php',
             'includes/class-notifications.php',
-            'includes/class-sendgrid.php',
+            'includes/class-email-sender.php',
             'includes/class-shortcodes.php',
             'includes/class-scheduler.php',
             'includes/class-csv-handler.php',
@@ -265,7 +265,7 @@ class SubscriberNotifications {
             $this->content_types_admin = new SubscriberNotifications_Content_Types_Admin();
             $this->frontend = new SubscriberNotifications_Frontend($this->database);
             $this->notifications = new SubscriberNotifications_Notifications($this->database);
-            $this->sendgrid = new SubscriberNotifications_SendGrid();
+            $this->email_sender = new SubscriberNotifications_Email_Sender();
             $this->shortcodes = new SubscriberNotifications_Shortcodes();
             $this->scheduler = new SubscriberNotifications_Scheduler($this->database);
             $this->csv_handler = new SubscriberNotifications_CSV_Handler($this->database);

@@ -491,7 +491,7 @@ class SubscriberNotifications_Frontend {
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
 
-        $mailer = new SubscriberNotifications_SendGrid();
+        $mailer = new SubscriberNotifications_Email_Sender();
         $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
     }
 
@@ -512,7 +512,7 @@ class SubscriberNotifications_Frontend {
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
 
-        $mailer = new SubscriberNotifications_SendGrid();
+        $mailer = new SubscriberNotifications_Email_Sender();
         $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
     }
 
@@ -739,7 +739,7 @@ class SubscriberNotifications_Frontend {
         $formatter = SubscriberNotifications_Email_Formatter::get_instance();
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
 
-        $mailer = new SubscriberNotifications_SendGrid();
+        $mailer = new SubscriberNotifications_Email_Sender();
         $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
     }
 

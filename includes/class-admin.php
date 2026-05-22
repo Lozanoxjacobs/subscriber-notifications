@@ -2437,7 +2437,7 @@ class SubscriberNotifications_Admin {
             $formatter = SubscriberNotifications_Email_Formatter::get_instance();
             $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $sample_subscriber);
 
-            $mailer = new SubscriberNotifications_SendGrid();
+            $mailer = new SubscriberNotifications_Email_Sender();
             $result = $mailer->send_email($email, $processed_subject, $processed_content, 0, 0);
 
             if ($result) {
