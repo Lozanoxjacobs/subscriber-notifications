@@ -9,7 +9,11 @@ if (!defined('ABSPATH')) {
 ?>
 
 <div class="wrap">
-    <h1><?php _e('Edit Notification', 'subscriber-notifications'); ?></h1>
+    <h1 class="wp-heading-inline"><?php _e('Edit Notification', 'subscriber-notifications'); ?></h1>
+    <a href="<?php echo esc_url(admin_url('admin.php?page=subscriber-notifications-create')); ?>" class="page-title-action">
+        <?php _e('Add New Notification', 'subscriber-notifications'); ?>
+    </a>
+    <hr class="wp-header-end">
 
     <?php settings_errors('subscriber_notifications'); ?>
     

@@ -196,11 +196,23 @@ class SubscriberNotifications_Admin {
             add_action('admin_footer', array($this, 'render_color_picker_init_script'));
         }
         
-        wp_localize_script('subscriber-notifications-admin', 'subscriberNotifications', array(
+        $localize = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('subscriber_notifications_nonce'),
-            'siteTitle' => get_bloginfo('name')
-        ));
+            'siteTitle' => get_bloginfo('name'),
+        );
+
+        if ($hook === 'toplevel_page_subscriber-notifications') {
+            $localize['dashboard'] = array(
+                'testMailNonce'       => wp_create_nonce('test_wp_mail'),
+                'testMailSending'     => __('Testing...', 'subscriber-notifications'),
+                'testMailButton'      => __('Send Test Email', 'subscriber-notifications'),
+                'testMailEnterEmail'  => __('Please enter a test email address.', 'subscriber-notifications'),
+                'testMailFailed'      => __('WordPress mail test failed.', 'subscriber-notifications'),
+            );
+        }
+
+        wp_localize_script('subscriber-notifications-admin', 'subscriberNotifications', $localize);
     }
     
     /**
@@ -1044,11 +1056,23 @@ class SubscriberNotifications_Admin {
      * Dashboard page
      */
     public function dashboard_page() {
-        $total_subscribers = $this->database->get_subscriber_count(array('status' => 'active'));
-        $pending_subscribers = $this->database->get_subscriber_count(array('status' => 'pending'));
-        $analytics = $this->database->get_analytics_data();
-        
+        $period = isset($_GET['period'])
+            ? SubscriberNotifications_Dashboard::sanitize_analytics_period((string) wp_unslash($_GET['period']))
+            : '30days';
+
+        $dashboard = new SubscriberNotifications_Dashboard($this->database, $this->get_analytics_instance());
+        $snapshot  = $dashboard->get_snapshot($period);
+
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-dashboard.php';
+    }
+
+    /**
+     * Analytics component used by the dashboard snapshot.
+     *
+     * @return SubscriberNotifications_Analytics
+     */
+    private function get_analytics_instance(): SubscriberNotifications_Analytics {
+        return new SubscriberNotifications_Analytics($this->database);
     }
     
     /**

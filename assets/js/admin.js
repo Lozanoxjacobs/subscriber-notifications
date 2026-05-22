@@ -276,4 +276,45 @@ jQuery(document).ready(function($) {
     $('form, .sn-targets').each(function () {
         snSyncSelectAll($(this));
     });
+
+    // Dashboard: test email (reuses test_wp_mail AJAX handler).
+    if ($('#sn-dashboard-test-wp-mail').length && typeof subscriberNotifications !== 'undefined' && subscriberNotifications.dashboard) {
+        var dashCfg = subscriberNotifications.dashboard;
+        $('#sn-dashboard-test-wp-mail').on('click', function () {
+            var $button = $(this);
+            var $result = $('#sn-dashboard-wp-mail-test-result');
+            var testEmail = $('#sn-dashboard-test-email').val();
+
+            if (!testEmail) {
+                $result.html('<div class="notice notice-error inline"><p>' + dashCfg.testMailEnterEmail + '</p></div>');
+                return;
+            }
+
+            $button.prop('disabled', true).text(dashCfg.testMailSending);
+            $result.html('');
+
+            $.ajax({
+                url: subscriberNotifications.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'test_wp_mail',
+                    test_email: testEmail,
+                    nonce: dashCfg.testMailNonce
+                },
+                success: function (response) {
+                    if (response.success) {
+                        $result.html('<div class="notice notice-success inline"><p>' + response.data + '</p></div>');
+                    } else {
+                        $result.html('<div class="notice notice-error inline"><p>' + response.data + '</p></div>');
+                    }
+                },
+                error: function () {
+                    $result.html('<div class="notice notice-error inline"><p>' + dashCfg.testMailFailed + '</p></div>');
+                },
+                complete: function () {
+                    $button.prop('disabled', false).text(dashCfg.testMailButton);
+                }
+            });
+        });
+    }
 });

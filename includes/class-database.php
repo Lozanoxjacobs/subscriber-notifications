@@ -996,5 +996,168 @@ class SubscriberNotifications_Database {
             array('%d')
         ) !== false;
     }
+
+    /**
+     * Aggregate subscriber counts for the admin dashboard.
+     *
+     * @return array<string, int>
+     */
+    public function get_subscriber_stats(): array {
+        $row = $this->wpdb->get_row(
+            "SELECT
+                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
+                SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) AS inactive,
+                SUM(CASE WHEN status = 'active' AND frequency = 'daily' THEN 1 ELSE 0 END) AS daily,
+                SUM(CASE WHEN status = 'active' AND frequency = 'weekly' THEN 1 ELSE 0 END) AS weekly,
+                SUM(CASE WHEN status = 'active' AND frequency = 'monthly' THEN 1 ELSE 0 END) AS monthly,
+                SUM(CASE WHEN status = 'active' AND user_id IS NOT NULL AND user_id > 0 THEN 1 ELSE 0 END) AS linked_wp_user,
+                SUM(CASE WHEN status = 'active' AND last_notified IS NULL THEN 1 ELSE 0 END) AS never_notified
+            FROM {$this->subscribers_table}",
+            ARRAY_A
+        );
+
+        if (!is_array($row)) {
+            $row = array();
+        }
+
+        return array(
+            'active'           => (int) ($row['active'] ?? 0),
+            'inactive'         => (int) ($row['inactive'] ?? 0),
+            'daily'            => (int) ($row['daily'] ?? 0),
+            'weekly'           => (int) ($row['weekly'] ?? 0),
+            'monthly'          => (int) ($row['monthly'] ?? 0),
+            'linked_wp_user'   => (int) ($row['linked_wp_user'] ?? 0),
+            'never_notified'   => (int) ($row['never_notified'] ?? 0),
+        );
+    }
+
+    /**
+     * Aggregate notification queue counts for the admin dashboard.
+     *
+     * @return array<string, int>
+     */
+    public function get_notification_stats(): array {
+        $row = $this->wpdb->get_row(
+            "SELECT
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                SUM(CASE WHEN status = 'pending' AND is_recurring = 1 AND recurrence_count > 0 THEN 1 ELSE 0 END) AS active_recurring,
+                SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
+            FROM {$this->notifications_table}",
+            ARRAY_A
+        );
+
+        if (!is_array($row)) {
+            $row = array();
+        }
+
+        return array(
+            'pending'          => (int) ($row['pending'] ?? 0),
+            'active_recurring' => (int) ($row['active_recurring'] ?? 0),
+            'sent'             => (int) ($row['sent'] ?? 0),
+            'cancelled'        => (int) ($row['cancelled'] ?? 0),
+        );
+    }
+
+    /**
+     * Per-recipient send queue counts and recent failures for the dashboard.
+     *
+     * @param int $failed_limit Max failed rows to return.
+     * @return array{counts: array<string, int>, recent_failed: array<int, object>}
+     */
+    public function get_send_queue_stats(int $failed_limit = 5): array {
+        $counts_row = $this->wpdb->get_row(
+            "SELECT
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+                SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped
+            FROM {$this->send_queue_table}",
+            ARRAY_A
+        );
+
+        $counts = array(
+            'pending' => (int) ($counts_row['pending'] ?? 0),
+            'sent'    => (int) ($counts_row['sent'] ?? 0),
+            'failed'  => (int) ($counts_row['failed'] ?? 0),
+            'skipped' => (int) ($counts_row['skipped'] ?? 0),
+        );
+
+        $failed_limit = max(1, min(20, $failed_limit));
+        $recent_failed = $this->wpdb->get_results(
+            $this->wpdb->prepare(
+                "SELECT sq.id, sq.notification_id, sq.subscriber_id, sq.attempts, sq.last_error, sq.sent_at,
+                        n.title AS notification_title, s.email AS subscriber_email
+                 FROM {$this->send_queue_table} sq
+                 LEFT JOIN {$this->notifications_table} n ON n.id = sq.notification_id
+                 LEFT JOIN {$this->subscribers_table} s ON s.id = sq.subscriber_id
+                 WHERE sq.status = 'failed'
+                 ORDER BY sq.id DESC
+                 LIMIT %d",
+                $failed_limit
+            )
+        );
+
+        return array(
+            'counts'        => $counts,
+            'recent_failed' => is_array($recent_failed) ? $recent_failed : array(),
+        );
+    }
+
+    /**
+     * Pending notifications with a scheduled next send, soonest first.
+     *
+     * @param int $limit Max rows.
+     * @return array<int, object>
+     */
+    public function get_upcoming_notifications(int $limit = 10): array {
+        $limit = max(1, min(50, $limit));
+        $results = $this->wpdb->get_results(
+            $this->wpdb->prepare(
+                "SELECT id, title, frequency_target, is_recurring, next_send_date, status
+                 FROM {$this->notifications_table}
+                 WHERE status = 'pending' AND next_send_date IS NOT NULL
+                 ORDER BY next_send_date ASC
+                 LIMIT %d",
+                $limit
+            )
+        );
+
+        return is_array($results) ? $results : array();
+    }
+
+    /**
+     * Recent email log rows for the dashboard activity feed.
+     *
+     * @param int $limit Max rows.
+     * @return array<int, object>
+     */
+    public function get_recent_logs(int $limit = 10): array {
+        return $this->get_logs(array(
+            'limit'  => max(1, min(50, $limit)),
+            'offset' => 0,
+        ));
+    }
+
+    /**
+     * Recently added subscribers for the dashboard activity feed.
+     *
+     * @param int $limit Max rows.
+     * @return array<int, object>
+     */
+    public function get_recent_subscribers(int $limit = 10): array {
+        $limit = max(1, min(50, $limit));
+        $results = $this->wpdb->get_results(
+            $this->wpdb->prepare(
+                "SELECT id, name, email, frequency, status, date_added, last_notified
+                 FROM {$this->subscribers_table}
+                 ORDER BY date_added DESC
+                 LIMIT %d",
+                $limit
+            )
+        );
+
+        return is_array($results) ? $results : array();
+    }
     
 }
