@@ -143,7 +143,10 @@ if (!defined('ABSPATH')) {
                             <span class="status <?php echo $status_class; ?>"><?php echo $status_text; ?></span>
                         </td>
                         <td class="column-created">
-                            <?php echo esc_html(mysql2date('M j, Y g:i A', $notification->created_date)); ?>
+                            <?php
+                            // created_date is stored as MySQL CURRENT_TIMESTAMP (UTC); convert to site timezone for display.
+                            echo esc_html(get_date_from_gmt($notification->created_date, 'M j, Y g:i A'));
+                            ?>
                         </td>
                         <td class="column-sent">
                             <?php 
@@ -166,12 +169,11 @@ if (!defined('ABSPATH')) {
                         </td>
                         <td class="column-next-send">
                             <?php 
-                            // Show N/A for cancelled recurring notifications, or if not recurring, or if no next_send_date
-                            if (isset($notification->is_recurring) && $notification->is_recurring && 
-                                $notification->status !== 'cancelled' && 
+                            // Show the next scheduled send for any pending notification (one-time or recurring).
+                            // Sent or cancelled notifications show N/A.
+                            if ($notification->status === 'pending' &&
                                 isset($notification->next_send_date) && $notification->next_send_date) {
-                                $timezone = wp_timezone();
-                                $datetime = new DateTime($notification->next_send_date, $timezone);
+                                $datetime = new DateTimeImmutable($notification->next_send_date, wp_timezone());
                                 echo esc_html($datetime->format('M j, Y g:i A'));
                             } else {
                                 echo '<em>' . __('N/A', 'subscriber-notifications') . '</em>';

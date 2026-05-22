@@ -26,6 +26,7 @@ class SubscriberNotifications_Database {
     private $subscribers_table;
     private $logs_table;
     private $notifications_table;
+    private $send_queue_table;
     
     /**
      * Constructor
@@ -42,6 +43,16 @@ class SubscriberNotifications_Database {
         $this->subscribers_table = $this->wpdb->prefix . 'subscriber_notifications';
         $this->logs_table = $this->wpdb->prefix . 'subscriber_notification_logs';
         $this->notifications_table = $this->wpdb->prefix . 'subscriber_notifications_queue';
+        $this->send_queue_table = $this->wpdb->prefix . 'subscriber_notifications_send_queue';
+    }
+
+    /**
+     * Get the per-recipient send queue table name.
+     *
+     * @return string
+     */
+    public function get_send_queue_table() {
+        return $this->send_queue_table;
     }
     
     /**
@@ -121,11 +132,30 @@ class SubscriberNotifications_Database {
             KEY is_recurring (is_recurring),
             KEY next_send_date (next_send_date)
         ) $charset_collate;";
+
+        // Per-recipient send queue. One row per (notification, subscriber) pair.
+        // The UNIQUE KEY makes enqueue idempotent so an interrupted enqueue can
+        // be retried safely with INSERT IGNORE.
+        $send_queue_sql = "CREATE TABLE {$this->send_queue_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            notification_id int(11) NOT NULL,
+            subscriber_id int(11) NOT NULL,
+            status enum('pending','sent','failed','skipped') DEFAULT 'pending',
+            attempts tinyint(3) unsigned DEFAULT 0,
+            last_error text,
+            enqueued_at datetime DEFAULT CURRENT_TIMESTAMP,
+            sent_at datetime,
+            PRIMARY KEY (id),
+            UNIQUE KEY notification_subscriber (notification_id, subscriber_id),
+            KEY status (status),
+            KEY notification_status (notification_id, status)
+        ) $charset_collate;";
         
         // Create tables
         $result1 = dbDelta($subscribers_sql);
         $result2 = dbDelta($logs_sql);
         $result3 = dbDelta($notifications_sql);
+        $result4 = dbDelta($send_queue_sql);
         
         // Check if subject column exists, if not add it
         $this->add_subject_column_if_missing();
@@ -137,7 +167,7 @@ class SubscriberNotifications_Database {
         update_option('subscriber_notifications_db_version', SUBSCRIBER_NOTIFICATIONS_VERSION);
         
         // Return success if at least one table was created
-        return !empty($result1) || !empty($result2) || !empty($result3);
+        return !empty($result1) || !empty($result2) || !empty($result3) || !empty($result4);
     }
     
     /**
@@ -401,108 +431,6 @@ class SubscriberNotifications_Database {
         
         return true;
     }
-    
-    /**
-     * Calculate next send date for an existing notification row.
-     *
-     * Currently unused by the v3 run_migrations() path but kept here as a helper
-     * for any one-off scripts that need it.
-     */
-    private function calculate_next_send_date_for_existing($frequency, $created_date) {
-        $current_time = current_time('timestamp');
-        $timezone = wp_timezone();
-        
-        switch ($frequency) {
-            case 'daily':
-                $daily_time = subscriber_notifications_get_option('daily_send_time', '09:00');
-                // Use timezone-aware method to get today's date
-                $now = new DateTime('@' . $current_time);
-                $now->setTimezone($timezone);
-                $today_datetime = new DateTime($now->format('Y-m-d') . ' ' . $daily_time, $timezone);
-                $today_time = $today_datetime->getTimestamp();
-                
-                if ($today_time <= $current_time) {
-                    $tomorrow_datetime = clone $today_datetime;
-                    $tomorrow_datetime->modify('+1 day');
-                    return $tomorrow_datetime->format('Y-m-d H:i:s');
-                } else {
-                    return $today_datetime->format('Y-m-d H:i:s');
-                }
-                
-            case 'weekly':
-                $weekly_time = subscriber_notifications_get_option('weekly_send_time', '14:00');
-                $weekly_day = subscriber_notifications_get_option('weekly_send_day', 'tuesday');
-                
-                $day_numbers = array(
-                    'sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3,
-                    'thursday' => 4, 'friday' => 5, 'saturday' => 6
-                );
-                $day_number = $day_numbers[$weekly_day];
-                
-                // Use timezone-aware method to get current day
-                $now = new DateTime('@' . $current_time);
-                $now->setTimezone($timezone);
-                $current_day = (int)$now->format('w');
-                $days_until = ($day_number - $current_day + 7) % 7;
-                
-                if ($days_until == 0) {
-                    $today_datetime = new DateTime($now->format('Y-m-d') . ' ' . $weekly_time, $timezone);
-                    $today_time = $today_datetime->getTimestamp();
-                    if ($today_time <= $current_time) {
-                        $days_until = 7;
-                    }
-                }
-                
-                $timezone = wp_timezone();
-                $next_date_datetime = new DateTime('+' . $days_until . ' days', $timezone);
-                $next_date_datetime->setTime(
-                    intval(substr($weekly_time, 0, 2)), 
-                    intval(substr($weekly_time, 3, 2))
-                );
-                return $next_date_datetime->format('Y-m-d H:i:s');
-                
-            case 'monthly':
-                $monthly_day = subscriber_notifications_get_option('monthly_send_day', 15);
-                $monthly_time = subscriber_notifications_get_option('monthly_send_time', '14:00');
-                
-                // Use timezone-aware method to get current month/year
-                $now = new DateTime('@' . $current_time);
-                $now->setTimezone($timezone);
-                $current_month = (int)$now->format('n');
-                $current_year = (int)$now->format('Y');
-                
-                // Get the target day for current month using timezone-aware method
-                $target_datetime = new DateTime($current_year . '-' . $current_month . '-01', $timezone);
-                $days_in_month = (int)$target_datetime->format('t');
-                $target_day = min($monthly_day, $days_in_month);
-                
-                // Use WordPress timezone-aware date functions
-                $datetime = new DateTime($current_year . '-' . $current_month . '-' . $target_day . ' ' . $monthly_time, $timezone);
-                $target_timestamp = $datetime->getTimestamp();
-                
-                if ($target_timestamp <= $current_time) {
-                    $next_month = $current_month + 1;
-                    $next_year = $current_year;
-                    if ($next_month > 12) {
-                        $next_month = 1;
-                        $next_year++;
-                    }
-                    
-                    // Get the target day for next month using timezone-aware method
-                    $next_target_datetime = new DateTime($next_year . '-' . $next_month . '-01', $timezone);
-                    $days_in_next_month = (int)$next_target_datetime->format('t');
-                    $target_day = min($monthly_day, $days_in_next_month);
-                    $datetime = new DateTime($next_year . '-' . $next_month . '-' . $target_day . ' ' . $monthly_time, $timezone);
-                    $target_timestamp = $datetime->getTimestamp();
-                }
-                
-                return $datetime->format('Y-m-d H:i:s');
-                
-            default:
-                return null;
-        }
-    }
-    
     
     /**
      * Build WHERE clause fragment for subscriber list search.

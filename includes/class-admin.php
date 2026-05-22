@@ -315,6 +315,13 @@ class SubscriberNotifications_Admin {
         
         switch ($action) {
             case 'delete':
+                // Remove any queued recipients for this notification first.
+                $wpdb->delete(
+                    $wpdb->prefix . 'subscriber_notifications_send_queue',
+                    array('notification_id' => $notification_id),
+                    array('%d')
+                );
+                
                 $result = $wpdb->delete(
                     $notifications_table,
                     array('id' => $notification_id),
@@ -338,6 +345,19 @@ class SubscriberNotifications_Admin {
                 );
                 
                 if ($result) {
+                    // Mark any remaining `pending` queue rows for this notification as
+                    // `skipped` so the drain handler excludes them.
+                    $wpdb->update(
+                        $wpdb->prefix . 'subscriber_notifications_send_queue',
+                        array('status' => 'skipped'),
+                        array(
+                            'notification_id' => $notification_id,
+                            'status'          => 'pending',
+                        ),
+                        array('%s'),
+                        array('%d', '%s')
+                    );
+                    
                     add_action('admin_notices', function() {
                         echo '<div class="notice notice-success"><p>' . __('Notification cancelled successfully.', 'subscriber-notifications') . '</p></div>';
                     });
@@ -345,22 +365,16 @@ class SubscriberNotifications_Admin {
                 break;
                 
             case 'resend':
-                $result = $wpdb->update(
-                    $notifications_table,
-                    array('status' => 'pending'),
-                    array('id' => $notification_id),
-                    array('%s'),
-                    array('%d')
-                );
-                
-                if ($result) {
-                    add_action('admin_notices', function() {
-                        echo '<div class="notice notice-success"><p>' . __('Notification queued for resending.', 'subscriber-notifications') . '</p></div>';
-                    });
-                }
-                break;
-                
             case 'reactivate':
+                // Clear any previous queue rows so the notification can be re-enqueued
+                // fresh on the next cron tick (the UNIQUE KEY on the queue table would
+                // otherwise block the new INSERT IGNORE).
+                $wpdb->delete(
+                    $wpdb->prefix . 'subscriber_notifications_send_queue',
+                    array('notification_id' => $notification_id),
+                    array('%d')
+                );
+                
                 $result = $wpdb->update(
                     $notifications_table,
                     array('status' => 'pending'),
@@ -370,8 +384,11 @@ class SubscriberNotifications_Admin {
                 );
                 
                 if ($result) {
-                    add_action('admin_notices', function() {
-                        echo '<div class="notice notice-success"><p>' . __('Notification reactivated successfully.', 'subscriber-notifications') . '</p></div>';
+                    $message = ($action === 'resend')
+                        ? __('Notification queued for resending.', 'subscriber-notifications')
+                        : __('Notification reactivated successfully.', 'subscriber-notifications');
+                    add_action('admin_notices', function() use ($message) {
+                        echo '<div class="notice notice-success"><p>' . esc_html($message) . '</p></div>';
                     });
                 }
                 break;
@@ -412,52 +429,41 @@ class SubscriberNotifications_Admin {
         $is_recurring      = (int) $form['is_recurring'];
         $allowed_freqs     = $this->get_allowed_notification_frequencies();
 
-        // Determine next_send_date based on current state and new settings
+        // Determine next_send_date based on current state and new settings.
+        // Both one-time and recurring notifications have a next_send_date so
+        // process_queue() can filter on a single SQL predicate.
         $next_send_date = $current_notification->next_send_date; // Preserve by default
         
-        // Only recalculate if notification is pending and will be recurring
-        if ($current_notification->status === 'pending' && $is_recurring && in_array($frequency_target, $allowed_freqs, true)) {
-            // Determine if recalculation is needed
+        if ($current_notification->status === 'pending' && in_array($frequency_target, $allowed_freqs, true)) {
             $should_recalculate = false;
             
-            // Check if frequency changed
             if ($current_notification->frequency_target !== $frequency_target) {
                 $should_recalculate = true;
-            }
-            // Check if converting from one-time to recurring
-            elseif ($current_notification->is_recurring == 0) {
+            } elseif ((int) $current_notification->is_recurring !== $is_recurring) {
                 $should_recalculate = true;
-            }
-            // Check if existing date is null or in the past
-            elseif ($current_notification->next_send_date === null) {
+            } elseif ($current_notification->next_send_date === null) {
                 $should_recalculate = true;
-            }
-            elseif ($current_notification->next_send_date !== null) {
-                $existing_timestamp = strtotime($current_notification->next_send_date);
-                $current_timestamp = current_time('timestamp');
-                if ($existing_timestamp <= $current_timestamp) {
+            } else {
+                $tz       = wp_timezone();
+                $existing = new DateTimeImmutable($current_notification->next_send_date, $tz);
+                $now      = new DateTimeImmutable('now', $tz);
+                if ($existing <= $now) {
                     $should_recalculate = true;
                 }
             }
             
             if ($should_recalculate) {
-                // Recalculate next_send_date for pending recurring notifications
-                $next_send_date = $this->calculate_next_send_date($frequency_target);
+                $next_send_date = (new SubscriberNotifications_Schedule_Calculator())->next_one_time($frequency_target);
                 
                 // Add 5-minute safety buffer to prevent immediate sending due to race conditions
-                $calculated_timestamp = strtotime($next_send_date);
-                $current_timestamp = current_time('timestamp');
-                $buffer_seconds = 300; // 5 minutes
+                $tz         = wp_timezone();
+                $calculated = new DateTimeImmutable($next_send_date, $tz);
+                $threshold  = (new DateTimeImmutable('now', $tz))->modify('+5 minutes');
                 
-                if ($calculated_timestamp <= ($current_timestamp + $buffer_seconds)) {
-                    // If calculated date is too close to now, add buffer
-                    $next_send_date = date('Y-m-d H:i:s', $current_timestamp + $buffer_seconds);
+                if ($calculated <= $threshold) {
+                    $next_send_date = $threshold->format('Y-m-d H:i:s');
                 }
             }
-            // Otherwise preserve existing next_send_date (already set above)
-        } elseif (!$is_recurring) {
-            // Converting to one-time: clear next_send_date
-            $next_send_date = null;
         }
         // If status is 'sent' or 'cancelled', preserve existing next_send_date (already set above)
         
@@ -638,11 +644,11 @@ class SubscriberNotifications_Admin {
         }
 
         $target_prefs_json = SubscriberNotifications_Preferences::encode($form['target_prefs']);
-        $next_send_date    = null;
 
-        if ($form['is_recurring']) {
-            $next_send_date = $this->calculate_next_send_date($form['frequency_target']);
-        }
+        // Both one-time and recurring notifications get a `next_send_date` so the
+        // unified process_queue() SQL can filter on `next_send_date <= NOW()` without
+        // a separate is_recurring branch.
+        $next_send_date = (new SubscriberNotifications_Schedule_Calculator())->next_one_time($form['frequency_target']);
 
         global $wpdb;
         $result = $wpdb->insert(
@@ -1203,7 +1209,7 @@ class SubscriberNotifications_Admin {
         $logs = $this->database->get_logs($args);
         
         // Set headers for CSV download
-        $filename = 'email-logs_' . date('Y-m-d_H-i-s') . '.csv';
+        $filename = 'email-logs_' . wp_date('Y-m-d_H-i-s') . '.csv';
         $charset = get_option('blog_charset');
         
         header('Content-Type: text/csv; charset=' . $charset);
@@ -2110,7 +2116,7 @@ class SubscriberNotifications_Admin {
         $value = subscriber_notifications_get_option('captcha_site_key', '');
         ?>
         <input type="text" id="captcha_site_key" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text">
-        <p class="description"><?php _e('Your Google reCAPTCHA site key.', 'subscriber-notifications'); ?></p>
+        <p class="description"><?php _e('Your Google reCAPTCHA v2 site key (the "I\'m not a robot" checkbox version).', 'subscriber-notifications'); ?></p>
         <?php
     }
     
@@ -2119,7 +2125,7 @@ class SubscriberNotifications_Admin {
         $value = subscriber_notifications_get_option('captcha_secret_key', '');
         ?>
         <input type="password" id="captcha_secret_key" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text">
-        <p class="description"><?php _e('Your Google reCAPTCHA secret key.', 'subscriber-notifications'); ?></p>
+        <p class="description"><?php _e('Your Google reCAPTCHA v2 secret key.', 'subscriber-notifications'); ?></p>
         <?php
     }
     
@@ -2644,135 +2650,6 @@ class SubscriberNotifications_Admin {
     }
     
     /**
-     * Get WordPress timezone string for date calculations
-     * 
-     * @return string Timezone string
-     */
-    private function get_wordpress_timezone() {
-        $timezone_string = get_option('timezone_string');
-        if (empty($timezone_string)) {
-            // Fallback to GMT offset if timezone string is not set
-            $gmt_offset = get_option('gmt_offset');
-            $timezone_string = 'UTC' . ($gmt_offset >= 0 ? '+' : '') . $gmt_offset;
-        }
-        return $timezone_string;
-    }
-    
-    /**
-     * Calculate next send date for recurring notifications
-     * 
-     * @param string $frequency Frequency (daily, weekly, monthly)
-     * @return string Next send date in MySQL format
-     */
-    private function calculate_next_send_date($frequency) {
-        $current_time = current_time('timestamp');
-        $current_utc_time = time(); // UTC timestamp for accurate comparisons
-        
-        switch ($frequency) {
-            case 'daily':
-                $daily_time = subscriber_notifications_get_option('daily_send_time', '09:00');
-                $timezone = wp_timezone();
-                // Use timezone-aware method to get today's date
-                $now = new DateTime('@' . $current_time);
-                $now->setTimezone($timezone);
-                $today_datetime = new DateTime($now->format('Y-m-d') . ' ' . $daily_time, $timezone);
-                $today_time = $today_datetime->getTimestamp();
-                
-                // Compare UTC timestamps for accuracy
-                if ($today_time <= $current_utc_time) {
-                    // Time has passed today, schedule for tomorrow
-                    $tomorrow_datetime = clone $today_datetime;
-                    $tomorrow_datetime->modify('+1 day');
-                    return $tomorrow_datetime->format('Y-m-d H:i:s');
-                } else {
-                    // Time hasn't passed today, schedule for today
-                    return $today_datetime->format('Y-m-d H:i:s');
-                }
-                
-            case 'weekly':
-                $weekly_time = subscriber_notifications_get_option('weekly_send_time', '14:00');
-                $weekly_day = subscriber_notifications_get_option('weekly_send_day', 'tuesday');
-                
-                $day_numbers = array(
-                    'sunday' => 0, 'monday' => 1, 'tuesday' => 2, 'wednesday' => 3,
-                    'thursday' => 4, 'friday' => 5, 'saturday' => 6
-                );
-                $day_number = $day_numbers[$weekly_day];
-                
-                // Calculate days until next occurrence
-                // Use timezone-aware method to get current day
-                $timezone = wp_timezone();
-                $now = new DateTime('@' . $current_time);
-                $now->setTimezone($timezone);
-                $current_day = (int)$now->format('w');
-                $days_until = ($day_number - $current_day + 7) % 7;
-                
-                if ($days_until == 0) {
-                    // Same day - check if time has passed
-                    // Use timezone-aware DateTime instead of strtotime
-                    $today_datetime = new DateTime($now->format('Y-m-d') . ' ' . $weekly_time, $timezone);
-                    $today_time = $today_datetime->getTimestamp();
-                    // Compare UTC timestamps for accuracy
-                    if ($today_time <= $current_utc_time) {
-                        $days_until = 7; // Next week
-                    }
-                }
-                
-                // Use timezone-aware method to calculate next date
-                $next_date_datetime = new DateTime('+' . $days_until . ' days', $timezone);
-                $next_date_datetime->setTime(
-                    intval(substr($weekly_time, 0, 2)), 
-                    intval(substr($weekly_time, 3, 2))
-                );
-                return $next_date_datetime->format('Y-m-d H:i:s');
-                
-            case 'monthly':
-                $monthly_day = subscriber_notifications_get_option('monthly_send_day', 15);
-                $monthly_time = subscriber_notifications_get_option('monthly_send_time', '14:00');
-                
-                // Use timezone-aware method to get current month/year
-                $timezone = wp_timezone();
-                $now = new DateTime('@' . $current_time);
-                $now->setTimezone($timezone);
-                $current_month = (int)$now->format('n');
-                $current_year = (int)$now->format('Y');
-                
-                // Get the target day for current month using timezone-aware method
-                $target_datetime = new DateTime($current_year . '-' . $current_month . '-01', $timezone);
-                $days_in_month = (int)$target_datetime->format('t');
-                $target_day = min($monthly_day, $days_in_month);
-                
-                // Use WordPress timezone-aware date functions
-                $datetime = new DateTime($current_year . '-' . $current_month . '-' . $target_day . ' ' . $monthly_time, $timezone);
-                $target_timestamp = $datetime->getTimestamp();
-                
-                // Compare timestamps - DateTime->getTimestamp() returns UTC timestamp
-                // Use time() (UTC) for accurate comparison, not current_time('timestamp') which is timezone-adjusted
-                if ($target_timestamp <= $current_utc_time) {
-                    // This month's time has passed, go to next month
-                    $next_month = $current_month + 1;
-                    $next_year = $current_year;
-                    if ($next_month > 12) {
-                        $next_month = 1;
-                        $next_year++;
-                    }
-                    
-                    // Get the target day for next month using timezone-aware method
-                    $next_target_datetime = new DateTime($next_year . '-' . $next_month . '-01', $timezone);
-                    $days_in_next_month = (int)$next_target_datetime->format('t');
-                    $target_day = min($monthly_day, $days_in_next_month);
-                    $datetime = new DateTime($next_year . '-' . $next_month . '-' . $target_day . ' ' . $monthly_time, $timezone);
-                    $target_timestamp = $datetime->getTimestamp();
-                }
-                
-                return $datetime->format('Y-m-d H:i:s');
-                
-            default:
-                return null;
-        }
-    }
-    
-    /**
      * Update next_send_date for existing recurring notifications
      * 
      * @param array $changed_fields Array of option names that changed (optional)
@@ -2823,58 +2700,46 @@ class SubscriberNotifications_Admin {
         
         foreach ($recurring_notifications as $notification) {
             $old_next_send_date = $notification->next_send_date;
-            $new_next_send_date = $this->calculate_next_send_date($notification->frequency_target);
+            $new_next_send_date = (new SubscriberNotifications_Schedule_Calculator())->next_one_time($notification->frequency_target);
             
             // Validate calculated date is in the future (minimum 1 minute buffer)
-            $calculated_timestamp = strtotime($new_next_send_date);
-            $current_timestamp = current_time('timestamp');
-            $minimum_future_seconds = 60; // 1 minute minimum buffer
+            $tz                = wp_timezone();
+            $minimum_threshold = (new DateTimeImmutable('now', $tz))->modify('+1 minute');
+            $calculated        = new DateTimeImmutable($new_next_send_date, $tz);
             
             $needs_adjustment = false;
-            $original_date = $new_next_send_date;
+            $original_date    = $new_next_send_date;
             
-            if ($calculated_timestamp <= ($current_timestamp + $minimum_future_seconds)) {
+            if ($calculated <= $minimum_threshold) {
                 $needs_adjustment = true;
                 
                 if (defined('WP_DEBUG') && WP_DEBUG) {
                     error_log(sprintf(
-                        "Subscriber Notifications: Calculated date '%s' (timestamp: %d) is in the past or too close (current: %d). Adjusting to minimum future date.",
+                        "Subscriber Notifications: Calculated date '%s' is in the past or too close to now (threshold: %s). Adjusting to minimum future date.",
                         $new_next_send_date,
-                        $calculated_timestamp,
-                        $current_timestamp
+                        $minimum_threshold->format('Y-m-d H:i:s')
                     ));
                 }
                 
                 // Force to next occurrence based on frequency
-                // Use WordPress timezone for consistency
-                $timezone = wp_timezone();
-                $adjusted_datetime = new DateTime($new_next_send_date, $timezone);
-                
+                $adjusted = $calculated;
                 switch ($notification->frequency_target) {
                     case 'daily':
-                        // Add 1 day to the calculated date
-                        $adjusted_datetime->modify('+1 day');
-                        $new_next_send_date = $adjusted_datetime->format('Y-m-d H:i:s');
+                        $adjusted = $calculated->modify('+1 day');
                         break;
-                        
                     case 'weekly':
-                        // Add 7 days to the calculated date
-                        $adjusted_datetime->modify('+7 days');
-                        $new_next_send_date = $adjusted_datetime->format('Y-m-d H:i:s');
+                        $adjusted = $calculated->modify('+7 days');
                         break;
-                        
                     case 'monthly':
-                        // Add 1 month to the calculated date
-                        $adjusted_datetime->modify('+1 month');
-                        $new_next_send_date = $adjusted_datetime->format('Y-m-d H:i:s');
+                        $adjusted = $calculated->modify('+1 month');
                         break;
                 }
+                $new_next_send_date = $adjusted->format('Y-m-d H:i:s');
                 
                 // Double-check the adjusted date is in the future
-                $adjusted_timestamp = strtotime($new_next_send_date);
-                if ($adjusted_timestamp <= ($current_timestamp + $minimum_future_seconds)) {
-                    // Fallback: set to 1 minute from now (should never happen, but safety net)
-                    $new_next_send_date = date('Y-m-d H:i:s', $current_timestamp + $minimum_future_seconds);
+                if ($adjusted <= $minimum_threshold) {
+                    // Fallback: set to minimum threshold (should never happen, but safety net)
+                    $new_next_send_date = $minimum_threshold->format('Y-m-d H:i:s');
                     
                     if (defined('WP_DEBUG') && WP_DEBUG) {
                         error_log(sprintf(

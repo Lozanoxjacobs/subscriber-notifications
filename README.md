@@ -67,9 +67,9 @@ Use in notification **subject** and **body**, welcome/preference emails, and glo
 | `[subscriber_email]` | Subscriber email |
 | `[delivery_frequency]` | Daily / weekly / monthly label |
 | `[selected_subscriptions]` | Formatted list of all selections (HTML in body; use `format="plain"` in **subject** only) |
-| `[selected_terms post_type="…" taxonomy="…"]` | Comma-separated term names for one taxonomy |
+| `[selected_terms taxonomy="…"]` | Names of the subscriber's selected terms in one taxonomy. Optional `post_type="…"` (omit to aggregate across post types) and `separator="…"` (default `, `) |
 | `[site_title]` | Site name |
-| `[manage_preferences_link]` | Preferences URL (optional `text="…"`) |
+| `[manage_preferences_link]` | Clickable HTML link to the subscriber's preferences page. Default link text **Manage Preferences**; override with `text="…"` |
 | `[subscriber_notifications_form]` | Public subscribe form (`title="…"` optional) |
 
 ### `[content_feed]` (personalized post lists)
@@ -304,34 +304,7 @@ Delivery frequency: [delivery_frequency]
 5. Confirmation email sent after preference updates
 6. Old unsubscribe links (`?action=unsubscribe&token=...`) automatically redirect to preferences page
 
-#### Sticky Header Compatibility
-If your theme uses a sticky header, you may need to adjust the top margin of the preferences form to prevent the header from covering the form content. The form's CSS includes margin-top values that account for sticky headers:
-
-- **Desktop**: Default is `125px` (in `assets/css/frontend.css`, line 5)
-- **Mobile**: Default is `70px` (in `assets/css/frontend.css`, line 183)
-
-To customize for your theme's sticky header height:
-
-1. Open `assets/css/frontend.css`
-2. Find `.subscriber-notifications-form` (around line 3)
-3. Adjust the top margin value (first value in `margin: Xpx auto 20px auto`) to match your sticky header's height
-4. For mobile, find the `@media (max-width: 768px)` section (around line 181)
-5. Adjust the top margin value (first value in `margin: Xpx auto 10px auto`) in the mobile media query
-
-**Example**: If your sticky header is 150px on desktop and 90px on mobile:
-```css
-.subscriber-notifications-form {
-    margin: 150px auto 20px auto; /* Top margin matches your sticky header height */
-}
-
-@media (max-width: 768px) {
-    .subscriber-notifications-form {
-        margin: 90px auto 10px auto; /* Top margin matches your mobile sticky header height */
-    }
-}
-```
-
-### Post/Event Updates
+### Flagging Posts for Notifications
 1. Edit any post in an enabled content type
 2. Check **Notify subscribers** in the meta box (includes the post in feed-flagged digests; does not send an immediate blast)
 3. Save — the post is eligible for the next scheduled notification that matches subscriber preferences
@@ -348,8 +321,7 @@ Nonces, capability checks (`manage_options`), sanitized input, optional reCAPTCH
 
 - **Open Tracking** - Track email opens with tracking pixels
 - **Click Tracking** - Track link clicks
-- **Engagement Metrics** - Per-subscriber engagement statistics
-- **Term performance** - See which configured terms perform best
+- **Engagement Metrics** - Aggregate open and click statistics with date-range filtering
 - **Daily Statistics** - Track performance over time
 
 ## Troubleshooting
@@ -398,11 +370,44 @@ define('WP_DEBUG', true);
 define('WP_DEBUG_LOG', true);
 ```
 
-## Support
+## Production cron
 
-For support and feature requests, please contact your site administrator or the plugin vendor.
+The scheduler registers five cron hooks (`subscriber_notifications_process_queue`, `subscriber_notifications_send_daily`, `subscriber_notifications_send_weekly`, `subscriber_notifications_send_monthly`, `subscriber_notifications_drain_queue`), all running every minute. WP-Cron only fires on incoming WordPress requests, so on low-traffic sites a notification can sit idle until someone visits the site. In production, disable WP-Cron and trigger it from a real system cron:
+
+```php
+// wp-config.php
+define('DISABLE_WP_CRON', true);
+```
+
+```cron
+# /etc/crontab or `crontab -e` for the web user
+* * * * * curl -s https://example.com/wp-cron.php?doing_wp_cron > /dev/null 2>&1
+```
+
+This guarantees the send queue drains on a strict one-minute cadence regardless of site traffic.
 
 ## Changelog
+
+### Unreleased
+
+### Version 3.3.0
+
+- **Fix — one-time notifications send on time** — the `subscriber_notifications_process_queue` cron now runs every minute (was hourly), and one-time notifications get a `next_send_date` at creation so they're picked up by the same SQL filter (`next_send_date <= NOW()`) used by recurring notifications. Previously a one-time notification could sit up to an hour past its target send time
+- **Fix — notification "Created" column shown in site timezone** — the Notifications admin table converts `created_date` (stored as UTC via MySQL `CURRENT_TIMESTAMP`) through `get_date_from_gmt()` instead of `mysql2date()`, so the displayed timestamp matches the site's WordPress timezone
+- **Scheduling refactor — single source of truth for date math** — the three duplicate `calculate_next_send_date` implementations across `class-admin.php`, `class-scheduler.php`, and `class-database.php` have been consolidated into `SubscriberNotifications_Schedule_Calculator` (`next_one_time()` and `next_recurring()`). Both private `get_wordpress_timezone()` helpers were also deleted; `wp_timezone()` is used everywhere
+- **Scheduling refactor — modern WordPress timezone APIs** — every `current_time('timestamp')` call (deprecated since WP 5.3) and every bare `date()` / `strtotime()` used for timezone-sensitive output now goes through `wp_timezone()` + `DateTimeImmutable` or `wp_date()`
+- **Scheduling refactor — per-recipient send queue** — `send_scheduled_notification()` no longer loops and calls `wp_mail()` inline. Instead it enqueues one row per eligible subscriber into `wp_subscriber_notifications_send_queue` via `INSERT IGNORE` (the `(notification_id, subscriber_id)` UNIQUE KEY makes the enqueue idempotent under retry). A new `subscriber_notifications_drain_queue` cron handler drains up to N rows per minute, recording `attempts` / `last_error` on each row, and finalizes the notification (`sent_date`, `next_send_date` recompute for recurring, `recurrence_count++`) only once every row is processed. The expensive per-subscriber `has_relevant_content()` `WP_Query` now runs at drain time so the work is spread across cron ticks instead of blocking the cron handler that fires the send
+- **Scheduling refactor — cancellation skips queued recipients** — cancelling a notification flips its remaining queue rows from `pending` to `skipped` so the drain handler ignores them. Deleting a notification cascades a `DELETE` over its queue rows. Resend / reactivate clears prior queue rows so the next enqueue starts fresh
+- **Class rename — `SubscriberNotifications_SendGrid` → `SubscriberNotifications_Email_Sender`** — the class only wraps `wp_mail()` and adds open / click tracking; it has never spoken to SendGrid directly (transport is configured site-wide via WordPress core, SMTP, or a dedicated transport plugin). The file moved from `includes/class-sendgrid.php` to `includes/class-email-sender.php`
+- **Filter — `subscriber_notifications_queue_batch_size`** — controls how many queue rows the drain handler processes per cron tick (default `50`)
+- **Internal cleanup** — consolidated cron registration into `SubscriberNotifications_Scheduler::schedule_cron_jobs()` and removed the now-redundant `schedule_events()` helper / activation call from the main plugin file. Deleted three dead methods (`get_next_daily_time` / `get_next_weekly_time` / `get_next_monthly_time` in `class-scheduler.php`) and one dead helper (`calculate_next_send_date_for_existing` in `class-database.php`)
+- **Settings** — reCAPTCHA field helper text now specifies v2 (the "I'm not a robot" checkbox version) so administrators know which key type to create
+- **Documentation** — added a "Production cron" section recommending `DISABLE_WP_CRON` + system cron for sites that need strict one-minute scheduling regardless of traffic
+- **Documentation** — corrected the `[selected_terms]` and `[manage_preferences_link]` shortcode reference rows to match actual output (selected-only terms with `taxonomy` required; HTML link with default text "Manage Preferences")
+- **Documentation** — removed the obsolete "Sticky Header Compatibility" section that referenced CSS rules and line numbers no longer present in `assets/css/frontend.css`
+- **Documentation** — tightened the analytics summary: dropped the unimplemented "Term performance" bullet and clarified "Engagement Metrics" as aggregate open/click statistics with date-range filtering
+- **Documentation** — renamed the "Post/Event Updates" section to "Flagging Posts for Notifications" so it reads correctly for any configured content type (the plugin is no longer event-specific)
+- **Documentation** — removed the "Support" section (boilerplate; not actionable)
 
 ### Version 3.2.0
 

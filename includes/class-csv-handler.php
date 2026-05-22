@@ -174,7 +174,7 @@ class SubscriberNotifications_CSV_Handler {
      * Write subscribers to a CSV file with dynamic columns.
      */
     private function export_csv($subscribers) {
-        $filename = 'subscribers_' . date('Y-m-d_H-i-s') . '.csv';
+        $filename = 'subscribers_' . wp_date('Y-m-d_H-i-s') . '.csv';
         $upload_dir = wp_upload_dir();
         $filepath = $upload_dir['basedir'] . '/' . $filename;
 

@@ -126,16 +126,21 @@ if (!defined('ABSPATH')) {
                     <p class="description">
                         <?php _e('Check this box to send this notification repeatedly based on the target frequency schedule. Unchecked notifications are sent only once.', 'subscriber-notifications'); ?>
                     </p>
-                    <?php if (isset($notification->is_recurring) && $notification->is_recurring): ?>
+                    <?php
+                    $show_schedule_line = (isset($notification->is_recurring) && $notification->is_recurring) ||
+                        (isset($notification->status) && $notification->status === 'pending' &&
+                            !empty($notification->next_send_date));
+                    if ($show_schedule_line):
+                    ?>
                         <p class="description" style="color: #0073aa; font-weight: bold;">
                             <?php 
-                            if (isset($notification->recurrence_count)) {
+                            if (isset($notification->is_recurring) && $notification->is_recurring && isset($notification->recurrence_count)) {
                                 printf(__('This notification has been sent %d times.', 'subscriber-notifications'), $notification->recurrence_count);
                             }
-                            if (isset($notification->next_send_date) && $notification->next_send_date) {
-                                $timezone = wp_timezone();
-                                $datetime = new DateTime($notification->next_send_date, $timezone);
-                                printf(__(' Next send: %s', 'subscriber-notifications'), $datetime->format('M j, Y g:i A'));
+                            if (isset($notification->next_send_date) && $notification->next_send_date &&
+                                isset($notification->status) && $notification->status === 'pending') {
+                                $datetime = new DateTimeImmutable($notification->next_send_date, wp_timezone());
+                                printf(__(' Next send: %s', 'subscriber-notifications'), esc_html($datetime->format('M j, Y g:i A')));
                             }
                             ?>
                         </p>

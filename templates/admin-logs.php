@@ -40,11 +40,10 @@ function format_log_date_local($date_value) {
     }
     // Date is already in WordPress site timezone, just format it
     try {
-        $timezone = wp_timezone();
-        $datetime = new DateTime($date_value, $timezone);
+        $datetime = new DateTimeImmutable($date_value, wp_timezone());
         return $datetime->format('M j, Y g:i A');
     } catch (Exception $e) {
-        return date('M j, Y g:i A', strtotime($date_value)) ?: '-';
+        return '-';
     }
 }
 ?>

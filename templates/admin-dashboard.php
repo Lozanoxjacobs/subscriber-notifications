@@ -70,9 +70,9 @@ if (!defined('ABSPATH')) {
                     $monthly_time = subscriber_notifications_get_option('monthly_send_time', '14:00');
                     
                     echo '<div class="schedule-info">';
-                    echo '<strong>' . __('Daily:', 'subscriber-notifications') . '</strong> ' . date('g:i A', strtotime($daily_time)) . '<br>';
-                    echo '<strong>' . __('Weekly:', 'subscriber-notifications') . '</strong> ' . ucfirst($weekly_day) . ' at ' . date('g:i A', strtotime($weekly_time)) . '<br>';
-                    echo '<strong>' . __('Monthly:', 'subscriber-notifications') . '</strong> ' . $monthly_day . date('S', strtotime('2000-01-' . $monthly_day)) . ' at ' . date('g:i A', strtotime($monthly_time));
+                    echo '<strong>' . esc_html__('Daily:', 'subscriber-notifications') . '</strong> ' . esc_html(wp_date('g:i A', strtotime($daily_time))) . '<br>';
+                    echo '<strong>' . esc_html__('Weekly:', 'subscriber-notifications') . '</strong> ' . esc_html(ucfirst($weekly_day)) . ' at ' . esc_html(wp_date('g:i A', strtotime($weekly_time))) . '<br>';
+                    echo '<strong>' . esc_html__('Monthly:', 'subscriber-notifications') . '</strong> ' . esc_html($monthly_day . wp_date('S', strtotime('2000-01-' . (int) $monthly_day)) . ' at ' . wp_date('g:i A', strtotime($monthly_time)));
                     echo '</div>';
                     ?>
                 </div>

@@ -438,18 +438,19 @@ class SubscriberNotifications_Shortcodes {
      * Convert a duration label to a MySQL cutoff datetime string.
      */
     private function get_cutoff_date($duration) {
+        $tz = wp_timezone();
         switch ($duration) {
             case '1day':
-                $ts = strtotime('1 day ago');
+                $cutoff = (new DateTimeImmutable('now', $tz))->modify('-1 day');
                 break;
             case '1week':
-                $ts = strtotime('1 week ago');
+                $cutoff = (new DateTimeImmutable('now', $tz))->modify('-1 week');
                 break;
             case '1month':
             default:
-                $ts = strtotime('1 month ago');
+                $cutoff = (new DateTimeImmutable('now', $tz))->modify('-1 month');
         }
-        return date('Y-m-d H:i:s', $ts);
+        return $cutoff->format('Y-m-d H:i:s');
     }
 
     /**

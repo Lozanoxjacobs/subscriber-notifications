@@ -3,7 +3,7 @@
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
  * Description: Configurable subscriber notification system with per-site Content Types (any public post type and taxonomy), JSON preferences, theme-native form, and brandable emails.
- * Version: 3.2.0
+ * Version: 3.3.0
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.2.0');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.3.0');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -230,6 +230,7 @@ class SubscriberNotifications {
             'includes/class-database.php',
             'includes/class-email-formatter.php',
             'includes/class-content-types-admin.php',
+            'includes/class-schedule-calculator.php',
             'includes/class-admin.php',
             'includes/class-frontend.php',
             'includes/class-notifications.php',
@@ -321,20 +322,24 @@ class SubscriberNotifications {
         // Auto-populate global footer if empty
         $this->auto_populate_global_footer();
 
-        // Schedule events
-        $this->schedule_events();
+        // Cron events are scheduled by SubscriberNotifications_Scheduler on every
+        // load; nothing to do here at activation time.
 
         // Flush rewrite rules
         flush_rewrite_rules();
     }
-    
+
     /**
      * Plugin deactivation
      */
     public function deactivate() {
         // Clear scheduled events
         wp_clear_scheduled_hook('subscriber_notifications_process_queue');
-        
+        wp_clear_scheduled_hook('subscriber_notifications_send_daily');
+        wp_clear_scheduled_hook('subscriber_notifications_send_weekly');
+        wp_clear_scheduled_hook('subscriber_notifications_send_monthly');
+        wp_clear_scheduled_hook('subscriber_notifications_drain_queue');
+
         // Flush rewrite rules
         flush_rewrite_rules();
     }
@@ -367,6 +372,7 @@ class SubscriberNotifications {
             wp_clear_scheduled_hook('subscriber_notifications_send_daily');
             wp_clear_scheduled_hook('subscriber_notifications_send_weekly');
             wp_clear_scheduled_hook('subscriber_notifications_send_monthly');
+            wp_clear_scheduled_hook('subscriber_notifications_drain_queue');
             
             // Delete transients
             delete_transient('subscriber_notifications_tokens_checked');
@@ -384,6 +390,7 @@ class SubscriberNotifications {
         $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}subscriber_notifications");
         $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}subscriber_notification_logs");
         $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}subscriber_notifications_queue");
+        $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}subscriber_notifications_send_queue");
         
         // Delete all plugin options (prefixed plus legacy leftovers).
         $prefixed_suffixes = array(
@@ -477,6 +484,7 @@ class SubscriberNotifications {
         wp_clear_scheduled_hook('subscriber_notifications_send_daily');
         wp_clear_scheduled_hook('subscriber_notifications_send_weekly');
         wp_clear_scheduled_hook('subscriber_notifications_send_monthly');
+        wp_clear_scheduled_hook('subscriber_notifications_drain_queue');
         
         // Delete transients
         delete_transient('subscriber_notifications_tokens_checked');
@@ -538,15 +546,6 @@ class SubscriberNotifications {
         if (empty($global_footer)) {
             $default_footer = '[site_title] | [manage_preferences_link]';
             subscriber_notifications_update_option('global_footer', $default_footer);
-        }
-    }
-    
-    /**
-     * Schedule WordPress events
-     */
-    private function schedule_events() {
-        if (!wp_next_scheduled('subscriber_notifications_process_queue')) {
-            wp_schedule_event(time(), 'hourly', 'subscriber_notifications_process_queue');
         }
     }
     
