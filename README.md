@@ -404,6 +404,12 @@ For support and feature requests, please contact your site administrator or the 
 
 ## Changelog
 
+### Version 3.2.0
+
+- **Settings API parity** — General, Email Templates, Scheduling, Security, and Email Design tabs now all save through WordPress core's Settings API (`options.php`), matching the pattern used by Content Types. Removes the legacy custom save handler so every settings tab persists, sanitizes, and surfaces success / validation notices through core. Tab markup is now driven by `do_settings_sections()` for consistency with WordPress admin conventions
+- **Scheduling side effects** — recalculating `next_send_date` for recurring notifications now hooks into per-option `update_option_*` / `add_option_*` actions, so the recalculation runs whether the option is changed from the Settings page, WP-CLI, or any other code path (still scoped to only the changed frequency)
+- **Internal cleanup** — removed the no-op `reschedule_cron_jobs()` method (scheduler runs every minute regardless)
+
 ### Version 3.1.4
 
 - **Settings → Shortcodes** — new tab with a full shortcode reference, including an auto-generated panel listing the post type and taxonomy slugs configured on this site so administrators can copy them exactly

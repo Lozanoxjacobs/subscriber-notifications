@@ -4,7 +4,7 @@
  *
  * Registers a "Content Types" submenu under Notifications. Renders a Settings API
  * form that posts to `options.php` so the configuration persists via WordPress
- * core's option-save flow (no custom admin_post / handle_settings_save handler).
+ * core's option-save flow.
  *
  * @package SubscriberNotifications
  * @since 3.0.0

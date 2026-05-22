@@ -38,6 +38,7 @@ class SubscriberNotifications_Admin {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_action('admin_init', array($this, 'handle_admin_actions'));
         add_action('admin_init', array($this, 'register_settings'));
+        $this->register_scheduling_side_effects();
         add_action('wp_ajax_test_wp_mail', array($this, 'test_wp_mail'));
         add_action('wp_ajax_get_notification_preview', array($this, 'get_notification_preview'));
         add_action('wp_ajax_send_preview_email', array($this, 'send_preview_email'));
@@ -235,11 +236,6 @@ class SubscriberNotifications_Admin {
         // Handle notification update
         if (isset($_POST['update_notification'])) {
             $this->handle_notification_update();
-        }
-        
-        // Handle settings save
-        if (isset($_POST['save_settings'])) {
-            $this->handle_settings_save();
         }
         
         // Handle CSV import
@@ -721,155 +717,6 @@ class SubscriberNotifications_Admin {
                 echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
             }
         );
-    }
-    
-    /**
-     * Handle settings save for legacy tabs.
-     *
-     * @todo v3.1: Remove this method once General / Scheduling / Security /
-     *       Email Templates tabs are migrated to the Settings API + options.php.
-     *       Tracked in Internal Resources/ROADMAP.md. The Content Types and Email Design tabs
-     *       already use options.php; this handler is only for the legacy tabs.
-     */
-    private function handle_settings_save() {
-        if (!wp_verify_nonce($_POST['settings_nonce'], 'save_settings')) {
-            wp_die(__('Security check failed.', 'subscriber-notifications'));
-        }
-
-        // Get active tab from URL or default to 'general'
-        $current_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'general';
-
-        // Email Design tab is handled by options.php (Settings API) — bail.
-        if ($current_tab === 'email-design') {
-            return;
-        }
-
-        // Define which options belong to each tab (short keys; stored as subscriber_notifications_{key}).
-        $tab_options = array(
-            'general' => array(
-                'test_email',
-                'delete_data_on_uninstall',
-                'hide_terms_without_published_content'
-            ),
-            'email-templates' => array(
-                'welcome_email_subject',
-                'welcome_email_content',
-                'welcome_back_email_subject',
-                'welcome_back_email_content',
-                'preferences_update_email_subject',
-                'preferences_update_email_content'
-            ),
-            'scheduling' => array(
-                'daily_send_time',
-                'weekly_send_day',
-                'weekly_send_time',
-                'monthly_send_day',
-                'monthly_send_time'
-            ),
-            'security' => array(
-                'captcha_site_key',
-                'captcha_secret_key'
-            )
-        );
-        
-        // Only process settings for the current tab
-        if (!isset($tab_options[$current_tab])) {
-            $current_tab = 'general';
-        }
-        
-        $options_to_save = $tab_options[$current_tab];
-        $scheduling_fields_changed = array();
-        
-        // Process each option in the current tab
-        foreach ($options_to_save as $option) {
-            $pref_full = subscriber_notifications_option_name($option);
-
-            // Handle checkboxes - they don't send a value when unchecked
-            if ($option === 'delete_data_on_uninstall') {
-                $new_value = isset($_POST[$pref_full]) ? 1 : 0;
-                $old_value = (int) subscriber_notifications_get_option('delete_data_on_uninstall', 0);
-
-                if ($old_value !== $new_value) {
-                    subscriber_notifications_update_option('delete_data_on_uninstall', $new_value);
-                }
-                continue;
-            }
-
-            if ($option === 'hide_terms_without_published_content') {
-                $new_value = isset($_POST[$pref_full]) ? 1 : 0;
-                $old_value = (int) subscriber_notifications_get_option('hide_terms_without_published_content', 1);
-
-                if ($old_value !== $new_value) {
-                    subscriber_notifications_update_option('hide_terms_without_published_content', $new_value);
-                }
-                continue;
-            }
-
-            if (!isset($_POST[$pref_full])) {
-                continue;
-            }
-
-            $sanitize_callback = 'sanitize_setting_' . $option;
-            if (!method_exists($this, $sanitize_callback)) {
-                continue;
-            }
-
-            $posted = wp_unslash($_POST[$pref_full]);
-            $old_value = subscriber_notifications_get_option($option);
-            $new_value = $this->$sanitize_callback($posted);
-
-            if ($option === 'monthly_send_day') {
-                $old_value = intval($old_value);
-                $new_value = intval($new_value);
-            }
-
-            if ($old_value !== $new_value) {
-                subscriber_notifications_update_option($option, $new_value);
-
-                if ($current_tab === 'scheduling') {
-                    $scheduling_fields_changed[] = $option;
-                }
-            }
-        }
-        
-        // Only reschedule cron jobs for fields that actually changed
-        if (!empty($scheduling_fields_changed)) {
-            // Determine which frequencies will be affected
-            $frequencies_to_update = array();
-            if (in_array('daily_send_time', $scheduling_fields_changed)) {
-                $frequencies_to_update[] = 'daily';
-            }
-            if (in_array('weekly_send_day', $scheduling_fields_changed) || in_array('weekly_send_time', $scheduling_fields_changed)) {
-                $frequencies_to_update[] = 'weekly';
-            }
-            if (in_array('monthly_send_day', $scheduling_fields_changed) || in_array('monthly_send_time', $scheduling_fields_changed)) {
-                $frequencies_to_update[] = 'monthly';
-            }
-            
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log(sprintf(
-                    "Subscriber Notifications: Scheduling fields changed: %s. Will update frequencies: %s",
-                    implode(', ', $scheduling_fields_changed),
-                    !empty($frequencies_to_update) ? implode(', ', $frequencies_to_update) : 'none'
-                ));
-            }
-            
-            $this->reschedule_cron_jobs($scheduling_fields_changed);
-            $this->update_recurring_notifications_schedule($scheduling_fields_changed);
-        }
-        
-        // Redirect back to the same tab
-        $redirect_url = add_query_arg(
-            array(
-                'page' => 'subscriber-notifications-settings',
-                'tab' => $current_tab,
-                'settings-updated' => 'true'
-            ),
-            admin_url('admin.php')
-        );
-        
-        wp_redirect($redirect_url);
-        exit;
     }
     
     /**
@@ -1473,6 +1320,36 @@ class SubscriberNotifications_Admin {
     }
     
     /**
+     * Wire up cron-related side effects for scheduling options.
+     *
+     * Listens to the per-option `update_option_{$option}` and `add_option_{$option}`
+     * actions so recurring notifications get their `next_send_date` recalculated
+     * whenever a scheduling option changes — regardless of whether the update comes
+     * from the admin Settings page, WP-CLI, the REST API, or any other code path.
+     *
+     * Each callback passes the specific short key that changed so
+     * update_recurring_notifications_schedule() only touches the affected frequency.
+     */
+    public function register_scheduling_side_effects() {
+        $scheduling_short_keys = array(
+            'daily_send_time',
+            'weekly_send_day',
+            'weekly_send_time',
+            'monthly_send_day',
+            'monthly_send_time',
+        );
+
+        foreach ($scheduling_short_keys as $short_key) {
+            $full_option_name = subscriber_notifications_option_name($short_key);
+            $callback = function () use ($short_key) {
+                $this->update_recurring_notifications_schedule(array($short_key));
+            };
+            add_action("update_option_{$full_option_name}", $callback);
+            add_action("add_option_{$full_option_name}", $callback);
+        }
+    }
+
+    /**
      * Register settings with WordPress Settings API
      */
     public function register_settings() {
@@ -1539,47 +1416,87 @@ class SubscriberNotifications_Admin {
     }
     
     /**
-     * Add settings sections for each tab
+     * Add settings sections for each tab.
+     *
+     * Each Settings page (tab) gets its own page slug so do_settings_sections()
+     * renders only that tab's fields. Most tabs use one section; Email Design
+     * uses four sub-sections (Header & Footer, Brand Colors, Typography, Advanced).
      */
     private function add_settings_sections() {
         add_settings_section(
-            'subscriber_notifications_general',
+            'subscriber_notifications_general_section',
             '',
-            '__return_empty_string',
-            'subscriber-notifications-settings'
+            array($this, 'render_general_section_description'),
+            'subscriber-notifications-settings-general'
         );
-        
+
         add_settings_section(
-            'subscriber_notifications_email_templates',
+            'subscriber_notifications_email_templates_section',
             '',
             '__return_empty_string',
-            'subscriber-notifications-settings'
+            'subscriber-notifications-settings-email-templates'
         );
-        
+
         add_settings_section(
-            'subscriber_notifications_scheduling',
+            'subscriber_notifications_scheduling_section',
             '',
             '__return_empty_string',
-            'subscriber-notifications-settings'
+            'subscriber-notifications-settings-scheduling'
         );
-        
+
         add_settings_section(
-            'subscriber_notifications_security',
+            'subscriber_notifications_security_section',
             '',
             '__return_empty_string',
-            'subscriber-notifications-settings'
+            'subscriber-notifications-settings-security'
         );
-        
+
         add_settings_section(
-            'subscriber_notifications_email_design',
-            '',
+            'subscriber_notifications_email_design_header_footer',
+            __('Header & Footer', 'subscriber-notifications'),
             '__return_empty_string',
-            'subscriber-notifications-settings'
+            'subscriber-notifications-settings-email-design'
+        );
+
+        add_settings_section(
+            'subscriber_notifications_email_design_brand_colors',
+            __('Brand Colors', 'subscriber-notifications'),
+            '__return_empty_string',
+            'subscriber-notifications-settings-email-design'
+        );
+
+        add_settings_section(
+            'subscriber_notifications_email_design_typography',
+            __('Typography', 'subscriber-notifications'),
+            '__return_empty_string',
+            'subscriber-notifications-settings-email-design'
+        );
+
+        add_settings_section(
+            'subscriber_notifications_email_design_advanced',
+            __('Advanced', 'subscriber-notifications'),
+            '__return_empty_string',
+            'subscriber-notifications-settings-email-design'
         );
     }
-    
+
     /**
-     * Add settings fields
+     * Section description callback for the General tab.
+     *
+     * Surfaces the wp_mail() notice that previously lived inline in
+     * templates/admin-settings.php so it renders inside the Settings API
+     * section markup.
+     */
+    public function render_general_section_description() {
+        ?>
+        <div class="notice notice-info inline" style="margin: 15px 0;">
+            <p><?php esc_html_e('Outgoing mail uses WordPress wp_mail(). Configure your site email (SMTP plugin, hosts mail, etc.) as needed.', 'subscriber-notifications'); ?></p>
+        </div>
+        <?php
+    }
+
+    /**
+     * Add settings fields for each tab and section.
      */
     private function add_settings_fields() {
         // General tab fields
@@ -1587,24 +1504,24 @@ class SubscriberNotifications_Admin {
             'test_email',
             __('Test Email Address', 'subscriber-notifications'),
             array($this, 'render_test_email_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_general'
-        );
-        
-        add_settings_field(
-            'delete_data_on_uninstall',
-            __('Delete Data on Uninstall', 'subscriber-notifications'),
-            array($this, 'render_delete_data_on_uninstall_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_general'
+            'subscriber-notifications-settings-general',
+            'subscriber_notifications_general_section'
         );
 
         add_settings_field(
             'hide_terms_without_published_content',
             __('Hide Empty Terms on Subscription Form', 'subscriber-notifications'),
             array($this, 'render_hide_terms_without_published_content_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_general'
+            'subscriber-notifications-settings-general',
+            'subscriber_notifications_general_section'
+        );
+
+        add_settings_field(
+            'delete_data_on_uninstall',
+            __('Delete Data on Uninstall', 'subscriber-notifications'),
+            array($this, 'render_delete_data_on_uninstall_field'),
+            'subscriber-notifications-settings-general',
+            'subscriber_notifications_general_section'
         );
 
         // Email Templates tab fields
@@ -1612,139 +1529,214 @@ class SubscriberNotifications_Admin {
             'welcome_email_subject',
             __('Welcome Email Subject', 'subscriber-notifications'),
             array($this, 'render_welcome_email_subject_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_email_templates'
+            'subscriber-notifications-settings-email-templates',
+            'subscriber_notifications_email_templates_section'
         );
-        
+
         add_settings_field(
             'welcome_email_content',
             __('Welcome Email Content', 'subscriber-notifications'),
             array($this, 'render_welcome_email_content_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_email_templates'
+            'subscriber-notifications-settings-email-templates',
+            'subscriber_notifications_email_templates_section'
         );
-        
+
         add_settings_field(
             'welcome_back_email_subject',
             __('Welcome Back Email Subject', 'subscriber-notifications'),
             array($this, 'render_welcome_back_email_subject_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_email_templates'
+            'subscriber-notifications-settings-email-templates',
+            'subscriber_notifications_email_templates_section'
         );
-        
+
         add_settings_field(
             'welcome_back_email_content',
             __('Welcome Back Email Content', 'subscriber-notifications'),
             array($this, 'render_welcome_back_email_content_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_email_templates'
+            'subscriber-notifications-settings-email-templates',
+            'subscriber_notifications_email_templates_section'
         );
-        
+
         add_settings_field(
             'preferences_update_email_subject',
             __('Preferences Updated Email Subject', 'subscriber-notifications'),
             array($this, 'render_preferences_update_email_subject_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_email_templates'
+            'subscriber-notifications-settings-email-templates',
+            'subscriber_notifications_email_templates_section'
         );
-        
+
         add_settings_field(
             'preferences_update_email_content',
             __('Preferences Updated Email Content', 'subscriber-notifications'),
             array($this, 'render_preferences_update_email_content_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_email_templates'
+            'subscriber-notifications-settings-email-templates',
+            'subscriber_notifications_email_templates_section'
         );
-        
+
         // Scheduling tab fields
         add_settings_field(
             'daily_send_time',
             __('Daily Email Time', 'subscriber-notifications'),
             array($this, 'render_daily_send_time_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_scheduling'
+            'subscriber-notifications-settings-scheduling',
+            'subscriber_notifications_scheduling_section'
         );
-        
+
         add_settings_field(
             'weekly_send_day',
             __('Weekly Email Day', 'subscriber-notifications'),
             array($this, 'render_weekly_send_day_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_scheduling'
+            'subscriber-notifications-settings-scheduling',
+            'subscriber_notifications_scheduling_section'
         );
-        
+
         add_settings_field(
             'weekly_send_time',
             __('Weekly Email Time', 'subscriber-notifications'),
             array($this, 'render_weekly_send_time_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_scheduling'
+            'subscriber-notifications-settings-scheduling',
+            'subscriber_notifications_scheduling_section'
         );
-        
+
         add_settings_field(
             'monthly_send_day',
             __('Monthly Email Day', 'subscriber-notifications'),
             array($this, 'render_monthly_send_day_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_scheduling'
+            'subscriber-notifications-settings-scheduling',
+            'subscriber_notifications_scheduling_section'
         );
-        
+
         add_settings_field(
             'monthly_send_time',
             __('Monthly Email Time', 'subscriber-notifications'),
             array($this, 'render_monthly_send_time_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_scheduling'
+            'subscriber-notifications-settings-scheduling',
+            'subscriber_notifications_scheduling_section'
         );
-        
+
         // Security tab fields
         add_settings_field(
             'captcha_site_key',
             __('reCAPTCHA Site Key', 'subscriber-notifications'),
             array($this, 'render_captcha_site_key_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_security'
+            'subscriber-notifications-settings-security',
+            'subscriber_notifications_security_section'
         );
-        
+
         add_settings_field(
             'captcha_secret_key',
             __('reCAPTCHA Secret Key', 'subscriber-notifications'),
             array($this, 'render_captcha_secret_key_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_security'
+            'subscriber-notifications-settings-security',
+            'subscriber_notifications_security_section'
         );
-        
-        // Email Design tab fields
+
+        // Email Design — Header & Footer section
         add_settings_field(
             'global_header_logo',
             __('Global Header Logo', 'subscriber-notifications'),
             array($this, 'render_global_header_logo_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_email_design'
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_header_footer'
         );
-        
+
         add_settings_field(
             'global_header_content',
             __('Global Header Content', 'subscriber-notifications'),
             array($this, 'render_global_header_content_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_email_design'
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_header_footer'
         );
-        
+
         add_settings_field(
             'global_footer',
             __('Global Footer Content', 'subscriber-notifications'),
             array($this, 'render_global_footer_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_email_design'
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_header_footer'
         );
-        
+
+        // Email Design — Brand Colors section
+        add_settings_field(
+            'email_color_text',
+            __('Body Text', 'subscriber-notifications'),
+            array($this, 'render_email_color_text_field'),
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_brand_colors'
+        );
+
+        add_settings_field(
+            'email_color_link',
+            __('Link', 'subscriber-notifications'),
+            array($this, 'render_email_color_link_field'),
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_brand_colors'
+        );
+
+        add_settings_field(
+            'email_color_link_hover',
+            __('Link Hover', 'subscriber-notifications'),
+            array($this, 'render_email_color_link_hover_field'),
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_brand_colors'
+        );
+
+        add_settings_field(
+            'email_color_background',
+            __('Outer Background', 'subscriber-notifications'),
+            array($this, 'render_email_color_background_field'),
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_brand_colors'
+        );
+
+        add_settings_field(
+            'email_color_content_bg',
+            __('Content Background', 'subscriber-notifications'),
+            array($this, 'render_email_color_content_bg_field'),
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_brand_colors'
+        );
+
+        add_settings_field(
+            'email_color_footer_bg',
+            __('Footer Background', 'subscriber-notifications'),
+            array($this, 'render_email_color_footer_bg_field'),
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_brand_colors'
+        );
+
+        add_settings_field(
+            'email_color_footer_text',
+            __('Footer Text', 'subscriber-notifications'),
+            array($this, 'render_email_color_footer_text_field'),
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_brand_colors'
+        );
+
+        // Email Design — Typography section
+        add_settings_field(
+            'email_font_body',
+            __('Body Font', 'subscriber-notifications'),
+            array($this, 'render_email_font_body_field'),
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_typography'
+        );
+
+        add_settings_field(
+            'email_font_heading',
+            __('Heading Font', 'subscriber-notifications'),
+            array($this, 'render_email_font_heading_field'),
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_typography'
+        );
+
+        // Email Design — Advanced section
         add_settings_field(
             'email_css',
             __('Custom Email CSS', 'subscriber-notifications'),
             array($this, 'render_email_css_field'),
-            'subscriber-notifications-settings',
-            'subscriber_notifications_email_design'
+            'subscriber-notifications-settings-email-design',
+            'subscriber_notifications_email_design_advanced'
         );
     }
     
@@ -1892,7 +1884,7 @@ class SubscriberNotifications_Admin {
     }
 
     public function sanitize_setting_delete_data_on_uninstall($value) {
-        return isset($value) ? 1 : 0;
+        return !empty($value) ? 1 : 0;
     }
 
     public function sanitize_setting_hide_terms_without_published_content($value) {
@@ -1919,6 +1911,7 @@ class SubscriberNotifications_Admin {
         $value = (int) subscriber_notifications_get_option('delete_data_on_uninstall', 0);
         ?>
         <label>
+            <input type="hidden" name="<?php echo esc_attr($name_opt); ?>" value="0">
             <input type="checkbox" name="<?php echo esc_attr($name_opt); ?>" value="1" <?php checked($value, 1); ?>>
             <?php _e('Delete all plugin data (subscribers, logs, settings) when the plugin is uninstalled', 'subscriber-notifications'); ?>
         </label>
@@ -1940,6 +1933,7 @@ class SubscriberNotifications_Admin {
         $value    = (int) subscriber_notifications_get_option('hide_terms_without_published_content', 1);
         ?>
         <label>
+            <input type="hidden" name="<?php echo esc_attr($name_opt); ?>" value="0">
             <input type="checkbox" name="<?php echo esc_attr($name_opt); ?>" value="1" <?php checked($value, 1); ?>>
             <?php esc_html_e('Hide terms with no published posts from the public subscription form', 'subscriber-notifications'); ?>
         </label>
@@ -2291,25 +2285,6 @@ class SubscriberNotifications_Admin {
         });
         </script>
         <?php
-    }
-    
-    /**
-     * Reschedule cron jobs
-     * 
-     * Note: The cron jobs actually run every minute and check if it's time to send.
-     * We don't need to reschedule them when settings change - we just need to update
-     * the next_send_date for recurring notifications, which is handled separately.
-     * 
-     * @param array $changed_fields Array of option names that changed (optional)
-     */
-    private function reschedule_cron_jobs($changed_fields = array()) {
-        // The cron jobs are scheduled to run every minute and check if it's time to send.
-        // We don't need to reschedule them when settings change - the scheduler handles
-        // checking the time internally. We only need to update next_send_date for
-        // recurring notifications, which is done in update_recurring_notifications_schedule().
-        
-        // This method is kept for backward compatibility but doesn't need to do anything
-        // since the cron jobs always run every minute regardless of settings.
     }
     
     /**

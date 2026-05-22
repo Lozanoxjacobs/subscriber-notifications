@@ -29,271 +29,40 @@ if (!defined('ABSPATH')) {
         </a>
     </h2>
     
-    <form method="post" action="">
-        <?php wp_nonce_field('save_settings', 'settings_nonce'); ?>
-        
-        <!-- General Tab -->
-        <?php if ($active_tab == 'general'): ?>
-            <?php settings_fields('subscriber_notifications_general'); ?>
-            <div class="notice notice-info inline" style="margin: 15px 0;">
-                <p><?php esc_html_e('Outgoing mail uses WordPress wp_mail(). Configure your site email (SMTP plugin, hosts mail, etc.) as needed.', 'subscriber-notifications'); ?></p>
-            </div>
-            <table class="form-table">
-                <tr>
-                    <th scope="row">
-                        <label for="test_email"><?php _e('Test Email Address', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_test_email_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="hide_terms_without_published_content"><?php _e('Hide Empty Terms on Subscription Form', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_hide_terms_without_published_content_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="delete_data_on_uninstall"><?php _e('Delete Data on Uninstall', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_delete_data_on_uninstall_field(); ?>
-                    </td>
-                </tr>
-            </table>
-        <?php endif; ?>
-        
-        <!-- Email Templates Tab -->
-        <?php if ($active_tab == 'email-templates'): ?>
-            <?php settings_fields('subscriber_notifications_email-templates'); ?>
-            <table class="form-table">
-                <tr>
-                    <th scope="row">
-                        <label for="welcome_email_subject"><?php _e('Welcome Email Subject', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_welcome_email_subject_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="welcome_email_content"><?php _e('Welcome Email Content', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_welcome_email_content_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="welcome_back_email_subject"><?php _e('Welcome Back Email Subject', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_welcome_back_email_subject_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="welcome_back_email_content"><?php _e('Welcome Back Email Content', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_welcome_back_email_content_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="preferences_update_email_subject"><?php _e('Preferences Updated Email Subject', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_preferences_update_email_subject_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="preferences_update_email_content"><?php _e('Preferences Updated Email Content', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_preferences_update_email_content_field(); ?>
-                    </td>
-                </tr>
-            </table>
-        <?php endif; ?>
-        
-        <!-- Scheduling Tab -->
-        <?php if ($active_tab == 'scheduling'): ?>
-            <?php settings_fields('subscriber_notifications_scheduling'); ?>
-            <table class="form-table">
-                <tr>
-                    <th scope="row">
-                        <label for="daily_send_time"><?php _e('Daily Email Time', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_daily_send_time_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="weekly_send_day"><?php _e('Weekly Email Day', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_weekly_send_day_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="weekly_send_time"><?php _e('Weekly Email Time', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_weekly_send_time_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="monthly_send_day"><?php _e('Monthly Email Day', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_monthly_send_day_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="monthly_send_time"><?php _e('Monthly Email Time', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_monthly_send_time_field(); ?>
-                    </td>
-                </tr>
-            </table>
-        <?php endif; ?>
-        
-        <!-- Security Tab -->
-        <?php if ($active_tab == 'security'): ?>
-            <?php settings_fields('subscriber_notifications_security'); ?>
-            <table class="form-table">
-                <tr>
-                    <th scope="row">
-                        <label for="captcha_site_key"><?php _e('reCAPTCHA Site Key', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_captcha_site_key_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="captcha_secret_key"><?php _e('reCAPTCHA Secret Key', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_captcha_secret_key_field(); ?>
-                    </td>
-                </tr>
-            </table>
-        <?php endif; ?>
-        
-        <?php if ($active_tab !== 'email-design' && $active_tab !== 'shortcodes') : ?>
-            <p class="submit">
-                <input type="submit" name="save_settings" class="button button-primary" value="<?php _e('Save Settings', 'subscriber-notifications'); ?>">
-            </p>
-        <?php endif; ?>
-    </form>
+    <?php
+    $settings_tabs = array(
+        'general' => array(
+            'page'  => 'subscriber-notifications-settings-general',
+            'group' => 'subscriber_notifications_general',
+        ),
+        'email-templates' => array(
+            'page'  => 'subscriber-notifications-settings-email-templates',
+            'group' => 'subscriber_notifications_email-templates',
+        ),
+        'scheduling' => array(
+            'page'  => 'subscriber-notifications-settings-scheduling',
+            'group' => 'subscriber_notifications_scheduling',
+        ),
+        'security' => array(
+            'page'  => 'subscriber-notifications-settings-security',
+            'group' => 'subscriber_notifications_security',
+        ),
+        'email-design' => array(
+            'page'  => 'subscriber-notifications-settings-email-design',
+            'group' => 'subscriber_notifications_email-design',
+        ),
+    );
+    ?>
 
-    <?php if ($active_tab === 'shortcodes') : ?>
-        <?php include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/partials/admin-settings-shortcodes.php'; ?>
-    <?php endif; ?>
-
-    <!-- Email Design Tab: posts to options.php via the Settings API. -->
-    <?php if ($active_tab == 'email-design'): ?>
+    <?php if (isset($settings_tabs[$active_tab])) : ?>
         <?php settings_errors(); ?>
         <form method="post" action="<?php echo esc_url(admin_url('options.php')); ?>">
-            <?php settings_fields('subscriber_notifications_email-design'); ?>
-
-            <h2><?php esc_html_e('Header & Footer', 'subscriber-notifications'); ?></h2>
-            <table class="form-table">
-                <tr>
-                    <th scope="row">
-                        <label for="global_header_logo"><?php _e('Global Header Logo', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_global_header_logo_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="global_header_content"><?php _e('Global Header Content', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_global_header_content_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row">
-                        <label for="global_footer"><?php _e('Global Footer Content', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_global_footer_field(); ?>
-                    </td>
-                </tr>
-            </table>
-
-            <h2><?php esc_html_e('Brand Colors', 'subscriber-notifications'); ?></h2>
-            <table class="form-table">
-                <tr>
-                    <th scope="row"><label for="email_color_text"><?php esc_html_e('Body Text', 'subscriber-notifications'); ?></label></th>
-                    <td><?php $admin->render_email_color_text_field(); ?></td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="email_color_link"><?php esc_html_e('Link', 'subscriber-notifications'); ?></label></th>
-                    <td><?php $admin->render_email_color_link_field(); ?></td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="email_color_link_hover"><?php esc_html_e('Link Hover', 'subscriber-notifications'); ?></label></th>
-                    <td><?php $admin->render_email_color_link_hover_field(); ?></td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="email_color_background"><?php esc_html_e('Outer Background', 'subscriber-notifications'); ?></label></th>
-                    <td><?php $admin->render_email_color_background_field(); ?></td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="email_color_content_bg"><?php esc_html_e('Content Background', 'subscriber-notifications'); ?></label></th>
-                    <td><?php $admin->render_email_color_content_bg_field(); ?></td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="email_color_footer_bg"><?php esc_html_e('Footer Background', 'subscriber-notifications'); ?></label></th>
-                    <td><?php $admin->render_email_color_footer_bg_field(); ?></td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="email_color_footer_text"><?php esc_html_e('Footer Text', 'subscriber-notifications'); ?></label></th>
-                    <td><?php $admin->render_email_color_footer_text_field(); ?></td>
-                </tr>
-            </table>
-
-            <h2><?php esc_html_e('Typography', 'subscriber-notifications'); ?></h2>
-            <table class="form-table">
-                <tr>
-                    <th scope="row"><label for="email_font_body"><?php esc_html_e('Body Font', 'subscriber-notifications'); ?></label></th>
-                    <td><?php $admin->render_email_font_body_field(); ?></td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="email_font_heading"><?php esc_html_e('Heading Font', 'subscriber-notifications'); ?></label></th>
-                    <td><?php $admin->render_email_font_heading_field(); ?></td>
-                </tr>
-            </table>
-
-            <h2><?php esc_html_e('Advanced', 'subscriber-notifications'); ?></h2>
-            <table class="form-table">
-                <tr>
-                    <th scope="row">
-                        <label for="email_css"><?php _e('Custom Email CSS', 'subscriber-notifications'); ?></label>
-                    </th>
-                    <td>
-                        <?php $admin->render_email_css_field(); ?>
-                    </td>
-                </tr>
-            </table>
-
+            <?php settings_fields($settings_tabs[$active_tab]['group']); ?>
+            <?php do_settings_sections($settings_tabs[$active_tab]['page']); ?>
             <?php submit_button(); ?>
         </form>
+    <?php elseif ($active_tab === 'shortcodes') : ?>
+        <?php include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/partials/admin-settings-shortcodes.php'; ?>
     <?php endif; ?>
 </div>
 
