@@ -1419,6 +1419,34 @@ class SubscriberNotifications_Admin {
     }
     
     /**
+     * Admin URL of the Shortcodes reference tab.
+     *
+     * @return string
+     */
+    public static function get_shortcode_reference_url() {
+        return admin_url('admin.php?page=subscriber-notifications-settings&tab=shortcodes');
+    }
+
+    /**
+     * Echo a `<p class="description">` linking to the Shortcodes reference tab.
+     *
+     * Used in place of inline shortcode lists on any field that supports shortcodes.
+     */
+    public static function render_shortcode_reference_description() {
+        printf(
+            '<p class="description">%s</p>',
+            wp_kses(
+                sprintf(
+                    /* translators: %s: link to the Shortcodes settings tab. */
+                    __('Dynamic content is inserted with shortcodes. %s.', 'subscriber-notifications'),
+                    '<a href="' . esc_url(self::get_shortcode_reference_url()) . '">' . esc_html__('View shortcode reference', 'subscriber-notifications') . '</a>'
+                ),
+                array('a' => array('href' => array()))
+            )
+        );
+    }
+
+    /**
      * Settings page
      */
     public function settings_page() {
@@ -1426,7 +1454,7 @@ class SubscriberNotifications_Admin {
         $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'general';
         
         // Validate tab name
-        $valid_tabs = array('general', 'email-templates', 'scheduling', 'security', 'email-design');
+        $valid_tabs = array('general', 'email-templates', 'scheduling', 'security', 'email-design', 'shortcodes');
         if (!in_array($active_tab, $valid_tabs)) {
             $active_tab = 'general';
         }
@@ -1947,15 +1975,8 @@ class SubscriberNotifications_Admin {
             )
         );
         ?>
-        <p class="description">
-            <?php _e('Welcome email content. Available shortcodes:', 'subscriber-notifications'); ?><br>
-            <code>[subscriber_name]</code> - <?php _e('Subscriber\'s name', 'subscriber-notifications'); ?><br>
-            <code>[selected_subscriptions]</code> - <?php _e('All selected post type / taxonomy / term labels', 'subscriber-notifications'); ?><br>
-            <code>[delivery_frequency]</code> - <?php _e('Delivery frequency', 'subscriber-notifications'); ?><br>
-            <code>[site_title]</code> - <?php _e('Site title', 'subscriber-notifications'); ?><br>
-            <code>[manage_preferences_link]</code> - <?php _e('Manage preferences link', 'subscriber-notifications'); ?><br>
-            <code>[manage_preferences_link text="Custom Text"]</code> - <?php _e('Manage preferences link with custom text', 'subscriber-notifications'); ?>
-        </p>
+        <p class="description"><?php _e('Sent immediately after a new subscription is confirmed.', 'subscriber-notifications'); ?></p>
+        <?php self::render_shortcode_reference_description(); ?>
         <?php
     }
     
@@ -1982,15 +2003,8 @@ class SubscriberNotifications_Admin {
             )
         );
         ?>
-        <p class="description">
-            <?php _e('Welcome back email content sent when an inactive subscriber resubscribes. Available shortcodes:', 'subscriber-notifications'); ?><br>
-            <code>[subscriber_name]</code> - <?php _e('Subscriber\'s name', 'subscriber-notifications'); ?><br>
-            <code>[selected_subscriptions]</code> - <?php _e('All selected post type / taxonomy / term labels', 'subscriber-notifications'); ?><br>
-            <code>[delivery_frequency]</code> - <?php _e('Delivery frequency', 'subscriber-notifications'); ?><br>
-            <code>[site_title]</code> - <?php _e('Site title', 'subscriber-notifications'); ?><br>
-            <code>[manage_preferences_link]</code> - <?php _e('Manage preferences link', 'subscriber-notifications'); ?><br>
-            <code>[manage_preferences_link text="Custom Text"]</code> - <?php _e('Manage preferences link with custom text', 'subscriber-notifications'); ?>
-        </p>
+        <p class="description"><?php _e('Sent when an inactive subscriber resubscribes.', 'subscriber-notifications'); ?></p>
+        <?php self::render_shortcode_reference_description(); ?>
         <?php
     }
     
@@ -2017,15 +2031,8 @@ class SubscriberNotifications_Admin {
             )
         );
         ?>
-        <p class="description">
-            <?php _e('Email content sent when a subscriber updates their preferences. Available shortcodes:', 'subscriber-notifications'); ?><br>
-            <code>[subscriber_name]</code> - <?php _e('Subscriber\'s name', 'subscriber-notifications'); ?><br>
-            <code>[selected_subscriptions]</code> - <?php _e('All selected post type / taxonomy / term labels', 'subscriber-notifications'); ?><br>
-            <code>[delivery_frequency]</code> - <?php _e('Delivery frequency', 'subscriber-notifications'); ?><br>
-            <code>[site_title]</code> - <?php _e('Site title', 'subscriber-notifications'); ?><br>
-            <code>[manage_preferences_link]</code> - <?php _e('Manage preferences link', 'subscriber-notifications'); ?><br>
-            <code>[manage_preferences_link text="Custom Text"]</code> - <?php _e('Manage preferences link with custom text', 'subscriber-notifications'); ?>
-        </p>
+        <p class="description"><?php _e('Sent when a subscriber updates their preferences.', 'subscriber-notifications'); ?></p>
+        <?php self::render_shortcode_reference_description(); ?>
         <?php
     }
     
@@ -2169,9 +2176,9 @@ class SubscriberNotifications_Admin {
         );
         ?>
         <p class="description">
-            <?php _e('This content will be displayed in the email header alongside the logo. You can use shortcodes like [subscriber_name], [site_title], etc.', 'subscriber-notifications'); ?><br>
-            <strong><?php _e('Note:', 'subscriber-notifications'); ?></strong> <?php _e('Keep header content concise. The content will appear on the left, logo on the right.', 'subscriber-notifications'); ?>
+            <?php _e('Displayed in the email header alongside the logo (content on the left, logo on the right). Keep it concise.', 'subscriber-notifications'); ?>
         </p>
+        <?php self::render_shortcode_reference_description(); ?>
         <?php
     }
     
@@ -2190,10 +2197,9 @@ class SubscriberNotifications_Admin {
         );
         ?>
         <p class="description">
-            <?php _e('This content will be automatically added to the bottom of every notification email. You can use shortcodes like [site_title], [manage_preferences_link], [subscriber_name], etc.', 'subscriber-notifications'); ?><br>
-            <strong><?php _e('Example:', 'subscriber-notifications'); ?></strong> <code>[site_title] | [manage_preferences_link]</code><br>
-            <strong><?php _e('Recommended:', 'subscriber-notifications'); ?></strong> <?php _e('Include manage preferences link, contact information, and any legal disclaimers.', 'subscriber-notifications'); ?>
+            <?php _e('Added to the bottom of every notification email. Recommended: include a manage preferences link, contact information, and any legal disclaimers.', 'subscriber-notifications'); ?>
         </p>
+        <?php self::render_shortcode_reference_description(); ?>
         <?php
     }
     

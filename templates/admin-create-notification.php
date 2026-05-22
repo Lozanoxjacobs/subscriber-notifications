@@ -39,9 +39,8 @@ $selected_targets = isset($selected_targets) ? $selected_targets : $notification
                 </th>
                 <td>
                     <input type="text" id="notification_subject" name="notification_subject" class="regular-text" value="<?php echo esc_attr($notification_form['subject']); ?>" required>
-                    <p class="description">
-                        <?php _e('Email subject line. You can use shortcodes like [subscriber_name], [selected_subscriptions], etc.', 'subscriber-notifications'); ?>
-                    </p>
+                    <p class="description"><?php _e('Email subject line. Shortcodes are supported.', 'subscriber-notifications'); ?></p>
+                    <?php SubscriberNotifications_Admin::render_shortcode_reference_description(); ?>
                 </td>
             </tr>
             
@@ -62,18 +61,7 @@ $selected_targets = isset($selected_targets) ? $selected_targets : $notification
                         )
                     );
                     ?>
-                    <p class="description">
-                        <?php _e('Available shortcodes:', 'subscriber-notifications'); ?><br>
-                        <code>[subscriber_name]</code> - <?php _e('Subscriber\'s name', 'subscriber-notifications'); ?><br>
-                        <code>[subscriber_email]</code> - <?php _e('Subscriber\'s email', 'subscriber-notifications'); ?><br>
-                        <code>[selected_subscriptions]</code> - <?php _e('Formatted list of selections (HTML in body). Use format="plain" in subject lines only.', 'subscriber-notifications'); ?><br>
-                        <code>[selected_terms taxonomy="..."]</code> - <?php _e('Term names from a specific taxonomy', 'subscriber-notifications'); ?><br>
-                        <code>[delivery_frequency]</code> - <?php _e('Delivery frequency', 'subscriber-notifications'); ?><br>
-                        <code>[content_feed post_type="..." taxonomy="..." terms="term-slug,other-slug" duration="1day|1week|1month" format="list|summary"]</code> - <?php _e('Personalized feed. Optional terms (plural) = comma-separated term slugs; requires taxonomy. Omit taxonomy to match any form taxonomy for that post type.', 'subscriber-notifications'); ?><br>
-                        <code>[site_title]</code> - <?php _e('Site title', 'subscriber-notifications'); ?><br>
-                        <code>[manage_preferences_link]</code> - <?php _e('Manage preferences link', 'subscriber-notifications'); ?><br>
-                        <code>[manage_preferences_link text="Custom Text"]</code> - <?php _e('Manage preferences link with custom text', 'subscriber-notifications'); ?>
-                    </p>
+                    <?php SubscriberNotifications_Admin::render_shortcode_reference_description(); ?>
                 </td>
             </tr>
 

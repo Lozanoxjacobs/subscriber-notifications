@@ -24,6 +24,9 @@ if (!defined('ABSPATH')) {
         <a href="?page=subscriber-notifications-settings&tab=email-design" class="nav-tab <?php echo $active_tab == 'email-design' ? 'nav-tab-active' : ''; ?>">
             <?php _e('Email Design', 'subscriber-notifications'); ?>
         </a>
+        <a href="?page=subscriber-notifications-settings&tab=shortcodes" class="nav-tab <?php echo $active_tab == 'shortcodes' ? 'nav-tab-active' : ''; ?>">
+            <?php _e('Shortcodes', 'subscriber-notifications'); ?>
+        </a>
     </h2>
     
     <form method="post" action="">
@@ -188,12 +191,16 @@ if (!defined('ABSPATH')) {
             </table>
         <?php endif; ?>
         
-        <?php if ($active_tab !== 'email-design') : ?>
+        <?php if ($active_tab !== 'email-design' && $active_tab !== 'shortcodes') : ?>
             <p class="submit">
                 <input type="submit" name="save_settings" class="button button-primary" value="<?php _e('Save Settings', 'subscriber-notifications'); ?>">
             </p>
         <?php endif; ?>
     </form>
+
+    <?php if ($active_tab === 'shortcodes') : ?>
+        <?php include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/partials/admin-settings-shortcodes.php'; ?>
+    <?php endif; ?>
 
     <!-- Email Design Tab: posts to options.php via the Settings API. -->
     <?php if ($active_tab == 'email-design'): ?>

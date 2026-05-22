@@ -389,6 +389,74 @@ select:focus {
     font-weight: 600;
 }
 
+/* Shortcodes reference tab (Settings → Shortcodes). */
+.sn-shortcodes-reference {
+    max-width: 960px;
+}
+
+.sn-shortcodes-reference h2 {
+    margin-top: 2em;
+}
+
+.sn-shortcodes-reference h2:first-of-type {
+    margin-top: 1em;
+}
+
+.sn-shortcodes-reference h3 {
+    margin-top: 1.25em;
+    margin-bottom: 0.5em;
+    font-size: 1.05em;
+}
+
+.sn-shortcodes-reference code {
+    background: #f0f0f1;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 13px;
+}
+
+.sn-shortcode-table {
+    margin: 0.5em 0 1em;
+}
+
+.sn-shortcode-table th,
+.sn-shortcode-table td {
+    vertical-align: top;
+}
+
+.sn-shortcode-table td:first-child {
+    width: 200px;
+    white-space: nowrap;
+}
+
+.sn-shortcode-code {
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    border-radius: 3px;
+    padding: 0.75em 1em;
+    margin: 0.5em 0 1.25em;
+    overflow-x: auto;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.sn-slug-list,
+.sn-targeting-rules,
+.sn-where-list {
+    margin: 0.5em 0 1em 1.25em;
+    list-style: disc;
+}
+
+.sn-slug-list ul {
+    list-style: circle;
+    margin: 0.25em 0 0.25em 1.25em;
+}
+
+.sn-slug-list li {
+    margin: 0.2em 0;
+}
+
 /* Print styles */
 @media print {
     .subscriber-notifications-dashboard .dashboard-actions,

@@ -57,6 +57,8 @@ Posts can be marked **Notify subscribers** in the editor; that sets feed meta so
 
 ## Shortcodes
 
+> **In-admin reference:** **Notifications → Settings → Shortcodes** has the same reference plus an auto-generated panel listing the post type and taxonomy slugs configured on this site. Administrators should use that tab; this section is a developer-focused summary.
+
 Use in notification **subject** and **body**, welcome/preference emails, and global header/footer (Email Design).
 
 | Shortcode | Use |
@@ -401,6 +403,11 @@ define('WP_DEBUG_LOG', true);
 For support and feature requests, please contact your site administrator or the plugin vendor.
 
 ## Changelog
+
+### Version 3.1.4
+
+- **Settings → Shortcodes** — new tab with a full shortcode reference, including an auto-generated panel listing the post type and taxonomy slugs configured on this site so administrators can copy them exactly
+- **Admin forms** — removed the duplicated inline shortcode help from the create / edit notification screens and from the Email Templates and Email Design fields; each field now links to the Shortcodes reference tab
 
 ### Version 3.1.3
 
