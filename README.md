@@ -388,7 +388,17 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
-### Unreleased
+### Version 3.3.3
+
+- **Fix — Resend / Reactivate buttons now recompute `next_send_date`** — the admin Resend (one-time) and Reactivate (recurring) actions previously only flipped `status` back to `pending` without recalculating `next_send_date`, so the notification kept whatever stale send time it had from its prior run. If that timestamp was already in the past (the common case), the every-minute `process_queue` cron picked it up on the next tick and sent it immediately, ignoring the configured global send time. The action handler now calls `SubscriberNotifications_Schedule_Calculator::next_one_time()` (one-time) or `next_recurring()` (recurring) and writes the result to `next_send_date`. For one-time notifications, the prior `sent_date` is also cleared so the admin "Sent" column doesn't show a stale timestamp on a notification that is now awaiting a fresh send. The success-notice condition was also tightened from `if ($result)` to `if ($result !== false)` so a no-op update (e.g., resending when fields are already correct) is not misreported as a failure
+
+### Version 3.3.2
+
+- **Fix — subscriber `last_notified` column is now updated on every successful send** — `SubscriberNotifications_Database::update_subscriber_last_notified()` existed but was never called from the send path, so the `wp_subscriber_notifications.last_notified` column stayed `NULL` for every subscriber even after successful deliveries. The drain-send-queue handler now calls it on every row that transitions to `sent`. Admin subscriber list, CSV export, and any code that filters on `last_notified` now reflect actual notification activity
+
+### Version 3.3.1
+
+- **Fix — one-time notifications respect changes to global send-time settings** — when the `daily_send_time`, `weekly_send_day`, `weekly_send_time`, `monthly_send_day`, or `monthly_send_time` option changes, the recalculation handler now updates `next_send_date` for **all** pending notifications of the affected frequency (recurring and one-time), not just recurring rows. Previously a one-time notification queued before the option change kept its original send time and ignored the new global setting. The internal handler was renamed from `update_recurring_notifications_schedule()` to `update_pending_notifications_schedule()` to reflect its broader scope
 
 ### Version 3.3.0
 

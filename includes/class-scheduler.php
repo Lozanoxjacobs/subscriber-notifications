@@ -220,6 +220,10 @@ class SubscriberNotifications_Scheduler {
                     array('%s', '%s', '%d'),
                     array('%d')
                 );
+
+                // Stamp the recipient's last_notified so admin lists, CSV export, and
+                // any rate-limit checks reflect that this subscriber has been notified.
+                $this->database->update_subscriber_last_notified((int) $row->subscriber_id);
             } else {
                 $wpdb->update(
                     $send_queue_table,

@@ -374,16 +374,51 @@ class SubscriberNotifications_Admin {
                     array('notification_id' => $notification_id),
                     array('%d')
                 );
-                
+
+                // Look up the notification so we can recompute next_send_date from the
+                // current scheduling settings instead of reusing whatever stale value
+                // was left from a prior send. Without this, a notification re-queued
+                // via the Resend / Reactivate button keeps its old next_send_date
+                // (often in the past) and fires immediately on the next cron tick.
+                $current = $wpdb->get_row($wpdb->prepare(
+                    "SELECT id, frequency_target, is_recurring, last_sent_date FROM {$notifications_table} WHERE id = %d",
+                    $notification_id
+                ));
+
+                if (!$current) {
+                    break;
+                }
+
+                $calculator = new SubscriberNotifications_Schedule_Calculator();
+                if ((int) $current->is_recurring === 1) {
+                    $next_send_date = $calculator->next_recurring(
+                        $current->frequency_target,
+                        $current->last_sent_date
+                    );
+                } else {
+                    $next_send_date = $calculator->next_one_time($current->frequency_target);
+                }
+
+                // For one-time notifications also clear the prior `sent_date` so the
+                // admin "Sent" column does not show a stale timestamp while the
+                // notification is awaiting its new send.
+                $update_data = array(
+                    'status'         => 'pending',
+                    'next_send_date' => $next_send_date,
+                );
+                if ((int) $current->is_recurring !== 1) {
+                    $update_data['sent_date'] = null;
+                }
+
                 $result = $wpdb->update(
                     $notifications_table,
-                    array('status' => 'pending'),
+                    $update_data,
                     array('id' => $notification_id),
-                    array('%s'),
+                    null,
                     array('%d')
                 );
-                
-                if ($result) {
+
+                if ($result !== false) {
                     $message = ($action === 'resend')
                         ? __('Notification queued for resending.', 'subscriber-notifications')
                         : __('Notification reactivated successfully.', 'subscriber-notifications');
@@ -1329,12 +1364,13 @@ class SubscriberNotifications_Admin {
      * Wire up cron-related side effects for scheduling options.
      *
      * Listens to the per-option `update_option_{$option}` and `add_option_{$option}`
-     * actions so recurring notifications get their `next_send_date` recalculated
-     * whenever a scheduling option changes — regardless of whether the update comes
-     * from the admin Settings page, WP-CLI, the REST API, or any other code path.
+     * actions so all pending notifications (recurring and one-time) get their
+     * `next_send_date` recalculated whenever a scheduling option changes —
+     * regardless of whether the update comes from the admin Settings page, WP-CLI,
+     * the REST API, or any other code path.
      *
      * Each callback passes the specific short key that changed so
-     * update_recurring_notifications_schedule() only touches the affected frequency.
+     * update_pending_notifications_schedule() only touches the affected frequency.
      */
     public function register_scheduling_side_effects() {
         $scheduling_short_keys = array(
@@ -1348,7 +1384,7 @@ class SubscriberNotifications_Admin {
         foreach ($scheduling_short_keys as $short_key) {
             $full_option_name = subscriber_notifications_option_name($short_key);
             $callback = function () use ($short_key) {
-                $this->update_recurring_notifications_schedule(array($short_key));
+                $this->update_pending_notifications_schedule(array($short_key));
             };
             add_action("update_option_{$full_option_name}", $callback);
             add_action("add_option_{$full_option_name}", $callback);
@@ -2650,11 +2686,16 @@ class SubscriberNotifications_Admin {
     }
     
     /**
-     * Update next_send_date for existing recurring notifications
-     * 
-     * @param array $changed_fields Array of option names that changed (optional)
+     * Update next_send_date for pending notifications (recurring and one-time).
+     *
+     * Both recurring and non-recurring notifications derive their `next_send_date`
+     * from the global daily / weekly / monthly send-time options at creation time,
+     * so changes to those options must propagate to every pending row of the
+     * affected frequency — not just recurring rows.
+     *
+     * @param array $changed_fields Array of option short-keys that changed (optional).
      */
-    private function update_recurring_notifications_schedule($changed_fields = array()) {
+    private function update_pending_notifications_schedule($changed_fields = array()) {
         global $wpdb;
         
         // If no specific fields provided, update all (backward compatibility)
@@ -2682,23 +2723,25 @@ class SubscriberNotifications_Admin {
             return;
         }
         
-        // Get all pending recurring notifications for the affected frequencies
+        // Get all pending notifications (recurring and one-time) for the affected frequencies.
+        // One-time notifications are included because their initial next_send_date was
+        // calculated from the same global send-time options that just changed.
         $placeholders = implode(',', array_fill(0, count($frequencies_to_update), '%s'));
-        $recurring_notifications = $wpdb->get_results($wpdb->prepare("
-            SELECT id, frequency_target, next_send_date 
+        $pending_notifications = $wpdb->get_results($wpdb->prepare("
+            SELECT id, frequency_target, next_send_date, is_recurring
             FROM {$wpdb->prefix}subscriber_notifications_queue 
-            WHERE is_recurring = 1 AND status = 'pending' AND frequency_target IN ($placeholders)
+            WHERE status = 'pending' AND frequency_target IN ($placeholders)
         ", $frequencies_to_update));
         
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log(sprintf(
-                "Subscriber Notifications: Found %d pending recurring notifications to update for frequencies: %s",
-                count($recurring_notifications),
+                "Subscriber Notifications: Found %d pending notifications to update for frequencies: %s",
+                count($pending_notifications),
                 implode(', ', $frequencies_to_update)
             ));
         }
         
-        foreach ($recurring_notifications as $notification) {
+        foreach ($pending_notifications as $notification) {
             $old_next_send_date = $notification->next_send_date;
             $new_next_send_date = (new SubscriberNotifications_Schedule_Calculator())->next_one_time($notification->frequency_target);
             
@@ -2760,7 +2803,8 @@ class SubscriberNotifications_Admin {
             );
             
             $log_message = sprintf(
-                "Subscriber Notifications: Updated recurring notification %d (%s) next send date from '%s' to '%s'",
+                "Subscriber Notifications: Updated %s notification %d (%s) next send date from '%s' to '%s'",
+                ((int) $notification->is_recurring === 1) ? 'recurring' : 'one-time',
                 $notification->id,
                 $notification->frequency_target,
                 $old_next_send_date,
