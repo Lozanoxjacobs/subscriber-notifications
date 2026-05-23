@@ -49,8 +49,28 @@ function format_log_date_local($date_value) {
 ?>
 
 <div class="wrap">
-    <h1><?php _e('Email Logs', 'subscriber-notifications'); ?></h1>
-    
+    <?php
+    $sn_logs_export_url = admin_url('admin.php?page=subscriber-notifications-logs&action=export');
+    if (!empty($_GET['status'])) {
+        $sn_logs_export_url = add_query_arg('status', sanitize_text_field(wp_unslash($_GET['status'])), $sn_logs_export_url);
+    }
+    if (!empty($_GET['date_from'])) {
+        $sn_logs_export_url = add_query_arg('date_from', sanitize_text_field(wp_unslash($_GET['date_from'])), $sn_logs_export_url);
+    }
+    if (!empty($_GET['date_to'])) {
+        $sn_logs_export_url = add_query_arg('date_to', sanitize_text_field(wp_unslash($_GET['date_to'])), $sn_logs_export_url);
+    }
+    if (!empty($_GET['subscriber_id'])) {
+        $sn_logs_export_url = add_query_arg('subscriber_id', intval($_GET['subscriber_id']), $sn_logs_export_url);
+    }
+    $sn_logs_export_url = wp_nonce_url($sn_logs_export_url, 'export_logs');
+    ?>
+    <h1 class="wp-heading-inline"><?php esc_html_e('Email Logs', 'subscriber-notifications'); ?></h1>
+    <a href="<?php echo esc_url($sn_logs_export_url); ?>" class="page-title-action">
+        <?php esc_html_e('Export Logs', 'subscriber-notifications'); ?>
+    </a>
+    <hr class="wp-header-end">
+
     <div class="logs-filters">
         <form method="get" action="">
             <input type="hidden" name="page" value="subscriber-notifications-logs">
@@ -232,31 +252,4 @@ function format_log_date_local($date_value) {
     </div>
     <?php endif; ?>
     
-    <div class="logs-actions">
-        <?php
-        // Build export URL with filters preserved
-        $export_url = admin_url('admin.php?page=subscriber-notifications-logs&action=export');
-        
-        // Preserve filter parameters
-        if (!empty($_GET['status'])) {
-            $export_url = add_query_arg('status', sanitize_text_field($_GET['status']), $export_url);
-        }
-        if (!empty($_GET['date_from'])) {
-            $export_url = add_query_arg('date_from', sanitize_text_field($_GET['date_from']), $export_url);
-        }
-        if (!empty($_GET['date_to'])) {
-            $export_url = add_query_arg('date_to', sanitize_text_field($_GET['date_to']), $export_url);
-        }
-        if (!empty($_GET['subscriber_id'])) {
-            $export_url = add_query_arg('subscriber_id', intval($_GET['subscriber_id']), $export_url);
-        }
-        
-        // Add nonce for security
-        $export_url = wp_nonce_url($export_url, 'export_logs');
-        ?>
-        <a href="<?php echo esc_url($export_url); ?>" class="button">
-            <?php _e('Export Logs', 'subscriber-notifications'); ?>
-        </a>
-    </div>
 </div>
-

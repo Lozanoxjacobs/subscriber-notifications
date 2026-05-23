@@ -182,14 +182,7 @@
 
 /* Subscribers page styles */
 .subscriber-notifications-subscribers .subscribers-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     margin: 20px 0;
-}
-
-.subscriber-notifications-subscribers .subscribers-actions .button {
-    margin-right: 10px;
 }
 
 .subscriber-notifications-subscribers .subscribers-filters form {

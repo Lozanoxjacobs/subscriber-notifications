@@ -82,16 +82,14 @@ function subscriber_notifications_format_wp_user_cell($subscriber) {
 ?>
 
 <div class="wrap">
-    <h1><?php _e('Subscribers', 'subscriber-notifications'); ?></h1>
-    
+    <h1 class="wp-heading-inline"><?php esc_html_e('Subscribers', 'subscriber-notifications'); ?></h1>
+    <a href="<?php echo esc_url(admin_url('admin.php?page=subscriber-notifications-import-export#export-subscribers')); ?>" class="page-title-action">
+        <?php esc_html_e('Import/Export CSV', 'subscriber-notifications'); ?>
+    </a>
+    <hr class="wp-header-end">
+
     <div class="subscriber-notifications-subscribers">
         <div class="subscribers-header">
-            <div class="subscribers-actions">
-                <a href="<?php echo admin_url('admin.php?page=subscriber-notifications-import-export#export-subscribers'); ?>" class="button">
-                    <?php _e('Import/Export CSV', 'subscriber-notifications'); ?>
-                </a>
-            </div>
-            
             <div class="subscribers-filters">
                 <form method="get" action="">
                     <input type="hidden" name="page" value="subscriber-notifications-subscribers">

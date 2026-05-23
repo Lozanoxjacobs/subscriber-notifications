@@ -5,8 +5,9 @@ if (!defined('ABSPATH')) {
 ?>
 
 <div class="wrap">
-    <h1><?php _e('Import/Export Subscribers', 'subscriber-notifications'); ?></h1>
-    
+    <h1 class="wp-heading-inline"><?php esc_html_e('Import/Export Subscribers', 'subscriber-notifications'); ?></h1>
+    <hr class="wp-header-end">
+
     <div class="subscriber-notifications-import-export">
         
         <!-- Import Section -->

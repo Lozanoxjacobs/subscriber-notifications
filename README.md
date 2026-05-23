@@ -389,6 +389,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.4.9
+
+- **Admin — consistent page headers** — Subscribers, Email Logs, Import/Export, Settings, Create Notification, and Content Types screens now use the WordPress `wp-heading-inline`, `page-title-action`, and `wp-header-end` layout. Import/Export CSV and Export Logs moved into the page title bar; duplicate Export Logs footer control removed
+
 ### Version 3.4.8
 
 - **Refactor — admin inline assets** — moved inline `<style>` and `<script>` blocks from admin templates into enqueued `assets/css/admin.css` and `assets/js/admin.js`. PHP values (nonces, i18n strings) passed via `wp_localize_script()`. No intentional UI changes

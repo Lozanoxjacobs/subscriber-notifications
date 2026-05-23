@@ -5,8 +5,9 @@ if (!defined('ABSPATH')) {
 ?>
 
 <div class="wrap">
-    <h1><?php _e('Subscriber Notifications Settings', 'subscriber-notifications'); ?></h1>
-    
+    <h1 class="wp-heading-inline"><?php esc_html_e('Subscriber Notifications Settings', 'subscriber-notifications'); ?></h1>
+    <hr class="wp-header-end">
+
     <!-- Tab Navigation -->
     <h2 class="nav-tab-wrapper">
         <a href="?page=subscriber-notifications-settings&tab=general" class="nav-tab <?php echo $active_tab == 'general' ? 'nav-tab-active' : ''; ?>">

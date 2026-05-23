@@ -25,7 +25,8 @@ $term_display_modes = array(
 );
 ?>
 <div class="wrap subscriber-notifications-content-types">
-    <h1><?php esc_html_e('Content Types', 'subscriber-notifications'); ?></h1>
+    <h1 class="wp-heading-inline"><?php esc_html_e('Content Types', 'subscriber-notifications'); ?></h1>
+    <hr class="wp-header-end">
     <p class="description">
         <?php esc_html_e('Choose which public post types and taxonomies appear on the subscription form. Subscribers will only see the post types and taxonomies you enable here.', 'subscriber-notifications'); ?>
     </p>

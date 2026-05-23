@@ -15,7 +15,11 @@ $selected_targets = isset($selected_targets) ? $selected_targets : $notification
 ?>
 
 <div class="wrap">
-    <h1><?php _e('Create Notification', 'subscriber-notifications'); ?></h1>
+    <h1 class="wp-heading-inline"><?php esc_html_e('Create Notification', 'subscriber-notifications'); ?></h1>
+    <a href="<?php echo esc_url(admin_url('admin.php?page=subscriber-notifications-notifications')); ?>" class="page-title-action">
+        <?php esc_html_e('View All Notifications', 'subscriber-notifications'); ?>
+    </a>
+    <hr class="wp-header-end">
 
     <?php settings_errors('subscriber_notifications'); ?>
     
