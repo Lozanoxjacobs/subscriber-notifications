@@ -302,7 +302,6 @@ Delivery frequency: [delivery_frequency]
    - Delivery frequency
 4. Unsubscribe option available on preferences page
 5. Confirmation email sent after preference updates
-6. Old unsubscribe links (`?action=unsubscribe&token=...`) automatically redirect to preferences page
 
 ### Flagging Posts for Notifications
 1. Edit any post in an enabled content type
@@ -387,6 +386,10 @@ define('DISABLE_WP_CRON', true);
 This guarantees the send queue drains on a strict one-minute cadence regardless of site traffic.
 
 ## Changelog
+
+### Version 3.4.1
+
+- **Cleanup — remove legacy unsubscribe URL and migration code** — dropped the `?action=unsubscribe&token=...` redirect to the manage-preferences page; the frontend route handler is now `handle_manage_preferences_route()` and only serves `?action=manage&token=...`. Removed the `unsubscribe_token` → `management_token` database migration, activation-time cleanup of obsolete `unsubscribe_page_*` options, and the email click-tracking skip for old unsubscribe URLs. Preferences-page unsubscribe (AJAX) and admin unsubscribe are unchanged
 
 ### Version 3.4.0
 

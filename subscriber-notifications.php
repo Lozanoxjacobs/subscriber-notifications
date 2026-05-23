@@ -3,7 +3,7 @@
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
  * Description: Configurable subscriber notification system with per-site Content Types (any public post type and taxonomy), JSON preferences, theme-native form, and brandable emails.
- * Version: 3.4.0
+ * Version: 3.4.1
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.4.0');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.4.1');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -317,9 +317,6 @@ class SubscriberNotifications {
         // Set default options
         $this->set_default_options();
 
-        // Clean up obsolete options
-        $this->cleanup_obsolete_options();
-
         // Auto-populate global footer if empty
         $this->auto_populate_global_footer();
 
@@ -527,15 +524,6 @@ class SubscriberNotifications {
                 add_option($prefixed, $value);
             }
         }
-    }
-    
-    /**
-     * Clean up obsolete options
-     */
-    private function cleanup_obsolete_options() {
-        // Delete obsolete unsubscribe page options (replaced by manage preferences page)
-        delete_option('unsubscribe_page_title');
-        delete_option('unsubscribe_page_content');
     }
     
     /**

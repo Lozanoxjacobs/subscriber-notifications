@@ -120,9 +120,6 @@ class SubscriberNotifications_Email_Sender {
             $after_href  = $matches[3];
             $link_text   = $matches[4];
 
-            if (strpos($url, 'unsubscribe') !== false || strpos($url, 'action=unsubscribe') !== false) {
-                return $full_match;
-            }
             if (strpos($url, 'action=manage') !== false || strpos($url, 'token=') !== false) {
                 return $full_match;
             }

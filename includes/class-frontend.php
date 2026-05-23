@@ -47,7 +47,7 @@ class SubscriberNotifications_Frontend {
         add_action('wp_ajax_nopriv_subscriber_notifications_update_preferences', array($this, 'handle_preferences_update'));
         add_action('wp_ajax_subscriber_notifications_unsubscribe', array($this, 'handle_unsubscribe_action'));
         add_action('wp_ajax_nopriv_subscriber_notifications_unsubscribe', array($this, 'handle_unsubscribe_action'));
-        add_action('template_redirect', array($this, 'handle_unsubscribe'));
+        add_action('template_redirect', array($this, 'handle_manage_preferences_route'));
         add_shortcode('subscriber_notifications_form', array($this, 'subscription_form_shortcode'));
     }
 
@@ -517,23 +517,19 @@ class SubscriberNotifications_Frontend {
     }
 
     /**
-     * Handle unsubscribe and manage preferences routes.
+     * Handle manage preferences route.
      */
-    public function handle_unsubscribe() {
-        if (isset($_GET['action']) && isset($_GET['token'])) {
-            $action = sanitize_text_field(wp_unslash($_GET['action']));
-            $token  = sanitize_text_field(wp_unslash($_GET['token']));
+    public function handle_manage_preferences_route() {
+        if (!isset($_GET['action'], $_GET['token'])) {
+            return;
+        }
 
-            if ($action === 'unsubscribe') {
-                wp_redirect(add_query_arg(array(
-                    'action' => 'manage',
-                    'token'  => $token,
-                ), home_url()));
-                exit;
-            } elseif ($action === 'manage') {
-                $this->render_preferences_form($token);
-                exit;
-            }
+        $action = sanitize_text_field(wp_unslash($_GET['action']));
+        $token  = sanitize_text_field(wp_unslash($_GET['token']));
+
+        if ($action === 'manage') {
+            $this->render_preferences_form($token);
+            exit;
         }
     }
 

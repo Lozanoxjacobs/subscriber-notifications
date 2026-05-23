@@ -241,14 +241,10 @@ class SubscriberNotifications_Database {
     /**
      * Run database migrations.
      *
-     * v3 is greenfield. Most 2.x migration paths are unsafe to re-run against the
-     * new schema (e.g. they reference removed columns). They are intentionally
-     * skipped here. The retained calls are safe on both fresh v3 installs and
-     * partially-wiped dev installs.
+     * v3 is greenfield. Retained calls are safe on fresh installs and partially-wiped
+     * dev environments where tables exist but some rows or columns are incomplete.
      */
     public function run_migrations() {
-        // Token columns are needed by both v2 and v3; safe to keep.
-        $this->migrate_unsubscribe_token_to_management_token();
         $this->migrate_generate_missing_tokens();
 
         // Optional cosmetic default; safe.
@@ -309,91 +305,8 @@ class SubscriberNotifications_Database {
     }
     
     /**
-     * Migrate unsubscribe_token column to management_token
-     * This migration must run BEFORE create_tables() to avoid duplicate columns
-     * 
-     * @return bool True on success, false on failure
-     */
-    private function migrate_unsubscribe_token_to_management_token() {
-        // Check if table exists first (for fresh installs)
-        $table_exists = $this->wpdb->get_var($this->wpdb->prepare(
-            "SHOW TABLES LIKE %s",
-            $this->subscribers_table
-        ));
-        
-        if (!$table_exists) {
-            // Table doesn't exist yet - this is a fresh install, skip migration
-            return true;
-        }
-        
-        // Get current columns
-        $columns = $this->wpdb->get_col("DESCRIBE {$this->subscribers_table}");
-        
-        // Check if management_token already exists
-        if (in_array('management_token', $columns)) {
-            // Already has management_token, check if we need to drop unsubscribe_token
-            if (in_array('unsubscribe_token', $columns)) {
-                // Both exist - drop the old one
-                $sql = "ALTER TABLE {$this->subscribers_table} DROP COLUMN unsubscribe_token";
-                $result = $this->wpdb->query($sql);
-                
-                if ($result === false && defined('WP_DEBUG') && WP_DEBUG) {
-                    error_log('Subscriber Notifications: Failed to drop unsubscribe_token column: ' . $this->wpdb->last_error);
-                }
-            }
-            return true;
-        }
-        
-        // Check if unsubscribe_token column exists (old column name)
-        if (in_array('unsubscribe_token', $columns)) {
-            // Rename column and index
-            // First, drop the old index if it exists
-            $index_exists = $this->wpdb->get_results($this->wpdb->prepare(
-                "SHOW INDEX FROM {$this->subscribers_table} WHERE Key_name = %s",
-                'unsubscribe_token'
-            ));
-            
-            if (!empty($index_exists)) {
-                $this->wpdb->query("ALTER TABLE {$this->subscribers_table} DROP INDEX unsubscribe_token");
-            }
-            
-            // Rename the column
-            $sql = "ALTER TABLE {$this->subscribers_table} CHANGE COLUMN unsubscribe_token management_token varchar(255)";
-            $result = $this->wpdb->query($sql);
-            
-            if ($result === false) {
-                if (defined('WP_DEBUG') && WP_DEBUG) {
-                    error_log('Subscriber Notifications: Failed to rename unsubscribe_token to management_token: ' . $this->wpdb->last_error);
-                }
-                return false;
-            }
-            
-            // Add the new index
-            $this->wpdb->query("ALTER TABLE {$this->subscribers_table} ADD INDEX management_token (management_token)");
-            
-            return true;
-        }
-        
-        // Neither column exists - add management_token (for tables missing the column)
-        $sql = "ALTER TABLE {$this->subscribers_table} ADD COLUMN management_token varchar(255) NULL";
-        $result = $this->wpdb->query($sql);
-        
-        if ($result === false) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Subscriber Notifications: Failed to add management_token column: ' . $this->wpdb->last_error);
-            }
-            return false;
-        }
-        
-        // Add index
-        $this->wpdb->query("ALTER TABLE {$this->subscribers_table} ADD INDEX management_token (management_token)");
-        
-        return true;
-    }
-    
-    /**
      * Generate management tokens for subscribers that don't have them
-     * 
+     *
      * @return bool True on success, false on failure
      */
     private function migrate_generate_missing_tokens() {
