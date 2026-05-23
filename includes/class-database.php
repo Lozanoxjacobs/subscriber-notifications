@@ -688,6 +688,86 @@ class SubscriberNotifications_Database {
         
         return $result !== false;
     }
+
+    /**
+     * Validate an admin log filter date (HTML date input, Y-m-d).
+     *
+     * @param string $date Raw date string.
+     * @return string|null Normalized Y-m-d or null when invalid.
+     */
+    private function parse_log_filter_date(string $date): ?string {
+        $date = sanitize_text_field($date);
+        if ($date === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            return null;
+        }
+
+        $parsed = DateTimeImmutable::createFromFormat('Y-m-d', $date, wp_timezone());
+        if (!$parsed || $parsed->format('Y-m-d') !== $date) {
+            return null;
+        }
+
+        return $date;
+    }
+
+    /**
+     * Convert site-calendar log filter dates to UTC sent_date bounds.
+     *
+     * sent_date is stored as UTC (MySQL CURRENT_TIMESTAMP). Admin filters and
+     * the logs table display use the site timezone, so bounds must be converted.
+     *
+     * @param string $date_from Inclusive start date (Y-m-d) or empty.
+     * @param string $date_to   Inclusive end date (Y-m-d) or empty.
+     * @return array{from: string|null, to_exclusive: string|null}
+     */
+    private function get_log_sent_date_utc_bounds(string $date_from, string $date_to): array {
+        $bounds = array(
+            'from'          => null,
+            'to_exclusive'  => null,
+        );
+
+        $from = $this->parse_log_filter_date($date_from);
+        if ($from) {
+            $bounds['from'] = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $from . ' 00:00:00', wp_timezone())
+                ->setTimezone(new DateTimeZone('UTC'))
+                ->format('Y-m-d H:i:s');
+        }
+
+        $to = $this->parse_log_filter_date($date_to);
+        if ($to) {
+            $bounds['to_exclusive'] = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $to . ' 00:00:00', wp_timezone())
+                ->modify('+1 day')
+                ->setTimezone(new DateTimeZone('UTC'))
+                ->format('Y-m-d H:i:s');
+        }
+
+        return $bounds;
+    }
+
+    /**
+     * Append sent_date WHERE clauses for log queries.
+     *
+     * @param array  $where_conditions Existing conditions.
+     * @param array  $where_values     Existing values.
+     * @param string $date_from        Filter start date.
+     * @param string $date_to          Filter end date.
+     * @param string $column           Qualified column name (e.g. l.sent_date).
+     * @return array{0: array, 1: array}
+     */
+    private function append_log_sent_date_filters(array $where_conditions, array $where_values, string $date_from, string $date_to, string $column): array {
+        $bounds = $this->get_log_sent_date_utc_bounds($date_from, $date_to);
+
+        if ($bounds['from']) {
+            $where_conditions[] = "{$column} >= %s";
+            $where_values[]     = $bounds['from'];
+        }
+
+        if ($bounds['to_exclusive']) {
+            $where_conditions[] = "{$column} < %s";
+            $where_values[]     = $bounds['to_exclusive'];
+        }
+
+        return array($where_conditions, $where_values);
+    }
     
     /**
      * Get logs
@@ -719,16 +799,14 @@ class SubscriberNotifications_Database {
             $where_conditions[] = "l.status = %s";
             $where_values[] = $args['status'];
         }
-        
-        if (!empty($args['date_from'])) {
-            $where_conditions[] = "l.sent_date >= %s";
-            $where_values[] = $args['date_from'];
-        }
-        
-        if (!empty($args['date_to'])) {
-            $where_conditions[] = "l.sent_date <= %s";
-            $where_values[] = $args['date_to'];
-        }
+
+        list($where_conditions, $where_values) = $this->append_log_sent_date_filters(
+            $where_conditions,
+            $where_values,
+            (string) $args['date_from'],
+            (string) $args['date_to'],
+            'l.sent_date'
+        );
         
         $where_clause = implode(' AND ', $where_conditions);
         
@@ -785,16 +863,14 @@ class SubscriberNotifications_Database {
             $where_conditions[] = "status = %s";
             $where_values[] = $args['status'];
         }
-        
-        if (!empty($args['date_from'])) {
-            $where_conditions[] = "sent_date >= %s";
-            $where_values[] = $args['date_from'];
-        }
-        
-        if (!empty($args['date_to'])) {
-            $where_conditions[] = "sent_date <= %s";
-            $where_values[] = $args['date_to'];
-        }
+
+        list($where_conditions, $where_values) = $this->append_log_sent_date_filters(
+            $where_conditions,
+            $where_values,
+            (string) $args['date_from'],
+            (string) $args['date_to'],
+            'sent_date'
+        );
         
         $where_clause = implode(' AND ', $where_conditions);
         

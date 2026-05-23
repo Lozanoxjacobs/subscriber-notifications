@@ -389,6 +389,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.4.10
+
+- **Fix — email log date filters** — date range filters on **Email Logs** now include the full end day and convert site-calendar dates to UTC before querying `sent_date` (stored as UTC). Previously `date_to=YYYY-MM-DD` was compared as midnight, which excluded almost all rows on that day; filters also did not match dates shown in the site timezone
+
 ### Version 3.4.9
 
 - **Admin — consistent page headers** — Subscribers, Email Logs, Import/Export, Settings, Create Notification, and Content Types screens now use the WordPress `wp-heading-inline`, `page-title-action`, and `wp-header-end` layout. Import/Export CSV and Export Logs moved into the page title bar; duplicate Export Logs footer control removed
