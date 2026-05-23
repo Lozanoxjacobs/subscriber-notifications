@@ -10,63 +10,6 @@ jQuery(document).ready(function($) {
         });
     }
     
-    // Handle bulk actions
-    $('#bulk-action-selector-top, #bulk-action-selector-bottom').on('change', function() {
-        var action = $(this).val();
-        if (action === 'delete' || action === 'deactivate') {
-            if (!confirm('Are you sure you want to perform this action on the selected items?')) {
-                $(this).val('');
-                return false;
-            }
-        }
-    });
-    
-    // Handle subscriber actions
-    $('.subscriber-action').on('click', function(e) {
-        e.preventDefault();
-        
-        var $button = $(this);
-        var action = $button.data('action');
-        var subscriberId = $button.data('subscriber-id');
-        
-        if (action === 'delete') {
-            if (!confirm('Are you sure you want to delete this subscriber?')) {
-                return false;
-            }
-        }
-        
-        // Show loading state
-        $button.prop('disabled', true).text('Processing...');
-        
-        $.ajax({
-            url: subscriberNotifications.ajaxUrl,
-            type: 'POST',
-            data: {
-                action: 'subscriber_notifications_subscriber_action',
-                subscriber_id: subscriberId,
-                subscriber_action: action,
-                nonce: subscriberNotifications.nonce
-            },
-            success: function(response) {
-                if (response.success) {
-                    location.reload();
-                } else {
-                    alert('Error: ' + response.data);
-                    $button.prop('disabled', false).text($button.data('original-text'));
-                }
-            },
-            error: function() {
-                alert('An error occurred. Please try again.');
-                $button.prop('disabled', false).text($button.data('original-text'));
-            }
-        });
-    });
-    
-    // Store original button text
-    $('.subscriber-action').each(function() {
-        $(this).data('original-text', $(this).text());
-    });
-    
     // Handle CSV import
     $('#csv-import-form').on('submit', function(e) {
         var fileInput = $('#csv-file')[0];

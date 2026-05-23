@@ -44,8 +44,6 @@ class SubscriberNotifications_Admin {
         add_action('wp_ajax_test_wp_mail', array($this, 'test_wp_mail'));
         add_action('wp_ajax_get_notification_preview', array($this, 'get_notification_preview'));
         add_action('wp_ajax_send_preview_email', array($this, 'send_preview_email'));
-        add_action('wp_ajax_save_notification', array($this, 'ajax_save_notification'));
-        add_action('wp_ajax_update_notification', array($this, 'ajax_update_notification'));
         add_action('wp_ajax_subscriber_notifications_export_csv', array($this, 'export_csv'));
         
         // Restrict media library for header logo uploads
@@ -171,8 +169,6 @@ class SubscriberNotifications_Admin {
         // Enqueue WordPress media library scripts for image upload
         wp_enqueue_media();
         wp_enqueue_script('media-upload');
-        wp_enqueue_script('thickbox');
-        wp_enqueue_style('thickbox');
         
         wp_enqueue_script(
             'subscriber-notifications-admin',
@@ -2602,65 +2598,6 @@ class SubscriberNotifications_Admin {
     }
     
     
-    
-    
-    /**
-     * AJAX handler for saving notifications
-     */
-    public function ajax_save_notification() {
-        if (!wp_verify_nonce($_POST['notification_nonce'], 'create_notification')) {
-            wp_die(__('Security check failed.', 'subscriber-notifications'));
-        }
-        
-        if (!current_user_can('manage_options')) {
-            wp_die(__('You do not have permission to perform this action.', 'subscriber-notifications'));
-        }
-        
-        try {
-            $result = $this->create_notification_from_post();
-
-            if (is_int($result) && $result > 0) {
-                wp_send_json_success(
-                    array(
-                        'message'  => __('Notification created successfully.', 'subscriber-notifications'),
-                        'redirect' => $this->get_notification_edit_url($result, 'created'),
-                    )
-                );
-            }
-
-            if (is_wp_error($result)) {
-                wp_send_json_error($result->get_error_message());
-            }
-
-            if ($result === false) {
-                wp_send_json_error(__('Failed to create notification.', 'subscriber-notifications'));
-            }
-
-            wp_send_json_error(__('Unable to create notification.', 'subscriber-notifications'));
-        } catch (Exception $e) {
-            wp_send_json_error($e->getMessage());
-        }
-    }
-    
-    /**
-     * AJAX handler for updating notifications
-     */
-    public function ajax_update_notification() {
-        if (!wp_verify_nonce($_POST['notification_nonce'], 'update_notification')) {
-            wp_die(__('Security check failed.', 'subscriber-notifications'));
-        }
-        
-        if (!current_user_can('manage_options')) {
-            wp_die(__('You do not have permission to perform this action.', 'subscriber-notifications'));
-        }
-        
-        try {
-            $this->handle_notification_update();
-            wp_send_json_success(__('Notification updated successfully.', 'subscriber-notifications'));
-        } catch (Exception $e) {
-            wp_send_json_error($e->getMessage());
-        }
-    }
     
     
     /**

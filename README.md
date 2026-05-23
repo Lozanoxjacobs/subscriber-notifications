@@ -389,6 +389,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.4.6
+
+- **Cleanup — remove dead admin code** — dropped unused notification AJAX handlers (`save_notification`, `update_notification`), dead subscriber-action and bulk-action JavaScript in `admin.js`, and unused Thickbox script/style enqueues. Notification create/edit continue to use form POST; subscribers list uses form POST with PRG flash notices
+
 ### Version 3.4.5
 
 - **Fix — subscriber admin flash notices not displaying** — flash notice handlers now run on the `admin_notices` hook (before page output) and render the notice directly instead of registering a nested `admin_notices` callback from the page callback, which ran too late to display
