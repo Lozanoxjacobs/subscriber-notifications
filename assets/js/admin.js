@@ -260,4 +260,209 @@ jQuery(document).ready(function($) {
             });
         });
     }
+
+    // Notification list: preview modal (Notifications admin screen).
+    if ($('.view-notification').length && subscriberNotifications.notificationList) {
+        var nlCfg = subscriberNotifications.notificationList;
+        var $modal = $('#notification-preview-modal');
+
+        $('.view-notification').on('click', function (e) {
+            e.preventDefault();
+            var notificationId = $(this).data('id');
+
+            $.ajax({
+                url: subscriberNotifications.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'get_notification_preview',
+                    notification_id: notificationId,
+                    nonce: nlCfg.previewNonce
+                },
+                success: function (response) {
+                    if (response.success) {
+                        $('#notification-preview-content').html(response.data);
+                        $modal.addClass('is-open');
+                    }
+                }
+            });
+        });
+
+        $('.notification-modal-close').on('click', function () {
+            $modal.removeClass('is-open');
+        });
+
+        $(window).on('click', function (e) {
+            if (e.target.id === 'notification-preview-modal') {
+                $modal.removeClass('is-open');
+            }
+        });
+    }
+
+    // Send preview email (Create / Edit notification screens).
+    if ($('#send-preview-email').length && subscriberNotifications.previewEmail) {
+        var peCfg = subscriberNotifications.previewEmail;
+
+        $('#send-preview-email').on('click', function (e) {
+            e.preventDefault();
+
+            var email = $('#preview_email').val();
+            var subject = $('#notification_subject').val();
+            var content = '';
+
+            if (typeof tinymce !== 'undefined' && tinymce.get('notification_content')) {
+                content = tinymce.get('notification_content').getContent();
+            } else {
+                content = $('#notification_content').val();
+            }
+
+            if (!email) {
+                alert(peCfg.enterEmail);
+                return;
+            }
+            if (!subject) {
+                alert(peCfg.enterSubject);
+                return;
+            }
+            if (!content) {
+                alert(peCfg.enterContent);
+                return;
+            }
+
+            var $button = $(this);
+            var $resultDiv = $('#preview-email-result');
+
+            $button.prop('disabled', true).text(peCfg.sending);
+            $resultDiv.html('<p style="color: #666;">' + peCfg.sendingPreview + '</p>');
+
+            $.ajax({
+                url: subscriberNotifications.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'send_preview_email',
+                    nonce: peCfg.nonce,
+                    email: email,
+                    subject: subject,
+                    content: content
+                },
+                success: function (response) {
+                    if (response.success) {
+                        $resultDiv.html('<p style="color: #46b450;">' + peCfg.sentSuccess + '</p>');
+                    } else {
+                        $resultDiv.html('<p style="color: #dc3232;">' + peCfg.sentFailed + response.data + '</p>');
+                    }
+                },
+                error: function () {
+                    $resultDiv.html('<p style="color: #dc3232;">' + peCfg.sentError + '</p>');
+                },
+                complete: function () {
+                    $button.prop('disabled', false).text(peCfg.buttonLabel);
+                }
+            });
+        });
+    }
+
+    // Settings → General: test email button.
+    if ($('#test-wp-mail').length && subscriberNotifications.settingsGeneral) {
+        var sgCfg = subscriberNotifications.settingsGeneral;
+
+        $('#test-wp-mail').on('click', function () {
+            var $button = $(this);
+            var $result = $('#wp-mail-test-result');
+            var testEmail = $('#test_email').val();
+
+            if (!testEmail) {
+                $result.html('<div class="notice notice-error inline"><p>' + sgCfg.testMailEnterEmail + '</p></div>');
+                return;
+            }
+
+            $button.prop('disabled', true).text(sgCfg.testMailSending);
+            $result.html('');
+
+            $.ajax({
+                url: subscriberNotifications.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'test_wp_mail',
+                    test_email: testEmail,
+                    nonce: sgCfg.testMailNonce
+                },
+                success: function (response) {
+                    if (response.success) {
+                        $result.html('<div class="notice notice-success inline"><p>' + response.data + '</p></div>');
+                    } else {
+                        $result.html('<div class="notice notice-error inline"><p>' + response.data + '</p></div>');
+                    }
+                },
+                error: function () {
+                    $result.html('<div class="notice notice-error inline"><p>' + sgCfg.testMailFailed + '</p></div>');
+                },
+                complete: function () {
+                    $button.prop('disabled', false).text(sgCfg.testMailButton);
+                }
+            });
+        });
+    }
+
+    // Settings → Email Design: header logo media uploader.
+    if ($('.upload-logo').length && subscriberNotifications.emailDesign) {
+        var edCfg = subscriberNotifications.emailDesign;
+        var mediaUploader;
+
+        $('.upload-logo').on('click', function (e) {
+            e.preventDefault();
+
+            if (mediaUploader) {
+                mediaUploader.open();
+                return;
+            }
+
+            mediaUploader = wp.media({
+                title: edCfg.mediaTitle,
+                button: { text: edCfg.mediaButton },
+                multiple: false,
+                library: { type: 'image', uploadedTo: null },
+                filterable: 'uploaded'
+            });
+
+            mediaUploader.on('select', function () {
+                var attachment = mediaUploader.state().get('selection').first().toJSON();
+                var allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+
+                if (allowedTypes.indexOf(attachment.mime) === -1) {
+                    alert(edCfg.invalidMime);
+                    return;
+                }
+
+                if (attachment.filesizeInBytes && attachment.filesizeInBytes > 200 * 1024) {
+                    alert(edCfg.fileTooLarge);
+                    return;
+                }
+
+                $('#global_header_logo').val(attachment.id);
+                $('.logo-preview').html(
+                    '<img src="' + attachment.url + '" alt="" />' +
+                    '<br><button type="button" class="button remove-logo">' + edCfg.removeLogo + '</button>'
+                );
+            });
+
+            mediaUploader.open();
+        });
+
+        $(document).on('click', '.remove-logo', function (e) {
+            e.preventDefault();
+            $('#global_header_logo').val('');
+            $('.logo-preview').html('<div class="no-logo">' + edCfg.noLogo + '</div>');
+        });
+    }
+
+    // Settings page: scroll to in-page anchor links (tab deep links).
+    if (subscriberNotifications.settingsPage && window.location.hash) {
+        setTimeout(function () {
+            var $target = $(window.location.hash);
+            if ($target.length) {
+                $('html, body').animate({ scrollTop: $target.offset().top - 50 }, 500);
+            }
+        }, 100);
+    }
+
 });

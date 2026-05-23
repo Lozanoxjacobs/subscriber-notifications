@@ -610,3 +610,231 @@ select:focus {
         display: none;
     }
 }
+
+/* Import/Export page (Section 3 — moved from template inline styles) */
+.subscriber-notifications-import-export {
+    max-width: 1200px;
+}
+
+.subscriber-notifications-import-export .import-section,
+.subscriber-notifications-import-export .export-section,
+.subscriber-notifications-import-export .help-section {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.subscriber-notifications-import-export .import-instructions {
+    margin-bottom: 30px;
+}
+
+.subscriber-notifications-import-export .format-requirements {
+    display: flex;
+    gap: 30px;
+    margin: 20px 0;
+}
+
+.subscriber-notifications-import-export .required-columns,
+.subscriber-notifications-import-export .optional-columns {
+    flex: 1;
+}
+
+.subscriber-notifications-import-export .required-columns h4 {
+    color: #d63638;
+}
+
+.subscriber-notifications-import-export .optional-columns h4 {
+    color: #0073aa;
+}
+
+.subscriber-notifications-import-export .sample-csv {
+    background: #f0f0f1;
+    padding: 15px;
+    border-radius: 4px;
+    margin: 20px 0;
+}
+
+.subscriber-notifications-import-export .sample-csv pre {
+    margin: 0;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.subscriber-notifications-import-export .category-reference {
+    margin: 20px 0;
+}
+
+.subscriber-notifications-import-export .category-reference .reference-block {
+    margin-bottom: 20px;
+}
+
+.subscriber-notifications-import-export .category-reference ul {
+    list-style: disc;
+    margin-left: 20px;
+}
+
+.subscriber-notifications-import-export .sn-term-reference-intro {
+    max-width: 72em;
+}
+
+.subscriber-notifications-import-export .sn-term-reference-note {
+    color: #646970;
+    font-size: 12px;
+    font-style: italic;
+}
+
+.subscriber-notifications-import-export #export-subscribers {
+    scroll-margin-top: 32px;
+}
+
+.subscriber-notifications-import-export .export-form {
+    text-align: center;
+    padding: 20px;
+}
+
+.subscriber-notifications-import-export .help-content ul {
+    list-style: disc;
+    margin-left: 20px;
+}
+
+.subscriber-notifications-import-export .help-content li {
+    margin-bottom: 8px;
+}
+
+/* Email logs */
+.subscriber-deleted {
+    color: #999;
+    font-style: italic;
+}
+
+/* Notifications list + preview modal */
+.notification-modal {
+    display: none;
+    position: fixed;
+    z-index: 100000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.notification-modal.is-open {
+    display: block;
+}
+
+.notification-modal-content {
+    background-color: #fff;
+    margin: 5% auto;
+    padding: 0;
+    border: 1px solid #ccd0d4;
+    width: 80%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.notification-modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #ccd0d4;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.notification-modal-header h2 {
+    margin: 0;
+}
+
+.notification-modal-close {
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #666;
+}
+
+.notification-modal-close:hover {
+    color: #000;
+}
+
+.notification-modal-body {
+    padding: 20px;
+}
+
+.subscriber-notifications-notifications span.status {
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.subscriber-notifications-notifications span.status.status-pending {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.subscriber-notifications-notifications span.status.status-sent {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.subscriber-notifications-notifications span.status.status-cancelled {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.subscriber-notifications-notifications span.status.status-active {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.subscriber-notifications-notifications .recurring-yes {
+    color: #155724;
+    font-weight: bold;
+}
+
+.subscriber-notifications-notifications .recurring-no {
+    color: #6c757d;
+}
+
+.subscriber-notifications-notifications .column-actions form {
+    display: inline-block;
+    margin-right: 5px;
+}
+
+.subscriber-notifications-notifications .column-actions input[type="submit"] {
+    margin-right: 5px;
+}
+
+/* Notification create form */
+.notification-form .required {
+    color: #d63638;
+}
+
+#preview-email-result {
+    margin-top: 10px;
+}
+
+.logo-preview img {
+    max-width: 200px;
+    max-height: 100px;
+    border: 1px solid #ddd;
+}
+
+.logo-preview .remove-logo {
+    margin-top: 5px;
+}
+
+.logo-preview .no-logo {
+    width: 200px;
+    height: 100px;
+    border: 2px dashed #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+}

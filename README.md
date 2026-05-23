@@ -389,6 +389,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.4.8
+
+- **Refactor — admin inline assets** — moved inline `<style>` and `<script>` blocks from admin templates into enqueued `assets/css/admin.css` and `assets/js/admin.js`. PHP values (nonces, i18n strings) passed via `wp_localize_script()`. No intentional UI changes
+
 ### Version 3.4.7
 
 - **Admin — Subscribers Import/Export link** — the Subscribers screen **Import/Export CSV** button now opens the Import/Export page at the **Export Subscribers** section (`#export-subscribers`) so users are not left at the long import instructions at the top of the page

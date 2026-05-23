@@ -196,8 +196,23 @@ class SubscriberNotifications_Admin {
         
         $localize = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('subscriber_notifications_nonce'),
+            'nonce'   => wp_create_nonce('subscriber_notifications_nonce'),
             'siteTitle' => get_bloginfo('name'),
+            'notificationList' => array(
+                'previewNonce' => wp_create_nonce('get_notification_preview'),
+            ),
+            'previewEmail' => array(
+                'nonce'          => wp_create_nonce('send_preview_email'),
+                'enterEmail'     => __('Please enter an email address.', 'subscriber-notifications'),
+                'enterSubject'   => __('Please enter a subject.', 'subscriber-notifications'),
+                'enterContent'   => __('Please enter content.', 'subscriber-notifications'),
+                'sending'        => __('Sending...', 'subscriber-notifications'),
+                'sendingPreview' => __('Sending preview email...', 'subscriber-notifications'),
+                'sentSuccess'    => __('Preview email sent successfully!', 'subscriber-notifications'),
+                'sentFailed'     => __('Failed to send preview email: ', 'subscriber-notifications'),
+                'sentError'      => __('Failed to send preview email due to an error.', 'subscriber-notifications'),
+                'buttonLabel'    => __('Send Preview Email', 'subscriber-notifications'),
+            ),
         );
 
         if ($hook === 'toplevel_page_subscriber-notifications') {
@@ -207,6 +222,25 @@ class SubscriberNotifications_Admin {
                 'testMailButton'      => __('Send Test Email', 'subscriber-notifications'),
                 'testMailEnterEmail'  => __('Please enter a test email address.', 'subscriber-notifications'),
                 'testMailFailed'      => __('WordPress mail test failed.', 'subscriber-notifications'),
+            );
+        }
+
+        if (strpos($hook, 'subscriber-notifications-settings') !== false) {
+            $localize['settingsPage'] = true;
+            $localize['settingsGeneral'] = array(
+                'testMailNonce'      => wp_create_nonce('test_wp_mail'),
+                'testMailSending'    => __('Testing...', 'subscriber-notifications'),
+                'testMailButton'     => __('Send Test Email', 'subscriber-notifications'),
+                'testMailEnterEmail' => __('Please enter a test email address.', 'subscriber-notifications'),
+                'testMailFailed'     => __('WordPress mail test failed.', 'subscriber-notifications'),
+            );
+            $localize['emailDesign'] = array(
+                'mediaTitle'   => __('Select Header Logo', 'subscriber-notifications'),
+                'mediaButton'  => __('Use This Logo', 'subscriber-notifications'),
+                'invalidMime'  => __('Please select a valid image file (JPG, PNG, or GIF only). SVG files are not supported for email headers.', 'subscriber-notifications'),
+                'fileTooLarge' => __('Image file size must be 200KB or smaller. Please choose a smaller image.', 'subscriber-notifications'),
+                'removeLogo'   => __('Remove Logo', 'subscriber-notifications'),
+                'noLogo'       => __('No logo selected', 'subscriber-notifications'),
             );
         }
 

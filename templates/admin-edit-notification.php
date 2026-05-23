@@ -176,75 +176,10 @@ if (!defined('ABSPATH')) {
                     <p class="description">
                         <?php _e('Send a test email to see how the notification will look. This email will only be sent to the address you specify.', 'subscriber-notifications'); ?>
                     </p>
-                    <div id="preview-email-result" style="margin-top: 10px;"></div>
+                    <div id="preview-email-result"></div>
                 </td>
             </tr>
         </table>
     </div>
 </div>
 
-<script>
-jQuery(document).ready(function($) {
-    // Send preview email functionality
-    $('#send-preview-email').on('click', function(e) {
-        e.preventDefault();
-        
-        var email = $('#preview_email').val();
-        var subject = $('#notification_subject').val();
-        var content = '';
-        
-        // Get content from TinyMCE editor if it exists, otherwise from textarea
-        if (typeof tinymce !== 'undefined' && tinymce.get('notification_content')) {
-            content = tinymce.get('notification_content').getContent();
-        } else {
-            content = $('#notification_content').val();
-        }
-        
-        if (!email) {
-            alert('<?php _e('Please enter an email address.', 'subscriber-notifications'); ?>');
-            return;
-        }
-        
-        if (!subject) {
-            alert('<?php _e('Please enter a subject.', 'subscriber-notifications'); ?>');
-            return;
-        }
-        
-        if (!content) {
-            alert('<?php _e('Please enter content.', 'subscriber-notifications'); ?>');
-            return;
-        }
-        
-        var button = $(this);
-        var resultDiv = $('#preview-email-result');
-        
-        button.prop('disabled', true).text('<?php _e('Sending...', 'subscriber-notifications'); ?>');
-        resultDiv.html('<p style="color: #666;"><?php _e('Sending preview email...', 'subscriber-notifications'); ?></p>');
-        
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'send_preview_email',
-                nonce: '<?php echo wp_create_nonce('send_preview_email'); ?>',
-                email: email,
-                subject: subject,
-                content: content
-            },
-            success: function(response) {
-                if (response.success) {
-                    resultDiv.html('<p style="color: #46b450;"><?php _e('Preview email sent successfully!', 'subscriber-notifications'); ?></p>');
-                } else {
-                    resultDiv.html('<p style="color: #dc3232;"><?php _e('Failed to send preview email: ', 'subscriber-notifications'); ?>' + response.data + '</p>');
-                }
-            },
-            error: function() {
-                resultDiv.html('<p style="color: #dc3232;"><?php _e('Failed to send preview email due to an error.', 'subscriber-notifications'); ?></p>');
-            },
-            complete: function() {
-                button.prop('disabled', false).text('<?php _e('Send Preview Email', 'subscriber-notifications'); ?>');
-            }
-        });
-    });
-});
-</script>

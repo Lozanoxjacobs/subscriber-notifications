@@ -4,7 +4,7 @@ if (!defined('ABSPATH')) {
 }
 ?>
 
-<div class="wrap">
+<div class="wrap subscriber-notifications-notifications">
     <h1 class="wp-heading-inline"><?php _e('Notifications', 'subscriber-notifications'); ?></h1>
     <a href="<?php echo admin_url('admin.php?page=subscriber-notifications-create'); ?>" class="page-title-action">
         <?php _e('Add New', 'subscriber-notifications'); ?>
@@ -319,7 +319,7 @@ if (!defined('ABSPATH')) {
 </div>
 
 <!-- Notification Preview Modal -->
-<div id="notification-preview-modal" class="notification-modal" style="display: none;">
+<div id="notification-preview-modal" class="notification-modal">
     <div class="notification-modal-content">
         <div class="notification-modal-header">
             <h2><?php _e('Notification Preview', 'subscriber-notifications'); ?></h2>
@@ -331,137 +331,3 @@ if (!defined('ABSPATH')) {
     </div>
 </div>
 
-<script>
-jQuery(document).ready(function($) {
-    // Handle view notification
-    $('.view-notification').on('click', function(e) {
-        e.preventDefault();
-        var notificationId = $(this).data('id');
-        
-        // Get notification data via AJAX
-        $.ajax({
-            url: '<?php echo admin_url('admin-ajax.php'); ?>',
-            type: 'POST',
-            data: {
-                action: 'get_notification_preview',
-                notification_id: notificationId,
-                nonce: '<?php echo wp_create_nonce('get_notification_preview'); ?>'
-            },
-            success: function(response) {
-                if (response.success) {
-                    $('#notification-preview-content').html(response.data);
-                    $('#notification-preview-modal').show();
-                }
-            }
-        });
-    });
-    
-    // Close modal
-    $('.notification-modal-close').on('click', function() {
-        $('#notification-preview-modal').hide();
-    });
-    
-    // Close modal when clicking outside
-    $(window).on('click', function(e) {
-        if (e.target.id === 'notification-preview-modal') {
-            $('#notification-preview-modal').hide();
-        }
-    });
-});
-</script>
-
-<style>
-.notification-modal {
-    position: fixed;
-    z-index: 100000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0,0,0,0.5);
-}
-
-.notification-modal-content {
-    background-color: #fff;
-    margin: 5% auto;
-    padding: 0;
-    border: 1px solid #ccd0d4;
-    width: 80%;
-    max-width: 800px;
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
-.notification-modal-header {
-    padding: 20px;
-    border-bottom: 1px solid #ccd0d4;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.notification-modal-header h2 {
-    margin: 0;
-}
-
-.notification-modal-close {
-    font-size: 24px;
-    font-weight: bold;
-    cursor: pointer;
-    color: #666;
-}
-
-.notification-modal-close:hover {
-    color: #000;
-}
-
-.notification-modal-body {
-    padding: 20px;
-}
-
-.status {
-    padding: 4px 8px;
-    border-radius: 3px;
-    font-size: 12px;
-    font-weight: bold;
-    text-transform: uppercase;
-}
-
-.status-pending {
-    background-color: #fff3cd;
-    color: #856404;
-}
-
-.status-sent {
-    background-color: #d4edda;
-    color: #155724;
-}
-
-.status-cancelled {
-    background-color: #f8d7da;
-    color: #721c24;
-}
-
-.status-active {
-    background-color: #d4edda;
-    color: #155724;
-}
-
-.recurring-yes {
-    color: #155724;
-    font-weight: bold;
-}
-
-.recurring-no {
-    color: #6c757d;
-}
-
-.column-actions form {
-    display: inline-block;
-    margin-right: 5px;
-}
-
-.column-actions input[type="submit"] {
-    margin-right: 5px;
-}
-</style>
