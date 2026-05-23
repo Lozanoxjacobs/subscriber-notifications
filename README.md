@@ -389,6 +389,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.4.5
+
+- **Fix — subscriber admin flash notices not displaying** — flash notice handlers now run on the `admin_notices` hook (before page output) and render the notice directly instead of registering a nested `admin_notices` callback from the page callback, which ran too late to display
+
 ### Version 3.4.4
 
 - **Fix — subscriber admin success notices** — activate, subscribe, unsubscribe, and delete actions on the Subscribers list now use Post-Redirect-Get flash messages (`?message=...`) so success notices appear after redirect instead of being lost when `wp_redirect()` runs in the same request

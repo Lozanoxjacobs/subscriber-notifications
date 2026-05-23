@@ -38,6 +38,8 @@ class SubscriberNotifications_Admin {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_action('admin_init', array($this, 'handle_admin_actions'));
         add_action('admin_init', array($this, 'register_settings'));
+        add_action('admin_notices', array($this, 'maybe_render_notification_flash_notice'));
+        add_action('admin_notices', array($this, 'maybe_render_subscribers_flash_notice'));
         $this->register_scheduling_side_effects();
         add_action('wp_ajax_test_wp_mail', array($this, 'test_wp_mail'));
         add_action('wp_ajax_get_notification_preview', array($this, 'get_notification_preview'));
@@ -725,7 +727,7 @@ class SubscriberNotifications_Admin {
     /**
      * Show a one-time admin notice after redirect (Post-Redirect-Get).
      */
-    private function maybe_render_notification_flash_notice() {
+    public function maybe_render_notification_flash_notice() {
         if (!isset($_GET['page'], $_GET['message'])) {
             return;
         }
@@ -744,12 +746,7 @@ class SubscriberNotifications_Admin {
         }
 
         $text = $messages[$message_key];
-        add_action(
-            'admin_notices',
-            function () use ($text) {
-                echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
-            }
-        );
+        echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
     }
 
     /**
@@ -773,7 +770,7 @@ class SubscriberNotifications_Admin {
     /**
      * Show a one-time admin notice after subscriber action redirect (Post-Redirect-Get).
      */
-    private function maybe_render_subscribers_flash_notice() {
+    public function maybe_render_subscribers_flash_notice() {
         if (!isset($_GET['page'], $_GET['message'])) {
             return;
         }
@@ -795,12 +792,7 @@ class SubscriberNotifications_Admin {
         }
 
         $text = $messages[$message_key];
-        add_action(
-            'admin_notices',
-            function () use ($text) {
-                echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
-            }
-        );
+        echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
     }
     
     /**
@@ -1110,8 +1102,6 @@ class SubscriberNotifications_Admin {
      * Subscribers page
      */
     public function subscribers_page() {
-        $this->maybe_render_subscribers_flash_notice();
-
         $page = isset($_GET['paged']) ? intval($_GET['paged']) : 1;
         
         // Get screen option - WordPress stores it via get_user_option
@@ -1200,8 +1190,6 @@ class SubscriberNotifications_Admin {
      * Edit notification page
      */
     public function edit_notification_page() {
-        $this->maybe_render_notification_flash_notice();
-
         $notification_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
         
         if (!$notification_id) {
