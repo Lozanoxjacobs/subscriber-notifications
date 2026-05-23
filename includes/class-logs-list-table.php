@@ -149,6 +149,53 @@ class SubscriberNotifications_Logs_List_Table extends WP_List_Table {
     }
 
     /**
+     * Status, email type, and date filters above the list table.
+     *
+     * @param string $which Top or bottom table nav.
+     */
+    protected function extra_tablenav($which): void {
+        if ($which !== 'top') {
+            return;
+        }
+
+        $status        = isset($_REQUEST['status']) ? sanitize_text_field(wp_unslash($_REQUEST['status'])) : '';
+        $email_type    = isset($_REQUEST['email_type']) ? sanitize_key(wp_unslash($_REQUEST['email_type'])) : '';
+        $date_from     = isset($_REQUEST['date_from']) ? sanitize_text_field(wp_unslash($_REQUEST['date_from'])) : '';
+        $date_to       = isset($_REQUEST['date_to']) ? sanitize_text_field(wp_unslash($_REQUEST['date_to'])) : '';
+        $subscriber_id = isset($_REQUEST['subscriber_id']) ? intval($_REQUEST['subscriber_id']) : 0;
+        $email_types   = sn_get_email_log_types();
+        ?>
+        <div class="alignleft actions sn-logs-filter-actions">
+            <?php if ($subscriber_id > 0) : ?>
+                <input type="hidden" name="subscriber_id" value="<?php echo esc_attr((string) $subscriber_id); ?>">
+            <?php endif; ?>
+            <label class="screen-reader-text" for="filter-by-status"><?php esc_html_e('Filter by status', 'subscriber-notifications'); ?></label>
+            <select name="status" id="filter-by-status">
+                <option value=""><?php esc_html_e('All Statuses', 'subscriber-notifications'); ?></option>
+                <option value="sent" <?php selected($status, 'sent'); ?>><?php esc_html_e('Sent', 'subscriber-notifications'); ?></option>
+                <option value="failed" <?php selected($status, 'failed'); ?>><?php esc_html_e('Failed', 'subscriber-notifications'); ?></option>
+                <option value="pending" <?php selected($status, 'pending'); ?>><?php esc_html_e('Pending', 'subscriber-notifications'); ?></option>
+            </select>
+            <label class="screen-reader-text" for="filter-by-email-type"><?php esc_html_e('Filter by email type', 'subscriber-notifications'); ?></label>
+            <select name="email_type" id="filter-by-email-type">
+                <option value=""><?php esc_html_e('All Email Types', 'subscriber-notifications'); ?></option>
+                <?php foreach ($email_types as $type_slug => $type_label) : ?>
+                    <option value="<?php echo esc_attr($type_slug); ?>" <?php selected($email_type, $type_slug); ?>>
+                        <?php echo esc_html($type_label); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <label class="screen-reader-text" for="filter-date-from"><?php esc_html_e('Filter from date', 'subscriber-notifications'); ?></label>
+            <input type="date" name="date_from" id="filter-date-from" value="<?php echo esc_attr($date_from); ?>">
+            <label class="screen-reader-text" for="filter-date-to"><?php esc_html_e('Filter to date', 'subscriber-notifications'); ?></label>
+            <input type="date" name="date_to" id="filter-date-to" value="<?php echo esc_attr($date_to); ?>">
+            <?php submit_button(__('Filter', 'subscriber-notifications'), '', 'filter_action', false); ?>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=subscriber-notifications-logs')); ?>" class="button"><?php esc_html_e('Clear Filters', 'subscriber-notifications'); ?></a>
+        </div>
+        <?php
+    }
+
+    /**
      * Render subscriber column.
      *
      * @param object $item Log row.

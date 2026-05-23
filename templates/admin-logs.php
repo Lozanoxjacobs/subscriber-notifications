@@ -28,8 +28,6 @@ foreach ($sn_logs_filter_args as $key => $value) {
 }
 $sn_logs_export_url = wp_nonce_url($sn_logs_export_url, 'export_logs');
 
-$sn_current_email_type = isset($_GET['email_type']) ? sanitize_key(wp_unslash($_GET['email_type'])) : '';
-$sn_email_log_types    = sn_get_email_log_types();
 if (!isset($sn_purge_presets)) {
     $sn_purge_presets = array(30, 90, 180, 365);
 }
@@ -41,40 +39,12 @@ if (!isset($sn_purge_counts)) {
 }
 ?>
 
-<div class="wrap">
+<div class="wrap subscriber-notifications-logs">
     <h1 class="wp-heading-inline"><?php esc_html_e('Email Logs', 'subscriber-notifications'); ?></h1>
     <a href="<?php echo esc_url($sn_logs_export_url); ?>" class="page-title-action">
         <?php esc_html_e('Export Logs', 'subscriber-notifications'); ?>
     </a>
     <hr class="wp-header-end">
-
-    <div class="logs-filters">
-        <form method="get" action="">
-            <input type="hidden" name="page" value="subscriber-notifications-logs">
-
-            <select name="status">
-                <option value=""><?php esc_html_e('All Statuses', 'subscriber-notifications'); ?></option>
-                <option value="sent" <?php selected($sn_logs_filter_args['status'] ?? '', 'sent'); ?>><?php esc_html_e('Sent', 'subscriber-notifications'); ?></option>
-                <option value="failed" <?php selected($sn_logs_filter_args['status'] ?? '', 'failed'); ?>><?php esc_html_e('Failed', 'subscriber-notifications'); ?></option>
-                <option value="pending" <?php selected($sn_logs_filter_args['status'] ?? '', 'pending'); ?>><?php esc_html_e('Pending', 'subscriber-notifications'); ?></option>
-            </select>
-
-            <select name="email_type">
-                <option value=""><?php esc_html_e('All Email Types', 'subscriber-notifications'); ?></option>
-                <?php foreach ($sn_email_log_types as $type_slug => $type_label) : ?>
-                    <option value="<?php echo esc_attr($type_slug); ?>" <?php selected($sn_current_email_type, $type_slug); ?>>
-                        <?php echo esc_html($type_label); ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-
-            <input type="date" name="date_from" value="<?php echo esc_attr($sn_logs_filter_args['date_from'] ?? ''); ?>">
-            <input type="date" name="date_to" value="<?php echo esc_attr($sn_logs_filter_args['date_to'] ?? ''); ?>">
-
-            <input type="submit" class="button" value="<?php esc_attr_e('Filter', 'subscriber-notifications'); ?>">
-            <a href="<?php echo esc_url(admin_url('admin.php?page=subscriber-notifications-logs')); ?>" class="button"><?php esc_html_e('Clear Filters', 'subscriber-notifications'); ?></a>
-        </form>
-    </div>
 
     <div class="logs-maintenance">
         <h2 class="screen-reader-text"><?php esc_html_e('Log maintenance', 'subscriber-notifications'); ?></h2>
@@ -104,9 +74,6 @@ if (!isset($sn_purge_counts)) {
 
     <form method="get">
         <input type="hidden" name="page" value="subscriber-notifications-logs">
-        <?php foreach ($sn_logs_filter_args as $key => $value) : ?>
-            <input type="hidden" name="<?php echo esc_attr($key); ?>" value="<?php echo esc_attr((string) $value); ?>">
-        <?php endforeach; ?>
         <?php $list_table->display(); ?>
     </form>
 </div>

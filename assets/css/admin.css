@@ -240,32 +240,20 @@
     overflow-y: auto;
 }
 
-/* Logs page styles */
-.logs-filters {
-    margin: 20px 0;
-    padding: 15px;
-    background: #f9f9f9;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-.logs-filters form {
+/* Email Logs page */
+.subscriber-notifications-logs .sn-logs-filter-actions {
     display: flex;
-    gap: 10px;
-    align-items: center;
     flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
 }
 
-.logs-filters select,
-.logs-filters input[type="date"] {
-    padding: 5px 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-.logs-filters select {
+.subscriber-notifications-logs .sn-logs-filter-actions select {
     min-width: 150px;
-    padding-right: 30px;
+}
+
+.subscriber-notifications-logs .sn-logs-filter-actions input[type="date"] {
+    max-width: 160px;
 }
 
 .logs-maintenance {
@@ -379,11 +367,6 @@
     }
     
     .subscriber-notifications-subscribers .subscribers-filters form {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    
-    .logs-filters form {
         flex-direction: column;
         align-items: flex-start;
     }

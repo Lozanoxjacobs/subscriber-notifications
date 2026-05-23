@@ -389,6 +389,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.5.1
+
+- **Admin — Email Logs filter UI** — status, email type, and date range filters now live in `WP_List_Table` `extra_tablenav` with a single GET form (consistent with Subscribers and Notifications). Purge maintenance stays in its own POST form
+
 ### Version 3.5.0
 
 - **Refactor — Subscribers admin list table** — Subscribers screen now uses WordPress `WP_List_Table` for columns, sortable headers, search, status filter, pagination, and screen options. Row actions (subscribe, unsubscribe, delete) keep the existing POST + PRG behavior
