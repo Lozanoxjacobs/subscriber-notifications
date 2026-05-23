@@ -33,7 +33,7 @@ $term_display_modes = array(
 
     <?php settings_errors(); ?>
 
-    <form method="post" action="<?php echo esc_url(admin_url('options.php')); ?>">
+    <form method="post" action="<?php echo esc_url(admin_url('options.php')); ?>" id="sn-content-types-form">
         <?php settings_fields($option_group); ?>
 
         <?php if (empty($available_post_types)) : ?>

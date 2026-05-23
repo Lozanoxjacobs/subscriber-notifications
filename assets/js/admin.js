@@ -113,39 +113,89 @@ jQuery(document).ready(function($) {
         $('#notification-options').hide();
     });
     
-    // Auto-save draft data for non-notification admin forms only.
-    $('form').not('.notification-form').on('input change', 'input, textarea, select', function() {
-        var $form = $(this).closest('form');
-        localStorage.setItem('subscriber_notifications_form_data', $form.serialize());
-    });
-
-    var savedData = localStorage.getItem('subscriber_notifications_form_data');
-    if (savedData) {
-        var $draftForm = $('form').not('.notification-form').first();
-        var hasData = $draftForm.find('input[value!=""], textarea:not(:empty)').length > 0;
-
-        if ($draftForm.length && !hasData) {
-            var params = new URLSearchParams(savedData);
-            params.forEach(function(value, key) {
-                if (key === 'notify_subscribers') {
-                    return;
-                }
-
-                var $field = $draftForm.find('[name="' + key + '"]');
-                if ($field.length) {
-                    if ($field.is(':checkbox, :radio')) {
-                        $field.filter('[value="' + value + '"]').prop('checked', true);
-                    } else {
-                        $field.val(value);
-                    }
-                }
-            });
+    function shouldAutoSaveDraft($form) {
+        if ($form.hasClass('notification-form')) {
+            return false;
         }
+
+        var method = ($form.attr('method') || 'get').toLowerCase();
+        if (method === 'get') {
+            return false;
+        }
+
+        if ($form.attr('id') === 'sn-purge-logs-form') {
+            return false;
+        }
+
+        return true;
     }
 
-    $('form').not('.notification-form').on('submit', function() {
-        localStorage.removeItem('subscriber_notifications_form_data');
-        // Reset notify checkbox to unchecked after form submission
+    function getFormDraftKey($form) {
+        var formId = $form.attr('id');
+        if (formId) {
+            return 'subscriber_notifications_form_draft_' + formId;
+        }
+
+        var params = new URLSearchParams(window.location.search);
+        var page = params.get('page') || 'unknown';
+        var tab = params.get('tab') || '';
+        return 'subscriber_notifications_form_draft_' + page + (tab ? '_' + tab : '');
+    }
+
+    function restoreFormDraft($form) {
+        var savedData = localStorage.getItem(getFormDraftKey($form));
+        if (!savedData) {
+            return;
+        }
+
+        var hasData = $form.find('input[value!=""], textarea:not(:empty)').length > 0;
+        if (hasData) {
+            return;
+        }
+
+        var params = new URLSearchParams(savedData);
+        params.forEach(function(value, key) {
+            if (key === 'notify_subscribers') {
+                return;
+            }
+
+            var $field = $form.find('[name="' + key + '"]');
+            if ($field.length) {
+                if ($field.is(':checkbox, :radio')) {
+                    $field.filter('[value="' + value + '"]').prop('checked', true);
+                } else {
+                    $field.val(value);
+                }
+            }
+        });
+    }
+
+    // Drop legacy shared draft key (pre-3.5.2).
+    localStorage.removeItem('subscriber_notifications_form_data');
+
+    $('form').each(function() {
+        var $form = $(this);
+        if (shouldAutoSaveDraft($form)) {
+            restoreFormDraft($form);
+        }
+    });
+
+    $(document).on('input change', 'form input, form textarea, form select', function() {
+        var $form = $(this).closest('form');
+        if (!shouldAutoSaveDraft($form)) {
+            return;
+        }
+
+        localStorage.setItem(getFormDraftKey($form), $form.serialize());
+    });
+
+    $(document).on('submit', 'form', function() {
+        var $form = $(this);
+        if (!shouldAutoSaveDraft($form)) {
+            return;
+        }
+
+        localStorage.removeItem(getFormDraftKey($form));
         $('#notify_subscribers').prop('checked', false);
         $('#notification-options').hide();
     });

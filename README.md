@@ -389,6 +389,11 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.5.2
+
+- **Admin — form draft auto-save** — localStorage drafts are namespaced per form (settings tab, import/export, content types) and skip GET list-table forms so filters no longer bleed across admin screens
+- **Admin — Screen Options** — per-page list table settings now use `set_screen_option_{$option}` instead of the deprecated `set-screen-option` filter
+
 ### Version 3.5.1
 
 - **Admin — Email Logs filter UI** — status, email type, and date range filters now live in `WP_List_Table` `extra_tablenav` with a single GET form (consistent with Subscribers and Notifications). Purge maintenance stays in its own POST form

@@ -53,7 +53,7 @@ class SubscriberNotifications_Admin {
         
         // Screen Options for pagination
         add_action('current_screen', array($this, 'action_screen_options'));
-        add_filter('set-screen-option', array($this, 'filter_save_screen_options'), 10, 3);
+        $this->register_screen_option_filters();
     }
     
     /**
@@ -2899,19 +2899,33 @@ class SubscriberNotifications_Admin {
      * @param mixed $value Option value
      * @return mixed Status or value
      */
-    public function filter_save_screen_options($status, $option, $value) {
-        $allowed_options = array(
+    private function register_screen_option_filters() {
+        $options = array(
             'subscriber_notifications_logs_per_page',
             'subscriber_notifications_subscribers_per_page',
-            'subscriber_notifications_notifications_per_page'
+            'subscriber_notifications_notifications_per_page',
         );
-        
-        if (in_array($option, $allowed_options)) {
-            // WordPress will save this automatically, we just need to return the value
-            return intval($value);
+
+        foreach ($options as $option) {
+            add_filter(
+                'set_screen_option_' . $option,
+                array($this, 'save_screen_option_per_page'),
+                10,
+                3
+            );
         }
-        
-        return $status;
+    }
+
+    /**
+     * Save list-table Screen Options (per-page).
+     *
+     * @param mixed  $status Current status.
+     * @param string $option Option name.
+     * @param mixed  $value  Submitted value.
+     * @return int|mixed
+     */
+    public function save_screen_option_per_page($status, $option, $value) {
+        return max(1, (int) $value);
     }
     
 }

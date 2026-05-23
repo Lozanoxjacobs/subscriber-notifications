@@ -57,7 +57,7 @@ if (!defined('ABSPATH')) {
 
     <?php if (isset($settings_tabs[$active_tab])) : ?>
         <?php settings_errors(); ?>
-        <form method="post" action="<?php echo esc_url(admin_url('options.php')); ?>">
+        <form method="post" action="<?php echo esc_url(admin_url('options.php')); ?>" id="sn-settings-form">
             <?php settings_fields($settings_tabs[$active_tab]['group']); ?>
             <?php do_settings_sections($settings_tabs[$active_tab]['page']); ?>
             <?php submit_button(); ?>
