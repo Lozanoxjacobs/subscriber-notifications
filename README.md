@@ -387,6 +387,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.4.3
+
+- **Fix — email click tracking** — click-tracking links now use literal `&` separators in HTML href attributes (`esc_attr()` instead of `esc_url()`) so multi-parameter `/track/click/` URLs work reliably in email clients. Manage-preferences links and other in-body links are wrapped for click tracking again (only `mailto:`, `tel:`, and existing tracking URLs are skipped). Fallback manage links are appended before click tracking so they are counted too. Redirect validation decodes HTML entities in the destination URL
+
 ### Version 3.4.2
 
 - **Fix — email log type for transactional emails** — `SubscriberNotifications_Email_Sender::send_email()` no longer logs every send as `notification`. Welcome, welcome back, preferences update, and admin test/preview emails now write distinct `email_type` values (`welcome`, `welcome_back`, `preferences_update`, `test`). Notification digests continue to log as `notification`. Email logs and CSV export display types with spaces instead of underscores

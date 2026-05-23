@@ -177,8 +177,9 @@ class SubscriberNotifications_Analytics {
             return false;
         }
         
-        // Decode URL
+        // Decode URL parameters from the tracking redirect.
         $url = urldecode($url);
+        $url = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         
         // Check for dangerous protocols (even if encoded or double-encoded)
         $dangerous_patterns = array(

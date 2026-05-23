@@ -48,18 +48,15 @@ class SubscriberNotifications_Email_Sender {
             'tracking_id'     => $tracking_id,
         ));
 
-        // Add click tracking to links.
-        $content = $this->add_click_tracking($content, $tracking_id);
-
-        // Add tracking pixel.
-        $tracking_pixel = $this->get_tracking_pixel($tracking_id);
-        $content       .= $tracking_pixel;
-
-        // Add manage preferences link only if not already present in global footer.
+        // Append fallback manage link before click tracking so it is tracked too.
         $manage_url = $this->get_manage_preferences_url($subscriber_id);
         if ($manage_url && strpos($content, 'manage') === false && strpos($content, 'Manage Preferences') === false) {
-            $content .= '<p><a href="' . esc_url($manage_url) . '">' . __('Manage Preferences', 'subscriber-notifications') . '</a></p>';
+            $content .= '<p><a href="' . esc_attr($manage_url) . '">' . esc_html__('Manage Preferences', 'subscriber-notifications') . '</a></p>';
         }
+
+        $content = $this->add_click_tracking($content, $tracking_id);
+
+        $content .= $this->get_tracking_pixel($tracking_id);
 
         $headers = array(
             'Content-Type: text/html; charset=UTF-8',
@@ -92,7 +89,7 @@ class SubscriberNotifications_Email_Sender {
             'tracking_id' => $tracking_id,
         ), home_url('track/open/'));
 
-        return '<img src="' . esc_url($tracking_url) . '" width="1" height="1" style="display:none;" />';
+        return '<img src="' . esc_attr($tracking_url) . '" width="1" height="1" style="display:none;" />';
     }
 
     /**
@@ -110,6 +107,56 @@ class SubscriberNotifications_Email_Sender {
     }
 
     /**
+     * Normalize a URL extracted from email HTML before tracking or redirect.
+     *
+     * @param string $url Raw href value.
+     * @return string
+     */
+    private function normalize_email_url($url) {
+        $url = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return $url;
+    }
+
+    /**
+     * Escape a URL for use in an HTML email attribute.
+     *
+     * esc_url() encodes ampersands as entities, which breaks multi-parameter
+     * tracking links in many email clients.
+     *
+     * @param string $url URL to escape.
+     * @return string
+     */
+    private function escape_email_href($url) {
+        return esc_attr($url);
+    }
+
+    /**
+     * Whether a link should skip click-tracking wrapping.
+     *
+     * @param string $url Normalized destination URL.
+     * @return bool
+     */
+    private function should_skip_click_tracking($url) {
+        if ($url === '') {
+            return true;
+        }
+
+        if (strpos($url, 'mailto:') === 0 || strpos($url, 'tel:') === 0) {
+            return true;
+        }
+
+        if (strpos($url, '/track/click') !== false || strpos($url, 'track/click/') !== false) {
+            return true;
+        }
+
+        if (strpos($url, '/track/open') !== false || strpos($url, 'track/open/') !== false) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Add click tracking to links in content.
      *
      * @param string $content Email content.
@@ -122,20 +169,17 @@ class SubscriberNotifications_Email_Sender {
         return preg_replace_callback($pattern, function ($matches) use ($tracking_id) {
             $full_match = $matches[0];
             $before_href = $matches[1];
-            $url         = $matches[2];
+            $url         = $this->normalize_email_url($matches[2]);
             $after_href  = $matches[3];
             $link_text   = $matches[4];
 
-            if (strpos($url, 'action=manage') !== false || strpos($url, 'token=') !== false) {
-                return $full_match;
-            }
-            if (strpos($url, 'mailto:') === 0 || strpos($url, 'tel:') === 0) {
+            if ($this->should_skip_click_tracking($url)) {
                 return $full_match;
             }
 
             $tracking_url = $this->get_click_tracking_url($url, $tracking_id);
 
-            return '<a ' . $before_href . 'href="' . esc_url($tracking_url) . '"' . $after_href . '>' . $link_text . '</a>';
+            return '<a ' . $before_href . 'href="' . $this->escape_email_href($tracking_url) . '"' . $after_href . '>' . $link_text . '</a>';
         }, $content);
     }
 
