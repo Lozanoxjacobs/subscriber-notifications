@@ -87,7 +87,7 @@ function subscriber_notifications_format_wp_user_cell($subscriber) {
     <div class="subscriber-notifications-subscribers">
         <div class="subscribers-header">
             <div class="subscribers-actions">
-                <a href="<?php echo admin_url('admin.php?page=subscriber-notifications-import-export'); ?>" class="button">
+                <a href="<?php echo admin_url('admin.php?page=subscriber-notifications-import-export#export-subscribers'); ?>" class="button">
                     <?php _e('Import/Export CSV', 'subscriber-notifications'); ?>
                 </a>
             </div>

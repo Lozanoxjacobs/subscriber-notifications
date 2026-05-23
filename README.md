@@ -389,6 +389,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.4.7
+
+- **Admin — Subscribers Import/Export link** — the Subscribers screen **Import/Export CSV** button now opens the Import/Export page at the **Export Subscribers** section (`#export-subscribers`) so users are not left at the long import instructions at the top of the page
+
 ### Version 3.4.6
 
 - **Cleanup — remove dead admin code** — dropped unused notification AJAX handlers (`save_notification`, `update_notification`), dead subscriber-action and bulk-action JavaScript in `admin.js`, and unused Thickbox script/style enqueues. Notification create/edit continue to use form POST; subscribers list uses form POST with PRG flash notices

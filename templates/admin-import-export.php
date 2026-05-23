@@ -109,7 +109,7 @@ if (!defined('ABSPATH')) {
         </div>
         
         <!-- Export Section -->
-        <div class="export-section">
+        <div class="export-section" id="export-subscribers">
             <h2><?php _e('Export Subscribers', 'subscriber-notifications'); ?></h2>
             
             <div class="export-instructions">
@@ -225,6 +225,10 @@ if (!defined('ABSPATH')) {
     color: #646970;
     font-size: 12px;
     font-style: italic;
+}
+
+.subscriber-notifications-import-export #export-subscribers {
+    scroll-margin-top: 32px;
 }
 
 .subscriber-notifications-import-export .export-form {
