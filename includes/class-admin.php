@@ -1315,7 +1315,7 @@ class SubscriberNotifications_Admin {
             fputcsv($output, array(
                 $subscriber_name,
                 $subscriber_email,
-                ucfirst($log->email_type),
+                ucfirst(str_replace('_', ' ', (string) $log->email_type)),
                 ucfirst($log->status),
                 $log->sent_date,
                 $log->open_count,
@@ -2504,7 +2504,7 @@ class SubscriberNotifications_Admin {
             $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $sample_subscriber);
 
             $mailer = new SubscriberNotifications_Email_Sender();
-            $result = $mailer->send_email($email, $processed_subject, $processed_content, 0, 0);
+            $result = $mailer->send_email($email, $processed_subject, $processed_content, 0, 0, 'test');
 
             if ($result) {
                 wp_send_json_success(__('Preview email sent successfully!', 'subscriber-notifications'));

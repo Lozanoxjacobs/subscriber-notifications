@@ -387,6 +387,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.4.2
+
+- **Fix — email log type for transactional emails** — `SubscriberNotifications_Email_Sender::send_email()` no longer logs every send as `notification`. Welcome, welcome back, preferences update, and admin test/preview emails now write distinct `email_type` values (`welcome`, `welcome_back`, `preferences_update`, `test`). Notification digests continue to log as `notification`. Email logs and CSV export display types with spaces instead of underscores
+
 ### Version 3.4.1
 
 - **Cleanup — remove legacy unsubscribe URL and migration code** — dropped the `?action=unsubscribe&token=...` redirect to the manage-preferences page; the frontend route handler is now `handle_manage_preferences_route()` and only serves `?action=manage&token=...`. Removed the `unsubscribe_token` → `management_token` database migration, activation-time cleanup of obsolete `unsubscribe_page_*` options, and the email click-tracking skip for old unsubscribe URLs. Preferences-page unsubscribe (AJAX) and admin unsubscribe are unchanged

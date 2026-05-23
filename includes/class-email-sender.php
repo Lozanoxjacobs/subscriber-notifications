@@ -28,9 +28,15 @@ class SubscriberNotifications_Email_Sender {
      * @param string $content Email content.
      * @param int    $subscriber_id Subscriber ID.
      * @param int    $notification_id Notification ID.
+     * @param string $email_type Log type slug (e.g. notification, welcome, preferences_update).
      * @return bool True on success, false on failure.
      */
-    public function send_email($to_email, $subject, $content, $subscriber_id = 0, $notification_id = 0) {
+    public function send_email($to_email, $subject, $content, $subscriber_id = 0, $notification_id = 0, $email_type = 'notification') {
+        $email_type = sanitize_key($email_type);
+        if ('' === $email_type) {
+            $email_type = 'notification';
+        }
+
         $tracking_id = wp_generate_password(32, false);
 
         // Log email attempt.
@@ -38,7 +44,7 @@ class SubscriberNotifications_Email_Sender {
         $log_id = $database->log_email(array(
             'subscriber_id'   => $subscriber_id,
             'notification_id' => $notification_id,
-            'email_type'      => 'notification',
+            'email_type'      => $email_type,
             'tracking_id'     => $tracking_id,
         ));
 

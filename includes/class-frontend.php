@@ -492,7 +492,7 @@ class SubscriberNotifications_Frontend {
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
 
         $mailer = new SubscriberNotifications_Email_Sender();
-        $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
+        $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0, 'welcome');
     }
 
     /**
@@ -513,7 +513,7 @@ class SubscriberNotifications_Frontend {
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
 
         $mailer = new SubscriberNotifications_Email_Sender();
-        $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
+        $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0, 'welcome_back');
     }
 
     /**
@@ -736,7 +736,7 @@ class SubscriberNotifications_Frontend {
         $processed_content = $formatter->wrap_content_with_css($processed_content, $email_css, $subscriber);
 
         $mailer = new SubscriberNotifications_Email_Sender();
-        $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0);
+        $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0, 'preferences_update');
     }
 
     /**

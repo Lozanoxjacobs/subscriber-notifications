@@ -105,7 +105,7 @@ function format_log_date_local($date_value) {
                             <?php echo esc_html($log->email); ?>
                         <?php endif; ?>
                     </td>
-                    <td><?php echo esc_html(ucfirst($log->email_type)); ?></td>
+                    <td><?php echo esc_html(ucfirst(str_replace('_', ' ', (string) $log->email_type))); ?></td>
                     <td>
                         <span class="status-<?php echo esc_attr($log->status); ?>">
                             <?php echo esc_html(ucfirst($log->status)); ?>
