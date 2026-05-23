@@ -7,28 +7,6 @@ $recent_logs        = $snapshot['recent_logs'] ?? array();
 $recent_subscribers = $snapshot['recent_subscribers'] ?? array();
 $urls               = $snapshot['urls'] ?? array();
 
-if (!function_exists('sn_dashboard_format_log_date')) {
-    /**
-     * Format log sent_date (UTC storage) for dashboard display.
-     *
-     * @param string|null $date_value Raw datetime.
-     * @return string
-     */
-    function sn_dashboard_format_log_date($date_value) {
-        if (empty($date_value)) {
-            return '—';
-        }
-        try {
-            $utc = new DateTimeZone('UTC');
-            $dt  = new DateTime($date_value, $utc);
-            $dt->setTimezone(wp_timezone());
-            return $dt->format('M j, Y g:i A');
-        } catch (Exception $e) {
-            return $date_value;
-        }
-    }
-}
-
 if (!function_exists('sn_dashboard_format_subscriber_date')) {
     /**
      * Format subscriber date_added (UTC) for dashboard display.
@@ -74,13 +52,13 @@ if (!function_exists('sn_dashboard_format_subscriber_date')) {
                     <?php foreach ($recent_logs as $log) : ?>
                         <tr>
                             <td><?php echo esc_html($log->email ?: ($log->name ?: '—')); ?></td>
-                            <td><?php echo esc_html(ucfirst(str_replace('_', ' ', (string) $log->email_type))); ?></td>
+                            <td><?php echo esc_html(sn_format_email_log_type($log->email_type)); ?></td>
                             <td>
                                 <span class="status-<?php echo esc_attr($log->status); ?>">
                                     <?php echo esc_html(ucfirst($log->status)); ?>
                                 </span>
                             </td>
-                            <td><?php echo esc_html(sn_dashboard_format_log_date($log->sent_date)); ?></td>
+                            <td><?php echo esc_html(sn_format_log_date_utc($log->sent_date)); ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

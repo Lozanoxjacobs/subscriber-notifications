@@ -769,45 +769,113 @@ class SubscriberNotifications_Database {
         return array($where_conditions, $where_values);
     }
     
+
     /**
-     * Get logs
-     * 
-     * @param array $args Query arguments
-     * @return array Array of log objects
+     * Build WHERE clause fragments for email log queries.
+     *
+     * @param array  $args            Query arguments.
+     * @param string $sent_date_column Qualified sent_date column (e.g. l.sent_date or sent_date).
+     * @return array{0: array, 1: array}
      */
-    public function get_logs(array $args = array()): array {
-        $defaults = array(
-            'limit' => 20,
-            'offset' => 0,
-            'subscriber_id' => 0,
-            'status' => '',
-            'date_from' => '',
-            'date_to' => ''
-        );
-        
-        $args = wp_parse_args($args, $defaults);
-        
-        $where_conditions = array("1=1");
-        $where_values = array();
-        
-        if (!empty($args['subscriber_id'])) {
-            $where_conditions[] = "l.subscriber_id = %d";
-            $where_values[] = $args['subscriber_id'];
+    private function build_log_where(array $args, string $sent_date_column): array {
+        $where_conditions = array('1=1');
+        $where_values     = array();
+
+        $subscriber_id = isset($args['subscriber_id']) ? (int) $args['subscriber_id'] : 0;
+        if ($subscriber_id > 0) {
+            $prefix = (strpos($sent_date_column, '.') !== false) ? substr($sent_date_column, 0, strpos($sent_date_column, '.')) . '.' : '';
+            $where_conditions[] = $prefix . 'subscriber_id = %d';
+            $where_values[]     = $subscriber_id;
         }
-        
-        if (!empty($args['status'])) {
-            $where_conditions[] = "l.status = %s";
-            $where_values[] = $args['status'];
+
+        $status = isset($args['status']) ? sanitize_text_field((string) $args['status']) : '';
+        if ($status !== '') {
+            $prefix = (strpos($sent_date_column, '.') !== false) ? substr($sent_date_column, 0, strpos($sent_date_column, '.')) . '.' : '';
+            $where_conditions[] = $prefix . 'status = %s';
+            $where_values[]     = $status;
+        }
+
+        $email_type = isset($args['email_type']) ? sanitize_key((string) $args['email_type']) : '';
+        if ($email_type !== '' && isset(sn_get_email_log_types()[ $email_type ])) {
+            $prefix = (strpos($sent_date_column, '.') !== false) ? substr($sent_date_column, 0, strpos($sent_date_column, '.')) . '.' : '';
+            $where_conditions[] = $prefix . 'email_type = %s';
+            $where_values[]     = $email_type;
         }
 
         list($where_conditions, $where_values) = $this->append_log_sent_date_filters(
             $where_conditions,
             $where_values,
-            (string) $args['date_from'],
-            (string) $args['date_to'],
-            'l.sent_date'
+            (string) ($args['date_from'] ?? ''),
+            (string) ($args['date_to'] ?? ''),
+            $sent_date_column
         );
-        
+
+        return array($where_conditions, $where_values);
+    }
+
+    /**
+     * Delete email logs with sent_date older than the given number of days.
+     *
+     * sent_date is stored in UTC; cutoff is computed from UTC now.
+     *
+     * @param int $days Age threshold in days (minimum 1).
+     * @return int Rows deleted.
+     */
+    /**
+     * Count email logs with sent_date older than the given number of days.
+     *
+     * @param int $days Age threshold in days (minimum 1).
+     * @return int Matching row count.
+     */
+    public function count_logs_older_than(int $days): int {
+        $days = max(1, $days);
+        $cutoff = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+            ->modify('-' . $days . ' days')
+            ->format('Y-m-d H:i:s');
+
+        $sql = $this->wpdb->prepare(
+            "SELECT COUNT(*) FROM {$this->logs_table} WHERE sent_date < %s",
+            $cutoff
+        );
+
+        return (int) $this->wpdb->get_var($sql);
+    }
+
+    public function delete_logs_older_than(int $days): int {
+        $days = max(1, $days);
+        $cutoff = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+            ->modify('-' . $days . ' days')
+            ->format('Y-m-d H:i:s');
+
+        $sql = $this->wpdb->prepare(
+            "DELETE FROM {$this->logs_table} WHERE sent_date < %s",
+            $cutoff
+        );
+
+        $result = $this->wpdb->query($sql);
+        return ($result === false) ? 0 : (int) $result;
+    }
+
+    /**
+     * Get logs
+     *
+     * @param array $args Query arguments
+     * @return array Array of log objects
+     */
+    public function get_logs(array $args = array()): array {
+        $defaults = array(
+            'limit'         => 20,
+            'offset'        => 0,
+            'subscriber_id' => 0,
+            'status'        => '',
+            'email_type'    => '',
+            'date_from'     => '',
+            'date_to'       => '',
+        );
+
+        $args = wp_parse_args($args, $defaults);
+
+        list($where_conditions, $where_values) = $this->build_log_where($args, 'l.sent_date');
         $where_clause = implode(' AND ', $where_conditions);
         
         // Build base SQL query
@@ -844,34 +912,15 @@ class SubscriberNotifications_Database {
     public function get_logs_count(array $args = array()): int {
         $defaults = array(
             'subscriber_id' => 0,
-            'status' => '',
-            'date_from' => '',
-            'date_to' => ''
+            'status'        => '',
+            'email_type'    => '',
+            'date_from'     => '',
+            'date_to'       => '',
         );
-        
-        $args = wp_parse_args($args, $defaults);
-        
-        $where_conditions = array("1=1");
-        $where_values = array();
-        
-        if (!empty($args['subscriber_id'])) {
-            $where_conditions[] = "subscriber_id = %d";
-            $where_values[] = $args['subscriber_id'];
-        }
-        
-        if (!empty($args['status'])) {
-            $where_conditions[] = "status = %s";
-            $where_values[] = $args['status'];
-        }
 
-        list($where_conditions, $where_values) = $this->append_log_sent_date_filters(
-            $where_conditions,
-            $where_values,
-            (string) $args['date_from'],
-            (string) $args['date_to'],
-            'sent_date'
-        );
-        
+        $args = wp_parse_args($args, $defaults);
+
+        list($where_conditions, $where_values) = $this->build_log_where($args, 'sent_date');
         $where_clause = implode(' AND ', $where_conditions);
         
         if (empty($where_values)) {

@@ -389,6 +389,18 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.4.12
+
+- **Fix — Email Logs purge summary text** — JavaScript now substitutes `%1$s` / `%2$s` placeholders correctly (was showing raw `%1$d` format strings)
+- **Fix — Email Logs purge** — purge form now posts via `admin-post.php` (reliable WordPress admin POST handler). Each age preset shows how many entries match; **Purge** is disabled when the count is zero. Success and warning notices explain whether rows were deleted or none matched the selected age
+
+### Version 3.4.11
+
+- **Admin — Email Logs filters and maintenance** — added **Email Type** filter (notification, welcome, welcome back, preferences update, test) wired through list, pagination, and CSV export
+- **Refactor — shared log date helpers** — consolidated UTC and site-timezone formatters and email type labels into `includes/log-date-helpers.php`; dashboard recent activity uses the same helpers
+- **Admin — Email Logs accessibility** — table header cells now use `scope="col"`
+- **Admin — purge old logs** — manual purge of entries older than 30 / 90 / 180 / 365 days with browser confirm, PRG flash notice showing deleted count; CSV export date columns formatted in site timezone
+
 ### Version 3.4.10
 
 - **Fix — email log date filters** — date range filters on **Email Logs** now include the full end day and convert site-calendar dates to UTC before querying `sent_date` (stored as UTC). Previously `date_to=YYYY-MM-DD` was compared as midnight, which excluded almost all rows on that day; filters also did not match dates shown in the site timezone

@@ -40,6 +40,8 @@ class SubscriberNotifications_Admin {
         add_action('admin_init', array($this, 'register_settings'));
         add_action('admin_notices', array($this, 'maybe_render_notification_flash_notice'));
         add_action('admin_notices', array($this, 'maybe_render_subscribers_flash_notice'));
+        add_action('admin_notices', array($this, 'maybe_render_logs_flash_notice'));
+        add_action('admin_post_subscriber_notifications_purge_logs', array($this, 'handle_purge_logs'));
         $this->register_scheduling_side_effects();
         add_action('wp_ajax_test_wp_mail', array($this, 'test_wp_mail'));
         add_action('wp_ajax_get_notification_preview', array($this, 'get_notification_preview'));
@@ -225,6 +227,14 @@ class SubscriberNotifications_Admin {
             );
         }
 
+        if (strpos($hook, 'subscriber-notifications-logs') !== false) {
+            $localize['logsMaintenance'] = array(
+                'matchTemplate'     => __('%1$s log entries match this age (older than %2$s days).', 'subscriber-notifications'),
+                'matchNoneTemplate' => __('No log entries are older than %2$s days.', 'subscriber-notifications'),
+                'confirmTemplate'   => __('Permanently delete %1$s log entries older than %2$s days? This cannot be undone.', 'subscriber-notifications'),
+            );
+        }
+
         if (strpos($hook, 'subscriber-notifications-settings') !== false) {
             $localize['settingsPage'] = true;
             $localize['settingsGeneral'] = array(
@@ -261,6 +271,7 @@ class SubscriberNotifications_Admin {
             $this->export_logs();
             // export_logs() will exit, so we won't reach here
         }
+
         
         // Handle subscriber actions
         if (isset($_POST['action']) && isset($_POST['subscriber_id'])) {
@@ -825,6 +836,89 @@ class SubscriberNotifications_Admin {
         echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
     }
     
+
+    /**
+     * Admin URL for the email logs screen.
+     *
+     * @param string $message Optional flash message key (e.g. `logs_purged`).
+     * @return string
+     */
+    private function get_logs_admin_url($message = '') {
+        $args = array(
+            'page' => 'subscriber-notifications-logs',
+        );
+
+        if ($message !== '') {
+            $args['message'] = sanitize_key($message);
+        }
+
+        return add_query_arg($args, admin_url('admin.php'));
+    }
+
+    /**
+     * Show a one-time admin notice after log purge redirect (Post-Redirect-Get).
+     */
+    public function maybe_render_logs_flash_notice() {
+        if (!isset($_GET['page'], $_GET['message'])) {
+            return;
+        }
+
+        if ($_GET['page'] !== 'subscriber-notifications-logs') {
+            return;
+        }
+
+        $message_key = sanitize_key(wp_unslash($_GET['message']));
+        if ($message_key !== 'logs_purged') {
+            return;
+        }
+
+        $transient_key = 'sn_logs_purge_count_' . get_current_user_id();
+        $deleted_count = get_transient($transient_key);
+        delete_transient($transient_key);
+
+        if ($deleted_count === false) {
+            $deleted_count = 0;
+        }
+
+        $text = sprintf(
+            _n('%d log entry deleted.', '%d log entries deleted.', (int) $deleted_count, 'subscriber-notifications'),
+            (int) $deleted_count
+        );
+
+        echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
+    }
+
+    /**
+     * Handle purge logs POST (delete entries older than N days).
+     */
+    public function handle_purge_logs() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have permission to purge logs.', 'subscriber-notifications'));
+        }
+
+        check_admin_referer('sn_purge_logs', 'sn_purge_logs_nonce');
+
+        $allowed_days = array(30, 90, 180, 365);
+        $days         = isset($_POST['purge_days']) ? (int) $_POST['purge_days'] : 0;
+
+        if (!in_array($days, $allowed_days, true)) {
+            wp_die(__('Invalid purge age selected.', 'subscriber-notifications'));
+        }
+
+        $deleted = $this->database->delete_logs_older_than($days);
+        set_transient(
+            'sn_logs_purge_result_' . get_current_user_id(),
+            array(
+                'deleted' => $deleted,
+                'days'    => $days,
+            ),
+            MINUTE_IN_SECONDS
+        );
+
+        wp_safe_redirect($this->get_logs_admin_url('logs_purged'));
+        exit;
+    }
+    
     /**
      * Handle CSV import
      */
@@ -1269,24 +1363,32 @@ class SubscriberNotifications_Admin {
         $offset = ($page - 1) * $per_page;
         
         $args = array(
-            'limit' => $per_page,
-            'offset' => $offset,
+            'limit'         => $per_page,
+            'offset'        => $offset,
             'subscriber_id' => isset($_GET['subscriber_id']) ? intval($_GET['subscriber_id']) : 0,
-            'status' => isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '',
-            'date_from' => isset($_GET['date_from']) ? sanitize_text_field($_GET['date_from']) : '',
-            'date_to' => isset($_GET['date_to']) ? sanitize_text_field($_GET['date_to']) : ''
+            'status'        => isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : '',
+            'email_type'    => isset($_GET['email_type']) ? sanitize_key(wp_unslash($_GET['email_type'])) : '',
+            'date_from'     => isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '',
+            'date_to'       => isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '',
         );
         
         $logs = $this->database->get_logs($args);
         
         $count_args = array(
             'subscriber_id' => $args['subscriber_id'],
-            'status' => $args['status'],
-            'date_from' => $args['date_from'],
-            'date_to' => $args['date_to']
+            'status'        => $args['status'],
+            'email_type'    => $args['email_type'],
+            'date_from'     => $args['date_from'],
+            'date_to'       => $args['date_to'],
         );
         $total_logs = $this->database->get_logs_count($count_args);
         $total_pages = ceil($total_logs / $per_page);
+
+        $sn_purge_presets = array(30, 90, 180, 365);
+        $sn_purge_counts  = array();
+        foreach ($sn_purge_presets as $purge_days) {
+            $sn_purge_counts[ $purge_days ] = $this->database->count_logs_older_than($purge_days);
+        }
         
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-logs.php';
     }
@@ -1307,12 +1409,13 @@ class SubscriberNotifications_Admin {
         
         // Get filter parameters (same as logs_page)
         $args = array(
-            'limit' => 0, // No limit for export
-            'offset' => 0,
+            'limit'         => 0,
+            'offset'        => 0,
             'subscriber_id' => isset($_GET['subscriber_id']) ? intval($_GET['subscriber_id']) : 0,
-            'status' => isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '',
-            'date_from' => isset($_GET['date_from']) ? sanitize_text_field($_GET['date_from']) : '',
-            'date_to' => isset($_GET['date_to']) ? sanitize_text_field($_GET['date_to']) : ''
+            'status'        => isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : '',
+            'email_type'    => isset($_GET['email_type']) ? sanitize_key(wp_unslash($_GET['email_type'])) : '',
+            'date_from'     => isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '',
+            'date_to'       => isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '',
         );
         
         // Get all logs matching filters
@@ -1340,11 +1443,11 @@ class SubscriberNotifications_Admin {
             __('Subscriber Email', 'subscriber-notifications'),
             __('Email Type', 'subscriber-notifications'),
             __('Status', 'subscriber-notifications'),
-            __('Sent Date (UTC)', 'subscriber-notifications'),
+            __('Sent Date (site time)', 'subscriber-notifications'),
             __('Opens', 'subscriber-notifications'),
             __('Clicks', 'subscriber-notifications'),
-            __('Last Opened', 'subscriber-notifications'),
-            __('Last Clicked', 'subscriber-notifications'),
+            __('Last Opened (site time)', 'subscriber-notifications'),
+            __('Last Clicked (site time)', 'subscriber-notifications'),
             __('Error Message', 'subscriber-notifications')
         ));
         
@@ -1366,13 +1469,13 @@ class SubscriberNotifications_Admin {
             fputcsv($output, array(
                 $subscriber_name,
                 $subscriber_email,
-                ucfirst(str_replace('_', ' ', (string) $log->email_type)),
+                sn_format_email_log_type($log->email_type),
                 ucfirst($log->status),
-                $log->sent_date,
+                sn_format_log_date_utc($log->sent_date),
                 $log->open_count,
                 $log->click_count,
-                $log->last_opened ? $log->last_opened : '',
-                $log->last_clicked ? $log->last_clicked : '',
+                sn_format_log_date_local($log->last_opened),
+                sn_format_log_date_local($log->last_clicked),
                 $log->error_message ? $log->error_message : ''
             ));
         }

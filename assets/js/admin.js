@@ -466,3 +466,46 @@ jQuery(document).ready(function($) {
     }
 
 });
+
+
+(function ($) {
+    function snFormatMaintenanceTemplate(template, count, days) {
+        return String(template)
+            .replace(/%1\$[ds]/g, String(count))
+            .replace(/%2\$[ds]/g, String(days));
+    }
+
+    function snUpdatePurgeSummary() {
+        var $form = $('#sn-purge-logs-form');
+        if (!$form.length || !window.subscriberNotifications || !subscriberNotifications.logsMaintenance) {
+            return;
+        }
+
+        var cfg = subscriberNotifications.logsMaintenance;
+        var $select = $form.find('#sn-purge-days');
+        var $summary = $('#sn-purge-match-summary');
+        var $button = $form.find('button[type="submit"]');
+        var count = parseInt($select.find(':selected').data('match-count'), 10) || 0;
+        var days = $select.val();
+        var summaryTemplate = count > 0 ? cfg.matchTemplate : cfg.matchNoneTemplate;
+
+        $summary.text(snFormatMaintenanceTemplate(summaryTemplate, count, days));
+        $button.prop('disabled', count === 0);
+
+        $form.off('submit.snPurgeLogs').on('submit.snPurgeLogs', function (event) {
+            if (count === 0) {
+                event.preventDefault();
+                return false;
+            }
+
+            var message = snFormatMaintenanceTemplate(cfg.confirmTemplate, count, days);
+
+            if (!window.confirm(message)) {
+                event.preventDefault();
+            }
+        });
+    }
+
+    $(document).ready(snUpdatePurgeSummary);
+    $(document).on('change', '#sn-purge-days', snUpdatePurgeSummary);
+})(jQuery);
