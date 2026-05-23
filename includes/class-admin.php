@@ -271,43 +271,23 @@ class SubscriberNotifications_Admin {
         switch ($action) {
             case 'activate':
                 $this->database->update_subscriber($subscriber_id, array('status' => 'active'));
-                add_action('admin_notices', function() {
-                    echo '<div class="notice notice-success"><p>' . __('Subscriber activated successfully.', 'subscriber-notifications') . '</p></div>';
-                });
-                // Redirect to show all statuses so user can see the change
-                wp_redirect(admin_url('admin.php?page=subscriber-notifications-subscribers'));
+                wp_safe_redirect($this->get_subscribers_admin_url('activated'));
                 exit;
-                break;
-                
+
             case 'unsubscribe':
                 $this->database->update_subscriber($subscriber_id, array('status' => 'inactive'));
-                add_action('admin_notices', function() {
-                    echo '<div class="notice notice-success"><p>' . __('Subscriber unsubscribed successfully.', 'subscriber-notifications') . '</p></div>';
-                });
-                // Redirect to show all statuses so user can see the change
-                wp_redirect(admin_url('admin.php?page=subscriber-notifications-subscribers'));
+                wp_safe_redirect($this->get_subscribers_admin_url('unsubscribed'));
                 exit;
-                break;
-                
+
             case 'subscribe':
                 $this->database->update_subscriber($subscriber_id, array('status' => 'active'));
-                add_action('admin_notices', function() {
-                    echo '<div class="notice notice-success"><p>' . __('Subscriber subscribed successfully.', 'subscriber-notifications') . '</p></div>';
-                });
-                // Redirect to show all statuses so user can see the change
-                wp_redirect(admin_url('admin.php?page=subscriber-notifications-subscribers'));
+                wp_safe_redirect($this->get_subscribers_admin_url('subscribed'));
                 exit;
-                break;
-                
+
             case 'delete':
                 $this->database->delete_subscriber($subscriber_id);
-                add_action('admin_notices', function() {
-                    echo '<div class="notice notice-success"><p>' . __('Subscriber deleted successfully.', 'subscriber-notifications') . '</p></div>';
-                });
-                // Redirect to show all statuses so user can see the change
-                wp_redirect(admin_url('admin.php?page=subscriber-notifications-subscribers'));
+                wp_safe_redirect($this->get_subscribers_admin_url('deleted'));
                 exit;
-                break;
         }
     }
     
@@ -771,6 +751,57 @@ class SubscriberNotifications_Admin {
             }
         );
     }
+
+    /**
+     * Admin URL for the subscribers list screen.
+     *
+     * @param string $message Optional flash message key (e.g. `subscribed`).
+     * @return string
+     */
+    private function get_subscribers_admin_url($message = '') {
+        $args = array(
+            'page' => 'subscriber-notifications-subscribers',
+        );
+
+        if ($message !== '') {
+            $args['message'] = sanitize_key($message);
+        }
+
+        return add_query_arg($args, admin_url('admin.php'));
+    }
+
+    /**
+     * Show a one-time admin notice after subscriber action redirect (Post-Redirect-Get).
+     */
+    private function maybe_render_subscribers_flash_notice() {
+        if (!isset($_GET['page'], $_GET['message'])) {
+            return;
+        }
+
+        if ($_GET['page'] !== 'subscriber-notifications-subscribers') {
+            return;
+        }
+
+        $message_key = sanitize_key(wp_unslash($_GET['message']));
+        $messages    = array(
+            'activated'    => __('Subscriber activated successfully.', 'subscriber-notifications'),
+            'unsubscribed' => __('Subscriber unsubscribed successfully.', 'subscriber-notifications'),
+            'subscribed'   => __('Subscriber subscribed successfully.', 'subscriber-notifications'),
+            'deleted'      => __('Subscriber deleted successfully.', 'subscriber-notifications'),
+        );
+
+        if (!isset($messages[$message_key])) {
+            return;
+        }
+
+        $text = $messages[$message_key];
+        add_action(
+            'admin_notices',
+            function () use ($text) {
+                echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
+            }
+        );
+    }
     
     /**
      * Handle CSV import
@@ -1079,6 +1110,8 @@ class SubscriberNotifications_Admin {
      * Subscribers page
      */
     public function subscribers_page() {
+        $this->maybe_render_subscribers_flash_notice();
+
         $page = isset($_GET['paged']) ? intval($_GET['paged']) : 1;
         
         // Get screen option - WordPress stores it via get_user_option

@@ -22,11 +22,10 @@ A comprehensive WordPress plugin for managing subscriber notifications with imme
 - **Recurring Notification Support** - Create and manage notifications that send repeatedly
 - **Subscriber Management** - View subscribers (including **WP User** link and ID), search, activate/deactivate, delete, and CSV import/export
 - **Notification Creation** - Rich text editor with shortcodes and live preview
-- **Email Logs** - Track all email activity with detailed analytics
+- **Email Logs** - Track all email activity with open/click counts and log type (notification, welcome, preferences update, test, etc.)
 - **Content Types** - Enable public post types and taxonomies, term display rules (all / children of / include / exclude), and form labels
 - **Settings** - Scheduling, CAPTCHA, email templates, Email Design branding, and general options (test email, hide empty terms on form, delete on uninstall)
 - **Test email** - Send a test message to verify mail delivery (`wp_mail()`)
-- **Migration Tools** - Convert existing notifications to recurring format
 
 ## Installation
 
@@ -51,7 +50,7 @@ A comprehensive WordPress plugin for managing subscriber notifications with imme
 2. **Subscriber choices** — Each person’s selected terms and delivery frequency are saved when they subscribe or update preferences. Each notification stores which terms that send is about.
 3. **Who gets an email** — Active subscribers are matched by frequency (daily, weekly, or monthly), then filtered to those who share at least one targeted term with the notification.
 4. **What they see** — Email content uses shortcodes. `[content_feed]` builds a personalized list of posts per recipient. Global header, footer, and styling come from **Email Design** settings.
-5. **Delivery** — Mail is sent through WordPress (use SMTP or a mail plugin on your host if needed). Opens and clicks can be logged when tracking is enabled.
+5. **Delivery** — Mail is sent through WordPress (use SMTP or a mail plugin on your host if needed). Opens and clicks are logged automatically for every send.
 
 Posts can be marked **Notify subscribers** in the editor; that sets feed meta so digests pick them up on the next scheduled run.
 
@@ -318,10 +317,13 @@ Nonces, capability checks (`manage_options`), sanitized input, optional reCAPTCH
 
 ## Analytics
 
-- **Open Tracking** - Track email opens with tracking pixels
-- **Click Tracking** - Track link clicks
-- **Engagement Metrics** - Aggregate open and click statistics with date-range filtering
-- **Daily Statistics** - Track performance over time
+Every email the plugin sends is tracked automatically (there is no on/off setting).
+
+- **Open tracking** — A 1×1 pixel in each message requests `/track/open/` when the email is opened.
+- **Click tracking** — Links in the email body (including `[content_feed]` post links and `[manage_preferences_link]`) are wrapped with `/track/click/` redirects so clicks are counted before the subscriber reaches the destination. `mailto:` and `tel:` links are not tracked.
+- **Where to view logs** — **Notifications → Logs** (full list and CSV export) and the dashboard **Recent activity** panel.
+- **Email log types** — Each row is labeled by purpose: **Notification** (digests), **Welcome**, **Welcome back**, **Preferences update**, and **Test** (admin test/preview sends).
+- **Engagement metrics** — The dashboard **Email delivery** panel shows open and click rates for the selected period (7 / 30 / 90 days or all time), using unique opens and clicks divided by delivered emails.
 
 ## Troubleshooting
 
@@ -386,6 +388,11 @@ define('DISABLE_WP_CRON', true);
 This guarantees the send queue drains on a strict one-minute cadence regardless of site traffic.
 
 ## Changelog
+
+### Version 3.4.4
+
+- **Fix — subscriber admin success notices** — activate, subscribe, unsubscribe, and delete actions on the Subscribers list now use Post-Redirect-Get flash messages (`?message=...`) so success notices appear after redirect instead of being lost when `wp_redirect()` runs in the same request
+- **Docs — Analytics and email logs** — expanded Analytics section (open/click behavior, log types, where to view logs); Email Logs feature bullet and How it works delivery step updated to reflect automatic tracking
 
 ### Version 3.4.3
 
