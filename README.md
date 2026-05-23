@@ -389,6 +389,12 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.5.0
+
+- **Refactor — Subscribers admin list table** — Subscribers screen now uses WordPress `WP_List_Table` for columns, sortable headers, search, status filter, pagination, and screen options. Row actions (subscribe, unsubscribe, delete) keep the existing POST + PRG behavior
+- **Admin — Clear Filters** — Subscribers and Notifications list tables now include a Clear Filters button consistent with Email Logs
+- **Refactor — Notifications and Email Logs list tables** — Notifications and Email Logs screens now use `WP_List_Table` with the same screen/form wiring as Subscribers (GET form wrapper, explicit screen id, column headers). Logs filters and purge UI unchanged
+
 ### Version 3.4.12
 
 - **Fix — Email Logs purge summary text** — JavaScript now substitutes `%1$s` / `%2$s` placeholders correctly (was showing raw `%1$d` format strings)

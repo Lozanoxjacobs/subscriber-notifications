@@ -3,6 +3,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+/** @var SubscriberNotifications_Logs_List_Table $list_table */
+
 $sn_logs_filter_args = array();
 if (!empty($_GET['status'])) {
     $sn_logs_filter_args['status'] = sanitize_text_field(wp_unslash($_GET['status']));
@@ -66,8 +68,8 @@ if (!isset($sn_purge_counts)) {
                 <?php endforeach; ?>
             </select>
 
-            <input type="date" name="date_from" value="<?php echo esc_attr($sn_logs_filter_args['date_from'] ?? ''); ?>" placeholder="<?php esc_attr_e('From Date', 'subscriber-notifications'); ?>">
-            <input type="date" name="date_to" value="<?php echo esc_attr($sn_logs_filter_args['date_to'] ?? ''); ?>" placeholder="<?php esc_attr_e('To Date', 'subscriber-notifications'); ?>">
+            <input type="date" name="date_from" value="<?php echo esc_attr($sn_logs_filter_args['date_from'] ?? ''); ?>">
+            <input type="date" name="date_to" value="<?php echo esc_attr($sn_logs_filter_args['date_to'] ?? ''); ?>">
 
             <input type="submit" class="button" value="<?php esc_attr_e('Filter', 'subscriber-notifications'); ?>">
             <a href="<?php echo esc_url(admin_url('admin.php?page=subscriber-notifications-logs')); ?>" class="button"><?php esc_html_e('Clear Filters', 'subscriber-notifications'); ?></a>
@@ -86,7 +88,6 @@ if (!isset($sn_purge_counts)) {
                         <?php
                         echo esc_html(
                             sprintf(
-                                /* translators: 1: number of days, 2: matching log count */
                                 _n('%1$d day (%2$d match)', '%1$d days (%2$d match)', $days, 'subscriber-notifications'),
                                 $days,
                                 (int) ($sn_purge_counts[ $days ] ?? 0)
@@ -101,157 +102,11 @@ if (!isset($sn_purge_counts)) {
         </form>
     </div>
 
-    <table class="wp-list-table widefat fixed striped">
-        <thead>
-            <tr>
-                <th scope="col"><?php esc_html_e('Subscriber', 'subscriber-notifications'); ?></th>
-                <th scope="col"><?php esc_html_e('Email Type', 'subscriber-notifications'); ?></th>
-                <th scope="col"><?php esc_html_e('Status', 'subscriber-notifications'); ?></th>
-                <th scope="col"><?php esc_html_e('Sent Date', 'subscriber-notifications'); ?></th>
-                <th scope="col"><?php esc_html_e('Opens', 'subscriber-notifications'); ?></th>
-                <th scope="col"><?php esc_html_e('Clicks', 'subscriber-notifications'); ?></th>
-                <th scope="col"><?php esc_html_e('Last Opened', 'subscriber-notifications'); ?></th>
-                <th scope="col"><?php esc_html_e('Last Clicked', 'subscriber-notifications'); ?></th>
-                <th scope="col"><?php esc_html_e('Error Message', 'subscriber-notifications'); ?></th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php if (empty($logs)) : ?>
-            <tr>
-                <td colspan="9" style="text-align: center; padding: 20px;">
-                    <?php esc_html_e('No logs found.', 'subscriber-notifications'); ?>
-                </td>
-            </tr>
-            <?php else : ?>
-                <?php foreach ($logs as $log) : ?>
-                <tr>
-                    <td>
-                        <?php if (empty($log->email) && !empty($log->subscriber_id)) : ?>
-                            <em class="subscriber-deleted"><?php esc_html_e('Subscriber Deleted', 'subscriber-notifications'); ?></em><br>
-                            <small><?php printf(esc_html__('ID: %d', 'subscriber-notifications'), intval($log->subscriber_id)); ?></small>
-                        <?php elseif ($log->name) : ?>
-                            <strong><?php echo esc_html($log->name); ?></strong><br>
-                            <small><?php echo esc_html($log->email); ?></small>
-                        <?php else : ?>
-                            <?php echo esc_html($log->email); ?>
-                        <?php endif; ?>
-                    </td>
-                    <td><?php echo esc_html(sn_format_email_log_type($log->email_type)); ?></td>
-                    <td>
-                        <span class="status-<?php echo esc_attr($log->status); ?>">
-                            <?php echo esc_html(ucfirst($log->status)); ?>
-                        </span>
-                    </td>
-                    <td><?php echo esc_html(sn_format_log_date_utc($log->sent_date)); ?></td>
-                    <td><?php echo esc_html($log->open_count); ?></td>
-                    <td><?php echo esc_html($log->click_count); ?></td>
-                    <td><?php echo esc_html(sn_format_log_date_local($log->last_opened)); ?></td>
-                    <td><?php echo esc_html(sn_format_log_date_local($log->last_clicked)); ?></td>
-                    <td>
-                        <?php if ($log->error_message) : ?>
-                            <span class="error-message" title="<?php echo esc_attr($log->error_message); ?>">
-                                <?php echo esc_html(wp_trim_words($log->error_message, 10)); ?>
-                            </span>
-                        <?php else : ?>
-                            -
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </tbody>
-    </table>
-
-    <?php if (isset($total_pages) && $total_pages > 1) : ?>
-    <div class="tablenav bottom">
-        <div class="tablenav-pages">
-            <?php
-            $current = $page;
-            $removable_query_args = wp_removable_query_args();
-            $current_url = admin_url('admin.php');
-            $current_url = add_query_arg('page', 'subscriber-notifications-logs', $current_url);
-            $current_url = remove_query_arg($removable_query_args, $current_url);
-
-            foreach ($sn_logs_filter_args as $key => $value) {
-                $current_url = add_query_arg($key, $value, $current_url);
-            }
-
-            $output = '<span class="displaying-num">' . sprintf(
-                /* translators: %s: Number of items. */
-                _n('%s item', '%s items', $total_logs, 'subscriber-notifications'),
-                number_format_i18n($total_logs)
-            ) . '</span>';
-
-            $page_links = array();
-
-            $disable_first = ($current == 1 || $current == 2);
-            $disable_last = ($current == $total_pages || $current == $total_pages - 1);
-            $disable_prev = ($current == 1);
-            $disable_next = ($current == $total_pages);
-
-            if ($disable_first) {
-                $page_links[] = '<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&laquo;</span>';
-            } else {
-                $page_links[] = sprintf(
-                    "<a class='first-page button' href='%s'><span class='screen-reader-text'>%s</span><span aria-hidden='true'>%s</span></a>",
-                    esc_url(remove_query_arg('paged', $current_url)),
-                    esc_html__('First page', 'subscriber-notifications'),
-                    '&laquo;'
-                );
-            }
-
-            if ($disable_prev) {
-                $page_links[] = '<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&lsaquo;</span>';
-            } else {
-                $page_links[] = sprintf(
-                    "<a class='prev-page button' href='%s'><span class='screen-reader-text'>%s</span><span aria-hidden='true'>%s</span></a>",
-                    esc_url(add_query_arg('paged', max(1, $current - 1), $current_url)),
-                    esc_html__('Previous page', 'subscriber-notifications'),
-                    '&lsaquo;'
-                );
-            }
-
-            $html_current_page = $current;
-            $total_pages_before = '<span class="screen-reader-text">' . esc_html__('Current Page', 'subscriber-notifications') . '</span><span id="table-paging" class="paging-input"><span class="tablenav-paging-text">';
-            $total_pages_after = '</span></span>';
-            $html_total_pages = sprintf("<span class='total-pages'>%s</span>", number_format_i18n($total_pages));
-            $page_links[] = $total_pages_before . sprintf(
-                /* translators: 1: Current page, 2: Total pages. */
-                _x('%1$s of %2$s', 'paging', 'subscriber-notifications'),
-                $html_current_page,
-                $html_total_pages
-            ) . $total_pages_after;
-
-            if ($disable_next) {
-                $page_links[] = '<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&rsaquo;</span>';
-            } else {
-                $page_links[] = sprintf(
-                    "<a class='next-page button' href='%s'><span class='screen-reader-text'>%s</span><span aria-hidden='true'>%s</span></a>",
-                    esc_url(add_query_arg('paged', min($total_pages, $current + 1), $current_url)),
-                    esc_html__('Next page', 'subscriber-notifications'),
-                    '&rsaquo;'
-                );
-            }
-
-            if ($disable_last) {
-                $page_links[] = '<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&raquo;</span>';
-            } else {
-                $page_links[] = sprintf(
-                    "<a class='last-page button' href='%s'><span class='screen-reader-text'>%s</span><span aria-hidden='true'>%s</span></a>",
-                    esc_url(add_query_arg('paged', $total_pages, $current_url)),
-                    esc_html__('Last page', 'subscriber-notifications'),
-                    '&raquo;'
-                );
-            }
-
-            $output .= "
-<span class='pagination-links'>" . join("
-", $page_links) . '</span>';
-
-            echo $output; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from escaped fragments above
-            ?>
-        </div>
-    </div>
-    <?php endif; ?>
-
+    <form method="get">
+        <input type="hidden" name="page" value="subscriber-notifications-logs">
+        <?php foreach ($sn_logs_filter_args as $key => $value) : ?>
+            <input type="hidden" name="<?php echo esc_attr($key); ?>" value="<?php echo esc_attr((string) $value); ?>">
+        <?php endforeach; ?>
+        <?php $list_table->display(); ?>
+    </form>
 </div>

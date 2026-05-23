@@ -1226,34 +1226,9 @@ class SubscriberNotifications_Admin {
      * Subscribers page
      */
     public function subscribers_page() {
-        $page = isset($_GET['paged']) ? intval($_GET['paged']) : 1;
-        
-        // Get screen option - WordPress stores it via get_user_option
-        // get_user_option automatically handles the WordPress prefix
-        $per_page = get_user_option('subscriber_notifications_subscribers_per_page');
-        if ($per_page === false || empty($per_page) || $per_page < 1) {
-            $per_page = 20;
-        }
-        $per_page = intval($per_page);
-        
-        $offset = ($page - 1) * $per_page;
-        
-        $args = array(
-            'limit' => $per_page,
-            'offset' => $offset,
-            'search' => isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '',
-            'status' => isset($_GET['status']) ? sanitize_text_field($_GET['status']) : ''
-        );
-        
-        $subscribers = $this->database->get_subscribers($args);
-        
-        $count_args = array(
-            'search' => $args['search'],
-            'status' => $args['status']
-        );
-        $total_subscribers = $this->database->get_subscriber_count($count_args);
-        $total_pages = ceil($total_subscribers / $per_page);
-        
+        $list_table = new SubscriberNotifications_Subscribers_List_Table($this->database);
+        $list_table->prepare_items();
+
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-subscribers.php';
     }
     
@@ -1261,34 +1236,9 @@ class SubscriberNotifications_Admin {
      * Notifications page
      */
     public function notifications_page() {
-        $page = isset($_GET['paged']) ? intval($_GET['paged']) : 1;
-        
-        // Get screen option - WordPress stores it via get_user_option
-        // get_user_option automatically handles the WordPress prefix
-        $per_page = get_user_option('subscriber_notifications_notifications_per_page');
-        if ($per_page === false || empty($per_page) || $per_page < 1) {
-            $per_page = 20;
-        }
-        $per_page = intval($per_page);
-        
-        $offset = ($page - 1) * $per_page;
-        
-        $args = array(
-            'limit' => $per_page,
-            'offset' => $offset,
-            'search' => isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '',
-            'status' => isset($_GET['status']) ? sanitize_text_field($_GET['status']) : ''
-        );
-        
-        $notifications = $this->get_notifications($args);
-        
-        $count_args = array(
-            'search' => $args['search'],
-            'status' => $args['status']
-        );
-        $total_notifications = $this->get_notification_count($count_args);
-        $total_pages = ceil($total_notifications / $per_page);
-        
+        $list_table = new SubscriberNotifications_Notifications_List_Table($this);
+        $list_table->prepare_items();
+
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-notifications.php';
     }
     
@@ -1350,46 +1300,15 @@ class SubscriberNotifications_Admin {
      * Logs page
      */
     public function logs_page() {
-        $page = isset($_GET['paged']) ? intval($_GET['paged']) : 1;
-        
-        // Get screen option - WordPress stores it via get_user_option
-        // get_user_option automatically handles the WordPress prefix
-        $per_page = get_user_option('subscriber_notifications_logs_per_page');
-        if ($per_page === false || empty($per_page) || $per_page < 1) {
-            $per_page = 20;
-        }
-        $per_page = intval($per_page);
-        
-        $offset = ($page - 1) * $per_page;
-        
-        $args = array(
-            'limit'         => $per_page,
-            'offset'        => $offset,
-            'subscriber_id' => isset($_GET['subscriber_id']) ? intval($_GET['subscriber_id']) : 0,
-            'status'        => isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : '',
-            'email_type'    => isset($_GET['email_type']) ? sanitize_key(wp_unslash($_GET['email_type'])) : '',
-            'date_from'     => isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '',
-            'date_to'       => isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '',
-        );
-        
-        $logs = $this->database->get_logs($args);
-        
-        $count_args = array(
-            'subscriber_id' => $args['subscriber_id'],
-            'status'        => $args['status'],
-            'email_type'    => $args['email_type'],
-            'date_from'     => $args['date_from'],
-            'date_to'       => $args['date_to'],
-        );
-        $total_logs = $this->database->get_logs_count($count_args);
-        $total_pages = ceil($total_logs / $per_page);
+        $list_table = new SubscriberNotifications_Logs_List_Table($this->database);
+        $list_table->prepare_items();
 
         $sn_purge_presets = array(30, 90, 180, 365);
         $sn_purge_counts  = array();
         foreach ($sn_purge_presets as $purge_days) {
             $sn_purge_counts[ $purge_days ] = $this->database->count_logs_older_than($purge_days);
         }
-        
+
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-logs.php';
     }
     
@@ -2513,7 +2432,7 @@ class SubscriberNotifications_Admin {
      * @param array $args Query arguments
      * @return array Array of notification objects
      */
-    private function get_notifications($args = array()) {
+    public function get_notifications($args = array()) {
         global $wpdb;
         
         $defaults = array(
@@ -2565,7 +2484,7 @@ class SubscriberNotifications_Admin {
      * @param array $args Query arguments
      * @return int Notification count
      */
-    private function get_notification_count($args = array()) {
+    public function get_notification_count($args = array()) {
         global $wpdb;
         
         $defaults = array(

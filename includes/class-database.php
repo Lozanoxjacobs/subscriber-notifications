@@ -871,20 +871,29 @@ class SubscriberNotifications_Database {
             'email_type'    => '',
             'date_from'     => '',
             'date_to'       => '',
+            'orderby'       => 'sent_date',
+            'order'         => 'DESC',
         );
 
         $args = wp_parse_args($args, $defaults);
 
+        $orderby_whitelist = array(
+            'sent_date' => 'l.sent_date',
+            'status'    => 'l.status',
+            'email_type'=> 'l.email_type',
+        );
+        $orderby_sql = isset($orderby_whitelist[ $args['orderby'] ]) ? $orderby_whitelist[ $args['orderby'] ] : 'l.sent_date';
+        $order_sql   = 'ASC' === strtoupper((string) $args['order']) ? 'ASC' : 'DESC';
+
         list($where_conditions, $where_values) = $this->build_log_where($args, 'l.sent_date');
         $where_clause = implode(' AND ', $where_conditions);
-        
-        // Build base SQL query
+
         $sql = "
             SELECT l.*, s.name, s.email 
             FROM {$this->logs_table} l 
             LEFT JOIN {$this->subscribers_table} s ON l.subscriber_id = s.id 
             WHERE {$where_clause} 
-            ORDER BY l.sent_date DESC
+            ORDER BY {$orderby_sql} {$order_sql}
         ";
         
         // Add limit and offset if limit is set and greater than 0
