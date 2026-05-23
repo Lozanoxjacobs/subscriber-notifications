@@ -2892,12 +2892,7 @@ class SubscriberNotifications_Admin {
     }
     
     /**
-     * Save Screen Options
-     * 
-     * @param mixed $status Status value
-     * @param string $option Option name
-     * @param mixed $value Option value
-     * @return mixed Status or value
+     * Register per-option Screen Options save filters.
      */
     private function register_screen_option_filters() {
         $options = array(
