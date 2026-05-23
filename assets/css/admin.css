@@ -660,6 +660,8 @@ select:focus {
     padding: 15px;
     border-radius: 4px;
     margin: 20px 0;
+    max-width: 100%;
+    overflow-x: auto;
 }
 
 .subscriber-notifications-import-export .sample-csv pre {
@@ -667,6 +669,9 @@ select:focus {
     font-family: monospace;
     font-size: 12px;
     line-height: 1.4;
+    overflow-x: auto;
+    max-width: 100%;
+    white-space: pre;
 }
 
 .subscriber-notifications-import-export .category-reference {

@@ -389,6 +389,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.5.3
+
+- **Admin — Import/Export sample CSV** — long sample CSV header rows now scroll horizontally inside the gray sample box instead of overflowing the container
+
 ### Version 3.5.2
 
 - **Admin — form draft auto-save** — localStorage drafts are namespaced per form (settings tab, import/export, content types) and skip GET list-table forms so filters no longer bleed across admin screens
