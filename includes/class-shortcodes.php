@@ -484,8 +484,11 @@ class SubscriberNotifications_Shortcodes {
         $out = '';
         foreach ($posts as $post) {
             $title = $this->format_post_title_with_update_date($post);
-            $out .= '<h3><a href="' . esc_url(get_permalink($post->ID)) . '">' . esc_html($title) . '</a></h3>';
-            $out .= '<p>' . wp_kses_post(wp_trim_words($post->post_content, 20)) . '</p>';
+            $out .= '<p><a href="' . esc_url(get_permalink($post->ID)) . '">' . esc_html($title) . '</a></p>';
+            $excerpt = wp_trim_words(wp_strip_all_tags($post->post_content), 20, '…');
+            if ($excerpt !== '') {
+                $out .= '<p>' . esc_html($excerpt) . '</p>';
+            }
         }
         return $out;
     }
