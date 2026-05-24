@@ -250,7 +250,7 @@ class SubscriberNotifications_Logs_List_Table extends WP_List_Table {
      * @param object $item Log row.
      */
     protected function column_sent_date($item): void {
-        echo esc_html(sn_format_log_date_utc($item->sent_date));
+        echo esc_html(sn_format_log_date_local($item->sent_date));
     }
 
     /**

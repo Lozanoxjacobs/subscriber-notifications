@@ -131,10 +131,11 @@ class SubscriberNotifications_Scheduler {
         
         foreach ($subscribers as $subscriber) {
             $result = $wpdb->query($wpdb->prepare(
-                "INSERT IGNORE INTO {$send_queue_table} (notification_id, subscriber_id, status) VALUES (%d, %d, %s)",
+                "INSERT IGNORE INTO {$send_queue_table} (notification_id, subscriber_id, status, enqueued_at) VALUES (%d, %d, %s, %s)",
                 $notification_id,
                 (int) $subscriber->id,
-                'pending'
+                'pending',
+                current_time('mysql')
             ));
             
             if ($result) {
@@ -316,6 +317,8 @@ class SubscriberNotifications_Scheduler {
                 array('%d')
             );
         }
+
+        $this->database->purge_send_queue_for_notification((int) $notification->id);
     }
     
     /**

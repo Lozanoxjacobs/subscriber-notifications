@@ -3,7 +3,7 @@
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
  * Description: Configurable subscriber notification system with per-site Content Types (any public post type and taxonomy), JSON preferences, theme-native form, and brandable emails.
- * Version: 3.5.3
+ * Version: 3.6.0
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,8 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.5.3');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.6.0');
+define('SUBSCRIBER_NOTIFICATIONS_DB_VERSION', '4');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -104,15 +105,6 @@ class SubscriberNotifications {
         
         // Load dependencies
         $this->load_dependencies();
-        
-        // Migrate legacy unprefixed options before components read settings.
-        if (function_exists('subscriber_notifications_migrate_prefixed_options')) {
-            subscriber_notifications_migrate_prefixed_options();
-        }
-
-        if (function_exists('subscriber_notifications_migrate_email_design_options')) {
-            subscriber_notifications_migrate_email_design_options();
-        }
 
         $this->maybe_upgrade_database();
 
@@ -203,7 +195,7 @@ class SubscriberNotifications {
      * Run database migrations when the plugin version is newer than the stored DB version.
      */
     private function maybe_upgrade_database() {
-        if (version_compare(get_option('subscriber_notifications_db_version', '0'), SUBSCRIBER_NOTIFICATIONS_VERSION, '>=')) {
+        if (version_compare(get_option('subscriber_notifications_db_version', '0'), SUBSCRIBER_NOTIFICATIONS_DB_VERSION, '>=')) {
             return;
         }
 
@@ -212,7 +204,6 @@ class SubscriberNotifications {
         }
 
         $database = new SubscriberNotifications_Database();
-        $database->run_migrations();
         $database->create_tables();
     }
 
@@ -307,9 +298,6 @@ class SubscriberNotifications {
         // Create database tables
         if (class_exists('SubscriberNotifications_Database')) {
             $database = new SubscriberNotifications_Database();
-            // IMPORTANT: Run migrations FIRST (before create_tables) to handle column renames
-            $database->run_migrations();
-            // Then create/update tables (dbDelta will see correct schema after migration)
             $database->create_tables();
         }
 
@@ -320,9 +308,6 @@ class SubscriberNotifications {
 
         // Set default options
         $this->set_default_options();
-
-        // Auto-populate global footer if empty
-        $this->auto_populate_global_footer();
 
         // Cron events are scheduled by SubscriberNotifications_Scheduler on every
         // load; nothing to do here at activation time.
@@ -353,10 +338,7 @@ class SubscriberNotifications {
     public static function uninstall() {
         // Check if user has opted to delete data on uninstall
         // Default is 0 (preserve data) - user must explicitly check the box to delete
-        $delete_data = (int) get_option(
-            subscriber_notifications_option_name('delete_data_on_uninstall'),
-            get_option('delete_data_on_uninstall', 0)
-        );
+        $delete_data = (int) subscriber_notifications_get_option('delete_data_on_uninstall', 0);
         
         // Log what's happening (for debugging)
         if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -430,20 +412,7 @@ class SubscriberNotifications {
             array(
                 'subscriber_notifications_db_version',
                 'subscriber_notifications_rewrite_version',
-                'subscriber_notifications_feed_migration_version',
-                'subscriber_notifications_phone_removal_version',
-                'subscriber_notifications_settings',
-                'subscriber_notifications_prefixed_options_migrated',
                 'subscriber_notifications_content_config',
-                'subscriber_notifications_email_design_options_migrated',
-            ),
-            array_map(
-                'subscriber_notifications_option_name',
-                array(
-                    'email_color_accent',
-                    'email_color_button_bg',
-                    'email_color_button_text',
-                )
             ),
             array_map(
                 'subscriber_notifications_option_name',
@@ -454,26 +423,6 @@ class SubscriberNotifications {
                 'sendgrid_api_key',
                 'sendgrid_from_email',
                 'sendgrid_from_name',
-            ),
-            array(
-                'welcome_email_subject',
-                'welcome_email_content',
-                'welcome_back_email_subject',
-                'welcome_back_email_content',
-                'preferences_update_email_subject',
-                'preferences_update_email_content',
-                'captcha_site_key',
-                'captcha_secret_key',
-                'global_header_logo',
-                'global_header_content',
-                'global_footer',
-                'email_css',
-                'daily_send_time',
-                'weekly_send_time',
-                'weekly_send_day',
-                'monthly_send_time',
-                'monthly_send_day',
-                'subscriber_notifications_db_version',
             )
         );
 
@@ -511,6 +460,7 @@ class SubscriberNotifications {
             'hide_terms_without_published_content' => 1,
             'global_header_logo'              => '',
             'global_header_content'           => '',
+            'global_footer'                   => '[site_title] | [manage_preferences_link]',
             'email_font_body'                 => 'Arial, Helvetica, sans-serif',
             'email_font_heading'              => '',
             'email_color_text'                => '#333333',
@@ -527,18 +477,6 @@ class SubscriberNotifications {
             if (get_option($prefixed) === false) {
                 add_option($prefixed, $value);
             }
-        }
-    }
-    
-    /**
-     * Auto-populate global footer if empty
-     */
-    private function auto_populate_global_footer() {
-        $global_footer = subscriber_notifications_get_option('global_footer', '');
-        
-        if (empty($global_footer)) {
-            $default_footer = '[site_title] | [manage_preferences_link]';
-            subscriber_notifications_update_option('global_footer', $default_footer);
         }
     }
     

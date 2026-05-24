@@ -46,27 +46,7 @@ function sn_format_email_log_type($email_type): string {
 }
 
 /**
- * Format sent_date (stored UTC) for admin display in the site timezone.
- *
- * @param string|null $date_value Raw datetime.
- * @return string
- */
-function sn_format_log_date_utc($date_value): string {
-    if (empty($date_value)) {
-        return '-';
-    }
-
-    try {
-        $datetime = new DateTime($date_value, new DateTimeZone('UTC'));
-        $datetime->setTimezone(wp_timezone());
-        return $datetime->format('M j, Y g:i A');
-    } catch (Exception $e) {
-        return mysql2date('M j, Y g:i A', $date_value) ?: '-';
-    }
-}
-
-/**
- * Format a datetime already stored in the site timezone.
+ * Format a datetime stored in the site timezone for admin display.
  *
  * @param string|null $date_value Raw datetime.
  * @return string
@@ -80,6 +60,6 @@ function sn_format_log_date_local($date_value): string {
         $datetime = new DateTimeImmutable($date_value, wp_timezone());
         return $datetime->format('M j, Y g:i A');
     } catch (Exception $e) {
-        return '-';
+        return mysql2date('M j, Y g:i A', $date_value) ?: '-';
     }
 }

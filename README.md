@@ -309,7 +309,11 @@ Delivery frequency: [delivery_frequency]
 
 ## Data storage
 
-The plugin stores subscribers, scheduled notifications, and email logs in the WordPress database. Data is created when the plugin is activated. You can optionally delete all plugin data on uninstall under **Settings > General**.
+The plugin stores subscribers, scheduled notifications, and email logs in four custom tables (schema version 4). Data is created when the plugin is activated. All datetimes are stored in the **WordPress site timezone** via `current_time( 'mysql' )` — not MySQL `CURRENT_TIMESTAMP`.
+
+- **Cascade delete** — deleting a subscriber removes their email logs and send-queue rows.
+- **Send-queue retention** — after a notification finishes sending, completed queue rows (`sent`, `skipped`) are purged; `failed` rows are kept for the dashboard.
+- **Uninstall** — optionally delete all plugin data under **Settings → General**.
 
 ## Security and performance
 
@@ -388,6 +392,17 @@ define('DISABLE_WP_CRON', true);
 This guarantees the send queue drains on a strict one-minute cadence regardless of site traffic.
 
 ## Changelog
+
+### Version 3.6.0
+
+**Upgrade note:** Not an in-place upgrade from 3.5.x — back up, export if needed, then fresh install or wipe plugin data before deploying 3.6.0.
+
+- **Database schema v4** — `sent_date` index on email logs; unique `management_token`; removed MySQL `DEFAULT CURRENT_TIMESTAMP` from plugin datetime columns
+- **Cascade subscriber delete** — deleting a subscriber removes related email logs and send-queue rows
+- **Send-queue retention** — purge `sent` and `skipped` queue rows when a notification finishes; retain `failed` for dashboard visibility
+- **Site timezone datetimes** — all plugin timestamps written with `current_time( 'mysql' )`; removed UTC conversion helpers (`sn_format_log_date_utc`, log filter UTC bounds)
+- **Greenfield cleanup** — removed legacy DB migration methods and unprefixed options migration; `SUBSCRIBER_NOTIFICATIONS_DB_VERSION` decoupled from plugin version
+- **Integration tests** — `tests/integration/db-schema-tests.php`, `e2e-smoke-tests.php`, and B8 uninstall/reinstall verification via `tests/bin/run-pantheon-tests.sh`
 
 ### Version 3.5.3
 

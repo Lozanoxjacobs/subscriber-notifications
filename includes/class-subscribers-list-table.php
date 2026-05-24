@@ -216,7 +216,7 @@ class SubscriberNotifications_Subscribers_List_Table extends WP_List_Table {
      * @return string
      */
     protected function column_date_added($item): void {
-        echo esc_html(sn_format_log_date_utc($item->date_added));
+        echo esc_html(sn_format_log_date_local($item->date_added));
     }
 
     /**

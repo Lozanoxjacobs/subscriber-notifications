@@ -9,23 +9,14 @@ $urls               = $snapshot['urls'] ?? array();
 
 if (!function_exists('sn_dashboard_format_subscriber_date')) {
     /**
-     * Format subscriber date_added (UTC) for dashboard display.
+     * Format subscriber date_added for dashboard display.
      *
      * @param string|null $date_value Raw datetime.
      * @return string
      */
     function sn_dashboard_format_subscriber_date($date_value) {
-        if (empty($date_value)) {
-            return '—';
-        }
-        try {
-            $utc = new DateTimeZone('UTC');
-            $dt  = new DateTime($date_value, $utc);
-            $dt->setTimezone(wp_timezone());
-            return $dt->format('M j, Y g:i A');
-        } catch (Exception $e) {
-            return $date_value;
-        }
+        $formatted = sn_format_log_date_local($date_value);
+        return $formatted === '-' ? '—' : $formatted;
     }
 }
 ?>
@@ -58,7 +49,7 @@ if (!function_exists('sn_dashboard_format_subscriber_date')) {
                                     <?php echo esc_html(ucfirst($log->status)); ?>
                                 </span>
                             </td>
-                            <td><?php echo esc_html(sn_format_log_date_utc($log->sent_date)); ?></td>
+                            <td><?php echo esc_html(sn_format_log_date_local($log->sent_date)); ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

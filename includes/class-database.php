@@ -77,7 +77,7 @@ class SubscriberNotifications_Database {
             subscription_preferences longtext,
             frequency enum('daily','weekly','monthly') NOT NULL,
             status enum('active','inactive') DEFAULT 'active',
-            date_added datetime DEFAULT CURRENT_TIMESTAMP,
+            date_added datetime,
             last_notified datetime,
             management_token varchar(255),
             PRIMARY KEY (id),
@@ -85,7 +85,7 @@ class SubscriberNotifications_Database {
             UNIQUE KEY user_id (user_id),
             KEY status (status),
             KEY frequency (frequency),
-            KEY management_token (management_token)
+            UNIQUE KEY management_token (management_token)
         ) $charset_collate;";
         
         // Logs table
@@ -94,7 +94,7 @@ class SubscriberNotifications_Database {
             subscriber_id int(11) NOT NULL,
             notification_id int(11),
             email_type varchar(50) NOT NULL,
-            sent_date datetime DEFAULT CURRENT_TIMESTAMP,
+            sent_date datetime,
             status enum('sent','failed','pending') DEFAULT 'pending',
             error_message text,
             open_count int(11) DEFAULT 0,
@@ -107,7 +107,8 @@ class SubscriberNotifications_Database {
             KEY subscriber_id (subscriber_id),
             KEY notification_id (notification_id),
             KEY status (status),
-            KEY tracking_id (tracking_id)
+            KEY tracking_id (tracking_id),
+            KEY sent_date (sent_date)
         ) $charset_collate;";
         
         // Notifications queue table
@@ -119,7 +120,7 @@ class SubscriberNotifications_Database {
             target_preferences longtext,
             frequency_target varchar(50),
             status enum('pending','sent','cancelled') DEFAULT 'pending',
-            created_date datetime DEFAULT CURRENT_TIMESTAMP,
+            created_date datetime,
             sent_date datetime,
             created_by int(11),
             is_recurring tinyint(1) DEFAULT 0,
@@ -143,7 +144,7 @@ class SubscriberNotifications_Database {
             status enum('pending','sent','failed','skipped') DEFAULT 'pending',
             attempts tinyint(3) unsigned DEFAULT 0,
             last_error text,
-            enqueued_at datetime DEFAULT CURRENT_TIMESTAMP,
+            enqueued_at datetime,
             sent_at datetime,
             PRIMARY KEY (id),
             UNIQUE KEY notification_subscriber (notification_id, subscriber_id),
@@ -151,196 +152,12 @@ class SubscriberNotifications_Database {
             KEY notification_status (notification_id, status)
         ) $charset_collate;";
         
-        // Create tables
-        $result1 = dbDelta($subscribers_sql);
-        $result2 = dbDelta($logs_sql);
-        $result3 = dbDelta($notifications_sql);
-        $result4 = dbDelta($send_queue_sql);
+        dbDelta($subscribers_sql);
+        dbDelta($logs_sql);
+        dbDelta($notifications_sql);
+        dbDelta($send_queue_sql);
         
-        // Check if subject column exists, if not add it
-        $this->add_subject_column_if_missing();
-        
-        // Check if recurring columns exist, if not add them
-        $this->add_recurring_columns_if_missing();
-        
-        // Update database version
-        update_option('subscriber_notifications_db_version', SUBSCRIBER_NOTIFICATIONS_VERSION);
-        
-        // Return success if at least one table was created
-        return !empty($result1) || !empty($result2) || !empty($result3) || !empty($result4);
-    }
-    
-    /**
-     * Add subject column if it doesn't exist
-     */
-    private function add_subject_column_if_missing() {
-        global $wpdb;
-        
-        // Validate table name - it comes from $wpdb->prefix so it's safe, but we validate format
-        $table_name = $this->notifications_table;
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', str_replace($wpdb->prefix, '', $table_name))) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Subscriber Notifications: Invalid table name format');
-            }
-            return;
-        }
-        
-        // Check if subject column exists
-        $column_exists = $wpdb->get_results($wpdb->prepare(
-            "SHOW COLUMNS FROM {$table_name} LIKE %s",
-            'subject'
-        ));
-        
-        if (empty($column_exists)) {
-            // Add subject column - table name is validated above, column name is hardcoded so safe
-            $wpdb->query("ALTER TABLE {$table_name} ADD COLUMN subject varchar(255) NOT NULL DEFAULT '' AFTER title");
-        }
-    }
-    
-    /**
-     * Add recurring notification columns if they don't exist
-     */
-    private function add_recurring_columns_if_missing() {
-        global $wpdb;
-        
-        // Validate table name - it comes from $wpdb->prefix so it's safe, but we validate format
-        $table_name = $this->notifications_table;
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', str_replace($wpdb->prefix, '', $table_name))) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('Subscriber Notifications: Invalid table name format');
-            }
-            return;
-        }
-        
-        // Whitelist of allowed column names to prevent injection
-        $allowed_columns = array(
-            'is_recurring' => 'tinyint(1) DEFAULT 0',
-            'next_send_date' => 'datetime',
-            'last_sent_date' => 'datetime', 
-            'recurrence_count' => 'int(11) DEFAULT 0'
-        );
-        
-        foreach ($allowed_columns as $column => $definition) {
-            // Validate column name format
-            if (!preg_match('/^[a-zA-Z0-9_]+$/', $column)) {
-                continue;
-            }
-            
-            $column_exists = $wpdb->get_results($wpdb->prepare(
-                "SHOW COLUMNS FROM {$table_name} LIKE %s",
-                $column
-            ));
-            
-            if (empty($column_exists)) {
-                // Table and column names are validated above, definition is from whitelist
-                $wpdb->query("ALTER TABLE {$table_name} ADD COLUMN {$column} {$definition}");
-            }
-        }
-    }
-    
-    /**
-     * Run database migrations.
-     *
-     * v3 is greenfield. Retained calls are safe on fresh installs and partially-wiped
-     * dev environments where tables exist but some rows or columns are incomplete.
-     */
-    public function run_migrations() {
-        $this->migrate_generate_missing_tokens();
-
-        // Optional cosmetic default; safe.
-        $this->migrate_auto_populate_global_footer();
-
-        // Defensive guards in case dbDelta hasn't run yet.
-        $this->add_subject_column_if_missing();
-        $this->add_recurring_columns_if_missing();
-        $this->add_user_id_column_if_missing();
-    }
-    
-    /**
-     * Add user_id column and unique index on subscribers table if missing.
-     */
-    private function add_user_id_column_if_missing() {
-        $table_exists = $this->wpdb->get_var($this->wpdb->prepare(
-            'SHOW TABLES LIKE %s',
-            $this->subscribers_table
-        ));
-
-        if (!$table_exists) {
-            return;
-        }
-
-        $column_exists = $this->wpdb->get_results($this->wpdb->prepare(
-            "SHOW COLUMNS FROM {$this->subscribers_table} LIKE %s",
-            'user_id'
-        ));
-
-        if (empty($column_exists)) {
-            $this->wpdb->query(
-                "ALTER TABLE {$this->subscribers_table} ADD COLUMN user_id bigint(20) unsigned DEFAULT NULL AFTER email"
-            );
-        }
-
-        $index_exists = $this->wpdb->get_results($this->wpdb->prepare(
-            "SHOW INDEX FROM {$this->subscribers_table} WHERE Key_name = %s",
-            'user_id'
-        ));
-
-        if (empty($index_exists)) {
-            $this->wpdb->query(
-                "ALTER TABLE {$this->subscribers_table} ADD UNIQUE KEY user_id (user_id)"
-            );
-        }
-    }
-    
-    /**
-     * Auto-populate global footer if empty
-     */
-    private function migrate_auto_populate_global_footer() {
-        $global_footer = subscriber_notifications_get_option('global_footer', '');
-        
-        if (empty($global_footer)) {
-            $default_footer = '[site_title] | [manage_preferences_link]';
-            subscriber_notifications_update_option('global_footer', $default_footer);
-        }
-    }
-    
-    /**
-     * Generate management tokens for subscribers that don't have them
-     *
-     * @return bool True on success, false on failure
-     */
-    private function migrate_generate_missing_tokens() {
-        // Check if table exists first (for fresh installs)
-        $table_exists = $this->wpdb->get_var($this->wpdb->prepare(
-            "SHOW TABLES LIKE %s",
-            $this->subscribers_table
-        ));
-        
-        if (!$table_exists) {
-            // Table doesn't exist yet - this is a fresh install, skip migration
-            return true;
-        }
-        
-        // Get all subscribers without tokens
-        $subscribers_without_tokens = $this->wpdb->get_results(
-            "SELECT id FROM {$this->subscribers_table} WHERE management_token IS NULL OR management_token = ''"
-        );
-        
-        if (empty($subscribers_without_tokens)) {
-            return true;
-        }
-        
-        // Generate tokens for each subscriber
-        foreach ($subscribers_without_tokens as $subscriber) {
-            $new_token = wp_generate_password(32, false);
-            $this->wpdb->update(
-                $this->subscribers_table,
-                array('management_token' => $new_token),
-                array('id' => $subscriber->id),
-                array('%s'),
-                array('%d')
-            );
-        }
+        update_option('subscriber_notifications_db_version', SUBSCRIBER_NOTIFICATIONS_DB_VERSION);
         
         return true;
     }
@@ -524,6 +341,10 @@ class SubscriberNotifications_Database {
             }
         }
 
+        if (empty($data['date_added'])) {
+            $data['date_added'] = current_time('mysql');
+        }
+
         $result = $this->wpdb->insert($this->subscribers_table, $data);
 
         if ($result === false) {
@@ -626,11 +447,67 @@ class SubscriberNotifications_Database {
      * @return bool True on success, false on failure
      */
     public function delete_subscriber(int $id): bool {
-        return $this->wpdb->delete(
+        $id = absint($id);
+        if ($id < 1) {
+            return false;
+        }
+
+        $this->wpdb->delete(
+            $this->logs_table,
+            array('subscriber_id' => $id),
+            array('%d')
+        );
+
+        $this->wpdb->delete(
+            $this->send_queue_table,
+            array('subscriber_id' => $id),
+            array('%d')
+        );
+
+        $deleted = $this->wpdb->delete(
             $this->subscribers_table,
             array('id' => $id),
             array('%d')
         );
+
+        return $deleted !== false && $deleted > 0;
+    }
+
+    /**
+     * Remove terminal send-queue rows for a notification.
+     *
+     * @param int          $notification_id Notification ID.
+     * @param array<int,string> $statuses   Statuses to delete.
+     * @return int Rows deleted.
+     */
+    public function purge_send_queue_for_notification(int $notification_id, array $statuses = array('sent', 'skipped')): int {
+        $notification_id = absint($notification_id);
+        if ($notification_id < 1) {
+            return 0;
+        }
+
+        $allowed = array('pending', 'sent', 'failed', 'skipped');
+        $statuses = array_values(array_intersect($statuses, $allowed));
+        if (empty($statuses)) {
+            return 0;
+        }
+
+        $total = 0;
+        foreach ($statuses as $status) {
+            $deleted = $this->wpdb->delete(
+                $this->send_queue_table,
+                array(
+                    'notification_id' => $notification_id,
+                    'status'          => $status,
+                ),
+                array('%d', '%s')
+            );
+            if ($deleted !== false) {
+                $total += (int) $deleted;
+            }
+        }
+
+        return $total;
     }
     
     
@@ -650,6 +527,10 @@ class SubscriberNotifications_Database {
         );
         
         $data = wp_parse_args($data, $defaults);
+
+        if (empty($data['sent_date'])) {
+            $data['sent_date'] = current_time('mysql');
+        }
         
         $result = $this->wpdb->insert($this->logs_table, $data);
         
@@ -710,37 +591,45 @@ class SubscriberNotifications_Database {
     }
 
     /**
-     * Convert site-calendar log filter dates to UTC sent_date bounds.
-     *
-     * sent_date is stored as UTC (MySQL CURRENT_TIMESTAMP). Admin filters and
-     * the logs table display use the site timezone, so bounds must be converted.
+     * Convert site-calendar log filter dates to sent_date bounds (site timezone).
      *
      * @param string $date_from Inclusive start date (Y-m-d) or empty.
      * @param string $date_to   Inclusive end date (Y-m-d) or empty.
      * @return array{from: string|null, to_exclusive: string|null}
      */
-    private function get_log_sent_date_utc_bounds(string $date_from, string $date_to): array {
+    private function get_log_sent_date_bounds(string $date_from, string $date_to): array {
         $bounds = array(
-            'from'          => null,
-            'to_exclusive'  => null,
+            'from'         => null,
+            'to_exclusive' => null,
         );
 
         $from = $this->parse_log_filter_date($date_from);
         if ($from) {
-            $bounds['from'] = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $from . ' 00:00:00', wp_timezone())
-                ->setTimezone(new DateTimeZone('UTC'))
-                ->format('Y-m-d H:i:s');
+            $bounds['from'] = $from . ' 00:00:00';
         }
 
         $to = $this->parse_log_filter_date($date_to);
         if ($to) {
             $bounds['to_exclusive'] = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $to . ' 00:00:00', wp_timezone())
                 ->modify('+1 day')
-                ->setTimezone(new DateTimeZone('UTC'))
                 ->format('Y-m-d H:i:s');
         }
 
         return $bounds;
+    }
+
+    /**
+     * Compute a sent_date cutoff for log age queries (site timezone).
+     *
+     * @param int $days Age threshold in days (minimum 1).
+     * @return string
+     */
+    private function get_log_age_cutoff(int $days): string {
+        $days = max(1, $days);
+
+        return (new DateTimeImmutable('now', wp_timezone()))
+            ->modify('-' . $days . ' days')
+            ->format('Y-m-d H:i:s');
     }
 
     /**
@@ -754,7 +643,7 @@ class SubscriberNotifications_Database {
      * @return array{0: array, 1: array}
      */
     private function append_log_sent_date_filters(array $where_conditions, array $where_values, string $date_from, string $date_to, string $column): array {
-        $bounds = $this->get_log_sent_date_utc_bounds($date_from, $date_to);
+        $bounds = $this->get_log_sent_date_bounds($date_from, $date_to);
 
         if ($bounds['from']) {
             $where_conditions[] = "{$column} >= %s";
@@ -814,24 +703,13 @@ class SubscriberNotifications_Database {
     }
 
     /**
-     * Delete email logs with sent_date older than the given number of days.
-     *
-     * sent_date is stored in UTC; cutoff is computed from UTC now.
-     *
-     * @param int $days Age threshold in days (minimum 1).
-     * @return int Rows deleted.
-     */
-    /**
      * Count email logs with sent_date older than the given number of days.
      *
      * @param int $days Age threshold in days (minimum 1).
      * @return int Matching row count.
      */
     public function count_logs_older_than(int $days): int {
-        $days = max(1, $days);
-        $cutoff = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
-            ->modify('-' . $days . ' days')
-            ->format('Y-m-d H:i:s');
+        $cutoff = $this->get_log_age_cutoff($days);
 
         $sql = $this->wpdb->prepare(
             "SELECT COUNT(*) FROM {$this->logs_table} WHERE sent_date < %s",
@@ -841,11 +719,14 @@ class SubscriberNotifications_Database {
         return (int) $this->wpdb->get_var($sql);
     }
 
+    /**
+     * Delete email logs with sent_date older than the given number of days.
+     *
+     * @param int $days Age threshold in days (minimum 1).
+     * @return int Rows deleted.
+     */
     public function delete_logs_older_than(int $days): int {
-        $days = max(1, $days);
-        $cutoff = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
-            ->modify('-' . $days . ' days')
-            ->format('Y-m-d H:i:s');
+        $cutoff = $this->get_log_age_cutoff($days);
 
         $sql = $this->wpdb->prepare(
             "DELETE FROM {$this->logs_table} WHERE sent_date < %s",

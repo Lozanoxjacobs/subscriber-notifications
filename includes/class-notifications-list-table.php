@@ -264,7 +264,7 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
      * @param object $item Notification row.
      */
     protected function column_created($item): void {
-        echo esc_html(get_date_from_gmt($item->created_date, 'M j, Y g:i A'));
+        echo esc_html(sn_format_log_date_local($item->created_date));
     }
 
     /**
@@ -275,7 +275,7 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
     protected function column_sent($item): void {
         if (isset($item->is_recurring) && $item->is_recurring) {
             if (isset($item->last_sent_date) && $item->last_sent_date) {
-                echo esc_html(mysql2date('M j, Y g:i A', $item->last_sent_date));
+                echo esc_html(sn_format_log_date_local($item->last_sent_date));
                 return;
             }
 
@@ -284,7 +284,7 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
         }
 
         if ($item->sent_date) {
-            echo esc_html(mysql2date('M j, Y g:i A', $item->sent_date));
+            echo esc_html(sn_format_log_date_local($item->sent_date));
             return;
         }
 

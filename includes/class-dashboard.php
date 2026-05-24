@@ -125,7 +125,7 @@ class SubscriberNotifications_Dashboard {
     }
 
     /**
-     * Map analytics period to log query date bounds (UTC date strings).
+     * Map analytics period to log query date bounds (site timezone).
      *
      * @param string $period Period key.
      * @return array{0: string, 1: string} date_from, date_to.
@@ -142,7 +142,7 @@ class SubscriberNotifications_Dashboard {
             $days = 90;
         }
 
-        $date_from = gmdate('Y-m-d H:i:s', strtotime("-{$days} days", time()));
+        $date_from = wp_date('Y-m-d H:i:s', strtotime("-{$days} days"));
         return array($date_from, '');
     }
 
