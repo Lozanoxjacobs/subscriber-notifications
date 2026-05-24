@@ -361,7 +361,7 @@ class SubscriberNotifications_Dashboard {
             'create'           => admin_url('admin.php?page=subscriber-notifications-create'),
             'notifications'      => admin_url('admin.php?page=subscriber-notifications-notifications'),
             'notifications_pending' => admin_url('admin.php?page=subscriber-notifications-notifications&status=pending'),
-            'notifications_recurring' => admin_url('admin.php?page=subscriber-notifications-notifications&status=active_recurring'),
+            'notifications_recurring' => admin_url('admin.php?page=subscriber-notifications-notifications&status=pending&recurring=1&series=active'),
             'subscribers'      => admin_url('admin.php?page=subscriber-notifications-subscribers'),
             'logs'             => admin_url('admin.php?page=subscriber-notifications-logs'),
             'logs_failed'      => admin_url('admin.php?page=subscriber-notifications-logs&status=failed'),

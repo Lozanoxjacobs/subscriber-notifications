@@ -2029,7 +2029,7 @@ class SubscriberNotifications_Admin {
         <input type="email" id="test_email" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text">
         <p class="description"><?php _e('Email address to send test notifications to.', 'subscriber-notifications'); ?></p>
         <p class="description"><?php _e('Emails are sent through WordPress wp_mail() (configure SMTP or a mail plugin as needed).', 'subscriber-notifications'); ?></p>
-        <button type="button" id="test-wp-mail" class="button"><?php _e('Send Test Email', 'subscriber-notifications'); ?></button>
+        <button type="button" id="test-wp-mail" class="button button-secondary"><?php _e('Send Test Email', 'subscriber-notifications'); ?></button>
         <div id="wp-mail-test-result"></div>
         <?php
     }
@@ -2515,6 +2515,57 @@ class SubscriberNotifications_Admin {
     }
     
     /**
+     * Build WHERE clause for notification list queries.
+     *
+     * @param array $args Query arguments (status, recurring, series, search).
+     * @return array{where_clause: string, where_values: array<int, mixed>}
+     */
+    private function build_notification_list_query_parts(array $args): array {
+        global $wpdb;
+
+        $where_conditions = array('1=1');
+        $where_values     = array();
+
+        $status    = isset($args['status']) ? (string) $args['status'] : '';
+        $recurring = isset($args['recurring']) ? (string) $args['recurring'] : '';
+        $series    = isset($args['series']) ? (string) $args['series'] : '';
+
+        // Legacy deep link: ?status=active_recurring
+        if ('active_recurring' === $status) {
+            $status    = 'pending';
+            $recurring = '1';
+            $series    = 'active';
+        }
+
+        if (in_array($status, array('pending', 'sent', 'cancelled'), true)) {
+            $where_conditions[] = 'status = %s';
+            $where_values[]       = $status;
+        }
+
+        if ('1' === $recurring) {
+            $where_conditions[] = 'is_recurring = 1';
+        } elseif ('0' === $recurring) {
+            $where_conditions[] = 'is_recurring = 0';
+        }
+
+        if ('active' === $series) {
+            $where_conditions[] = 'recurrence_count > 0';
+        }
+
+        if (!empty($args['search'])) {
+            $where_conditions[] = '(title LIKE %s OR content LIKE %s)';
+            $search_term        = '%' . $wpdb->esc_like((string) $args['search']) . '%';
+            $where_values[]     = $search_term;
+            $where_values[]     = $search_term;
+        }
+
+        return array(
+            'where_clause' => implode(' AND ', $where_conditions),
+            'where_values' => $where_values,
+        );
+    }
+
+    /**
      * Get notifications
      * 
      * @param array $args Query arguments
@@ -2524,44 +2575,35 @@ class SubscriberNotifications_Admin {
         global $wpdb;
         
         $defaults = array(
-            'status' => '',
-            'limit' => 20,
-            'offset' => 0,
-            'search' => '',
-            'orderby' => 'created_date',
-            'order' => 'DESC'
+            'status'    => '',
+            'recurring' => '',
+            'series'    => '',
+            'limit'     => 20,
+            'offset'    => 0,
+            'search'    => '',
+            'orderby'   => 'created_date',
+            'order'     => 'DESC',
         );
         
         $args = wp_parse_args($args, $defaults);
+
+        $allowed_orderby = array('title', 'created_date', 'status', 'id');
+        $orderby         = in_array($args['orderby'], $allowed_orderby, true) ? $args['orderby'] : 'created_date';
+        $order           = 'ASC' === strtoupper((string) $args['order']) ? 'ASC' : 'DESC';
+
+        $query_parts  = $this->build_notification_list_query_parts($args);
+        $where_clause = $query_parts['where_clause'];
+        $where_values = $query_parts['where_values'];
         
-        $where_conditions = array("1=1");
-        $where_values = array();
-        
-        if (!empty($args['status'])) {
-            if ($args['status'] === 'active_recurring') {
-                // Active Recurring: status = pending AND is_recurring = 1 AND recurrence_count > 0
-                $where_conditions[] = "status = 'pending' AND is_recurring = 1 AND recurrence_count > 0";
-            } else {
-                $where_conditions[] = "status = %s";
-                $where_values[] = $args['status'];
-            }
-        }
-        
-        if (!empty($args['search'])) {
-            $where_conditions[] = "(title LIKE %s OR content LIKE %s)";
-            $search_term = '%' . $wpdb->esc_like($args['search']) . '%';
-            $where_values[] = $search_term;
-            $where_values[] = $search_term;
-        }
-        
-        $where_clause = implode(' AND ', $where_conditions);
-        
-        $sql = $wpdb->prepare("
+        $sql = $wpdb->prepare(
+            "
             SELECT * FROM {$wpdb->prefix}subscriber_notifications_queue 
             WHERE {$where_clause} 
-            ORDER BY {$args['orderby']} {$args['order']} 
+            ORDER BY {$orderby} {$order} 
             LIMIT %d OFFSET %d
-        ", array_merge($where_values, array($args['limit'], $args['offset'])));
+            ",
+            array_merge($where_values, array($args['limit'], $args['offset']))
+        );
         
         return $wpdb->get_results($sql);
     }
@@ -2576,45 +2618,32 @@ class SubscriberNotifications_Admin {
         global $wpdb;
         
         $defaults = array(
-            'status' => '',
-            'search' => ''
+            'status'    => '',
+            'recurring' => '',
+            'series'    => '',
+            'search'    => '',
         );
         
         $args = wp_parse_args($args, $defaults);
-        
-        $where_conditions = array("1=1");
-        $where_values = array();
-        
-        if (!empty($args['status'])) {
-            if ($args['status'] === 'active_recurring') {
-                // Active Recurring: status = pending AND is_recurring = 1 AND recurrence_count > 0
-                $where_conditions[] = "status = 'pending' AND is_recurring = 1 AND recurrence_count > 0";
-            } else {
-                $where_conditions[] = "status = %s";
-                $where_values[] = $args['status'];
-            }
-        }
-        
-        if (!empty($args['search'])) {
-            $where_conditions[] = "(title LIKE %s OR content LIKE %s)";
-            $search_term = '%' . $wpdb->esc_like($args['search']) . '%';
-            $where_values[] = $search_term;
-            $where_values[] = $search_term;
-        }
-        
-        $where_clause = implode(' AND ', $where_conditions);
+
+        $query_parts  = $this->build_notification_list_query_parts($args);
+        $where_clause = $query_parts['where_clause'];
+        $where_values = $query_parts['where_values'];
         
         if (empty($where_values)) {
             $sql = "SELECT COUNT(*) FROM {$wpdb->prefix}subscriber_notifications_queue WHERE {$where_clause}";
-            return $wpdb->get_var($sql);
+            return (int) $wpdb->get_var($sql);
         }
         
-        $sql = $wpdb->prepare("
+        $sql = $wpdb->prepare(
+            "
             SELECT COUNT(*) FROM {$wpdb->prefix}subscriber_notifications_queue 
             WHERE {$where_clause}
-        ", $where_values);
+            ",
+            $where_values
+        );
         
-        return $wpdb->get_var($sql);
+        return (int) $wpdb->get_var($sql);
     }
     
     /**

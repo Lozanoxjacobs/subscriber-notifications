@@ -296,6 +296,19 @@ class SubscriberNotifications_Preferences {
     }
 
     /**
+     * HTML summary for admin list tables (post type labels emphasized).
+     *
+     * @param array|string $prefs Preferences array or JSON.
+     * @return string
+     */
+    public static function human_readable_admin_html($prefs) {
+        if (!is_array($prefs)) {
+            $prefs = self::decode($prefs);
+        }
+        return SubscriberNotifications_Term_Resolver::describe_selection_admin_html($prefs);
+    }
+
+    /**
      * HTML summary of preferences for email shortcodes.
      *
      * @param array|string $prefs Preferences array or JSON.

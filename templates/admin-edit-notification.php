@@ -154,7 +154,7 @@ if (!defined('ABSPATH')) {
         </table>
         
         <p class="submit">
-            <input type="submit" name="update_notification" class="button-primary" 
+            <input type="submit" name="update_notification" class="button button-primary"
                    value="<?php _e('Update Notification', 'subscriber-notifications'); ?>">
             <a href="<?php echo admin_url('admin.php?page=subscriber-notifications-notifications'); ?>" 
                class="button"><?php _e('Cancel', 'subscriber-notifications'); ?></a>

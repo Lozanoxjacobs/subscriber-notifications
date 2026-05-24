@@ -288,6 +288,38 @@ class SubscriberNotifications_Term_Resolver {
     }
 
     /**
+     * HTML summary for admin list tables (bold post type labels only).
+     *
+     * @param array $prefs Preferences-shaped array.
+     * @return string Safe HTML fragment.
+     */
+    public static function describe_selection_admin_html(array $prefs) {
+        $html = '';
+
+        foreach (self::get_selection_sections($prefs) as $section) {
+            if (empty($section['taxonomies'])) {
+                continue;
+            }
+
+            $lines = array();
+            foreach ($section['taxonomies'] as $tax_row) {
+                $lines[] = esc_html($tax_row['label']) . ': ' . esc_html(implode(', ', $tax_row['term_names']));
+            }
+
+            if (empty($lines)) {
+                continue;
+            }
+
+            $html .= '<div class="sn-prefs-block">';
+            $html .= '<div class="sn-prefs-post-type">' . esc_html($section['post_type_label']) . '</div>';
+            $html .= '<div class="sn-prefs-taxonomies">' . implode('<br />', $lines) . '</div>';
+            $html .= '</div>';
+        }
+
+        return $html;
+    }
+
+    /**
      * HTML summary of preferences for email bodies (post type heading, taxonomy lines).
      *
      * @param array $prefs Preferences-shaped array.

@@ -197,12 +197,13 @@ class SubscriberNotifications_Database {
      */
     public function get_subscribers(array $args = array()): array {
         $defaults = array(
-            'status' => '', // Changed to empty to show all by default
-            'limit' => 20,
-            'offset' => 0,
-            'search' => '',
+            'status'  => '', // Changed to empty to show all by default
+            'wp_user' => '',
+            'limit'   => 20,
+            'offset'  => 0,
+            'search'  => '',
             'orderby' => 'date_added',
-            'order' => 'DESC'
+            'order'   => 'DESC',
         );
         
         $args = wp_parse_args($args, $defaults);
@@ -223,6 +224,12 @@ class SubscriberNotifications_Database {
         if (!empty($args['status'])) {
             $where_conditions[] = "status = %s";
             $where_values[] = $args['status'];
+        }
+
+        if ('linked' === $args['wp_user']) {
+            $where_conditions[] = 'user_id IS NOT NULL AND user_id > 0';
+        } elseif ('none' === $args['wp_user']) {
+            $where_conditions[] = '(user_id IS NULL OR user_id = 0)';
         }
         
         list($search_sql, $search_values) = $this->get_subscriber_search_where((string) $args['search']);
@@ -835,8 +842,9 @@ class SubscriberNotifications_Database {
      */
     public function get_subscriber_count(array $args = array()): int {
         $defaults = array(
-            'status' => '',
-            'search' => ''
+            'status'  => '',
+            'wp_user' => '',
+            'search'  => '',
         );
         
         $args = wp_parse_args($args, $defaults);
@@ -847,6 +855,12 @@ class SubscriberNotifications_Database {
         if (!empty($args['status'])) {
             $where_conditions[] = "status = %s";
             $where_values[] = $args['status'];
+        }
+
+        if ('linked' === $args['wp_user']) {
+            $where_conditions[] = 'user_id IS NOT NULL AND user_id > 0';
+        } elseif ('none' === $args['wp_user']) {
+            $where_conditions[] = '(user_id IS NULL OR user_id = 0)';
         }
         
         list($search_sql, $search_values) = $this->get_subscriber_search_where((string) $args['search']);
@@ -859,7 +873,7 @@ class SubscriberNotifications_Database {
         
         if (empty($where_values)) {
             $sql = "SELECT COUNT(*) FROM {$this->subscribers_table} WHERE {$where_clause}";
-            return $this->wpdb->get_var($sql);
+            return (int) $this->wpdb->get_var($sql);
         }
         
         $sql = $this->wpdb->prepare(

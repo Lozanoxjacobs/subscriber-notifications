@@ -393,6 +393,14 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.6.3
+
+- **Admin — button consistency** — aligned submit and secondary actions with WordPress core patterns (filled primary for main saves, outlined secondary for export and test email)
+- **Admin — list table row actions** — primary/secondary action buttons plus link-style delete, stacked with equal width on Subscribers and Notifications
+- **Admin — subscriptions and targets columns** — post type labels emphasized in list tables for easier scanning
+- **Admin — Subscribers filters** — added WP user filter (linked WP user / no WP user), combinable with status and search
+- **Admin — Notifications filters** — split into separate status (Pending, Sent, Cancelled) and recurring (Recurring, One-time) filters; dashboard “Active recurring” deep link uses `series=active`; legacy `?status=active_recurring` URLs still work
+
 ### Version 3.6.2
 
 - **Admin — Email Design typography** — body and heading fonts use email-safe preset dropdowns with optional custom stack, live preview, and “Same as body” for headings

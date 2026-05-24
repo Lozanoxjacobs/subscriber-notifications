@@ -107,15 +107,17 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
 
         $order  = isset($_REQUEST['order']) ? strtoupper(sanitize_text_field(wp_unslash($_REQUEST['order']))) : 'DESC';
         $search = isset($_REQUEST['s']) ? sanitize_text_field(wp_unslash($_REQUEST['s'])) : '';
-        $status = isset($_REQUEST['status']) ? sanitize_text_field(wp_unslash($_REQUEST['status'])) : '';
+        $filters = $this->get_request_filters();
 
         $args = array(
-            'limit'   => $per_page,
-            'offset'  => ($current_page - 1) * $per_page,
-            'search'  => $search,
-            'status'  => $status,
-            'orderby' => $orderby,
-            'order'   => $order,
+            'limit'     => $per_page,
+            'offset'    => ($current_page - 1) * $per_page,
+            'search'    => $search,
+            'status'    => $filters['status'],
+            'recurring' => $filters['recurring'],
+            'series'    => $filters['series'],
+            'orderby'   => $orderby,
+            'order'     => $order,
         );
 
         if (! $this->screen) {
@@ -126,8 +128,10 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
 
         $total_items = $this->admin->get_notification_count(
             array(
-                'search' => $search,
-                'status' => $status,
+                'search'    => $search,
+                'status'    => $filters['status'],
+                'recurring' => $filters['recurring'],
+                'series'    => $filters['series'],
             )
         );
 
@@ -231,7 +235,7 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
      * @param object $item Notification row.
      */
     protected function column_targets($item): void {
-        $targets_summary = SubscriberNotifications_Preferences::human_readable(
+        $targets_summary = SubscriberNotifications_Preferences::human_readable_admin_html(
             $item->target_preferences ?? ''
         );
 
@@ -240,7 +244,7 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
             return;
         }
 
-        echo nl2br(esc_html($targets_summary), false);
+        echo wp_kses_post($targets_summary);
     }
 
     /**
@@ -322,7 +326,7 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
                 $notification_id,
                 'cancel',
                 __('Cancel', 'subscriber-notifications'),
-                'button button-small',
+                'button button-secondary button-small',
                 __('Are you sure you want to cancel this notification?', 'subscriber-notifications')
             );
         } elseif ($item->status === 'sent') {
@@ -330,7 +334,7 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
                 $notification_id,
                 'resend',
                 __('Resend', 'subscriber-notifications'),
-                'button button-small',
+                'button button-primary button-small',
                 __('Are you sure you want to resend this notification?', 'subscriber-notifications')
             );
         } elseif ($item->status === 'cancelled') {
@@ -338,7 +342,7 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
                 $notification_id,
                 'reactivate',
                 __('Reactivate', 'subscriber-notifications'),
-                'button button-small',
+                'button button-primary button-small',
                 __('Are you sure you want to reactivate this notification?', 'subscriber-notifications')
             );
         }
@@ -347,7 +351,7 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
             $notification_id,
             'delete',
             __('Delete', 'subscriber-notifications'),
-            'button button-small button-link-delete',
+            'button button-link button-link-delete',
             __('Are you sure you want to delete this notification? This action cannot be undone.', 'subscriber-notifications'),
             true
         );
@@ -365,17 +369,24 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
             return;
         }
 
-        $status = isset($_REQUEST['status']) ? sanitize_text_field(wp_unslash($_REQUEST['status'])) : '';
+        $filters = $this->get_request_filters();
+        $status    = $filters['status'];
+        $recurring = $filters['recurring'];
         ?>
         <div class="alignleft actions">
             <input type="hidden" name="page" value="subscriber-notifications-notifications">
             <label class="screen-reader-text" for="filter-by-status"><?php esc_html_e('Filter by status', 'subscriber-notifications'); ?></label>
             <select name="status" id="filter-by-status">
-                <option value=""><?php esc_html_e('All', 'subscriber-notifications'); ?></option>
+                <option value=""><?php esc_html_e('All Statuses', 'subscriber-notifications'); ?></option>
                 <option value="pending" <?php selected($status, 'pending'); ?>><?php esc_html_e('Pending', 'subscriber-notifications'); ?></option>
-                <option value="active_recurring" <?php selected($status, 'active_recurring'); ?>><?php esc_html_e('Active Recurring', 'subscriber-notifications'); ?></option>
                 <option value="sent" <?php selected($status, 'sent'); ?>><?php esc_html_e('Sent', 'subscriber-notifications'); ?></option>
                 <option value="cancelled" <?php selected($status, 'cancelled'); ?>><?php esc_html_e('Cancelled', 'subscriber-notifications'); ?></option>
+            </select>
+            <label class="screen-reader-text" for="filter-by-recurring"><?php esc_html_e('Filter by recurring', 'subscriber-notifications'); ?></label>
+            <select name="recurring" id="filter-by-recurring">
+                <option value=""><?php esc_html_e('All Types', 'subscriber-notifications'); ?></option>
+                <option value="1" <?php selected($recurring, '1'); ?>><?php esc_html_e('Recurring', 'subscriber-notifications'); ?></option>
+                <option value="0" <?php selected($recurring, '0'); ?>><?php esc_html_e('One-time', 'subscriber-notifications'); ?></option>
             </select>
             <?php submit_button(__('Filter', 'subscriber-notifications'), '', 'filter_action', false); ?>
             <a href="<?php echo esc_url(admin_url('admin.php?page=subscriber-notifications-notifications')); ?>" class="button"><?php esc_html_e('Clear Filters', 'subscriber-notifications'); ?></a>
@@ -455,11 +466,10 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
         bool $is_delete = false
     ): string {
         $confirm_attr = ' onclick="return confirm(\'' . esc_js($confirm_message) . '\');"';
-        $style        = $is_delete ? ' style="display:inline-block;margin-left:5px;"' : ' style="display:inline-block;"';
 
         ob_start();
         ?>
-        <form method="post"<?php echo $style; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+        <form method="post" class="sn-row-action-form">
             <?php wp_nonce_field('notification_action', 'notification_nonce'); ?>
             <input type="hidden" name="notification_id" value="<?php echo esc_attr((string) $notification_id); ?>">
             <input type="hidden" name="notification_action" value="<?php echo esc_attr($action); ?>">
@@ -469,5 +479,40 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
         </form>
         <?php
         return (string) ob_get_clean();
+    }
+
+    /**
+     * Parse and validate list-table filter values from the request.
+     *
+     * @return array{status: string, recurring: string, series: string}
+     */
+    private function get_request_filters(): array {
+        $status    = isset($_REQUEST['status']) ? sanitize_key(wp_unslash($_REQUEST['status'])) : '';
+        $recurring = isset($_REQUEST['recurring']) ? sanitize_key(wp_unslash($_REQUEST['recurring'])) : '';
+        $series    = isset($_REQUEST['series']) ? sanitize_key(wp_unslash($_REQUEST['series'])) : '';
+
+        if ('active_recurring' === $status) {
+            $status    = 'pending';
+            $recurring = '1';
+            $series    = 'active';
+        }
+
+        if (!in_array($status, array('', 'pending', 'sent', 'cancelled'), true)) {
+            $status = '';
+        }
+
+        if (!in_array($recurring, array('', '1', '0'), true)) {
+            $recurring = '';
+        }
+
+        if ('active' !== $series) {
+            $series = '';
+        }
+
+        return array(
+            'status'    => $status,
+            'recurring' => $recurring,
+            'series'    => $series,
+        );
     }
 }

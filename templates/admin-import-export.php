@@ -119,7 +119,7 @@ if (!defined('ABSPATH')) {
             </div>
             
             <div class="export-form">
-                <button type="button" class="button button-primary export-csv">
+                <button type="button" class="button button-secondary export-csv">
                     <?php _e('Export CSV', 'subscriber-notifications'); ?>
                 </button>
                 <p class="description"><?php _e('Downloads a CSV file with all active subscribers.', 'subscriber-notifications'); ?></p>

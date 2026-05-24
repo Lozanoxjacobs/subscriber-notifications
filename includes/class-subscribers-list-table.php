@@ -102,12 +102,17 @@ class SubscriberNotifications_Subscribers_List_Table extends WP_List_Table {
         $order   = isset($_REQUEST['order']) ? strtoupper(sanitize_text_field(wp_unslash($_REQUEST['order']))) : 'DESC';
         $search  = isset($_REQUEST['s']) ? sanitize_text_field(wp_unslash($_REQUEST['s'])) : '';
         $status  = isset($_REQUEST['status']) ? sanitize_text_field(wp_unslash($_REQUEST['status'])) : '';
+        $wp_user = isset($_REQUEST['wp_user']) ? sanitize_key(wp_unslash($_REQUEST['wp_user'])) : '';
+        if (!in_array($wp_user, array('', 'linked', 'none'), true)) {
+            $wp_user = '';
+        }
 
         $args = array(
             'limit'   => $per_page,
             'offset'  => ($current_page - 1) * $per_page,
             'search'  => $search,
             'status'  => $status,
+            'wp_user' => $wp_user,
             'orderby' => $orderby,
             'order'   => $order,
         );
@@ -120,8 +125,9 @@ class SubscriberNotifications_Subscribers_List_Table extends WP_List_Table {
 
         $total_items = $this->database->get_subscriber_count(
             array(
-                'search' => $search,
-                'status' => $status,
+                'search'  => $search,
+                'status'  => $status,
+                'wp_user' => $wp_user,
             )
         );
 
@@ -181,14 +187,14 @@ class SubscriberNotifications_Subscribers_List_Table extends WP_List_Table {
      * @return string
      */
     protected function column_subscriptions($item): void {
-        $prefs_summary = SubscriberNotifications_Preferences::human_readable($item->subscription_preferences ?? '');
+        $prefs_summary = SubscriberNotifications_Preferences::human_readable_admin_html($item->subscription_preferences ?? '');
 
         if ($prefs_summary === '') {
             echo '<span class="description">' . esc_html__('—', 'subscriber-notifications') . '</span>';
             return;
         }
 
-        echo nl2br(esc_html($prefs_summary), false);
+        echo wp_kses_post($prefs_summary);
     }
 
     /**
@@ -233,14 +239,14 @@ class SubscriberNotifications_Subscribers_List_Table extends WP_List_Table {
                 (int) $item->id,
                 'unsubscribe',
                 __('Unsubscribe', 'subscriber-notifications'),
-                'button button-small'
+                'button button-primary button-small'
             );
         } elseif ($item->status === 'inactive') {
             $output .= $this->render_action_form(
                 (int) $item->id,
                 'subscribe',
                 __('Subscribe', 'subscriber-notifications'),
-                'button button-small'
+                'button button-secondary button-small'
             );
         }
 
@@ -248,7 +254,7 @@ class SubscriberNotifications_Subscribers_List_Table extends WP_List_Table {
             (int) $item->id,
             'delete',
             __('Delete', 'subscriber-notifications'),
-            'button button-small button-link-delete',
+            'button button-link button-link-delete',
             true
         );
 
@@ -266,6 +272,10 @@ class SubscriberNotifications_Subscribers_List_Table extends WP_List_Table {
         }
 
         $status = isset($_REQUEST['status']) ? sanitize_text_field(wp_unslash($_REQUEST['status'])) : '';
+        $wp_user = isset($_REQUEST['wp_user']) ? sanitize_key(wp_unslash($_REQUEST['wp_user'])) : '';
+        if (!in_array($wp_user, array('', 'linked', 'none'), true)) {
+            $wp_user = '';
+        }
         ?>
         <div class="alignleft actions">
             <input type="hidden" name="page" value="subscriber-notifications-subscribers">
@@ -274,6 +284,12 @@ class SubscriberNotifications_Subscribers_List_Table extends WP_List_Table {
                 <option value=""><?php esc_html_e('All Statuses', 'subscriber-notifications'); ?></option>
                 <option value="active" <?php selected($status, 'active'); ?>><?php esc_html_e('Subscribed', 'subscriber-notifications'); ?></option>
                 <option value="inactive" <?php selected($status, 'inactive'); ?>><?php esc_html_e('Unsubscribed', 'subscriber-notifications'); ?></option>
+            </select>
+            <label class="screen-reader-text" for="filter-by-wp-user"><?php esc_html_e('Filter by WP user', 'subscriber-notifications'); ?></label>
+            <select name="wp_user" id="filter-by-wp-user">
+                <option value=""><?php esc_html_e('All WP Users', 'subscriber-notifications'); ?></option>
+                <option value="linked" <?php selected($wp_user, 'linked'); ?>><?php esc_html_e('Linked WP user', 'subscriber-notifications'); ?></option>
+                <option value="none" <?php selected($wp_user, 'none'); ?>><?php esc_html_e('No WP user', 'subscriber-notifications'); ?></option>
             </select>
             <?php submit_button(__('Filter', 'subscriber-notifications'), '', 'filter_action', false); ?>
             <a href="<?php echo esc_url(admin_url('admin.php?page=subscriber-notifications-subscribers')); ?>" class="button"><?php esc_html_e('Clear Filters', 'subscriber-notifications'); ?></a>
@@ -297,11 +313,9 @@ class SubscriberNotifications_Subscribers_List_Table extends WP_List_Table {
             $confirm_attr = ' onclick="return confirm(\'' . esc_js(__('Are you sure you want to delete this subscriber?', 'subscriber-notifications')) . '\');"';
         }
 
-        $style = ('delete' === $action) ? ' style="display:inline;margin-left:5px;"' : ' style="display:inline;"';
-
         ob_start();
         ?>
-        <form method="post"<?php echo $style; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+        <form method="post" class="sn-row-action-form">
             <?php wp_nonce_field('subscriber_action', 'subscriber_nonce'); ?>
             <input type="hidden" name="subscriber_id" value="<?php echo esc_attr((string) $subscriber_id); ?>">
             <input type="hidden" name="action" value="<?php echo esc_attr($action); ?>">
