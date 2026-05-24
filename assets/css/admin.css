@@ -849,3 +849,26 @@ select:focus {
     justify-content: center;
     color: #666;
 }
+
+/* Email Design → Typography font pickers */
+.sn-email-font-control .sn-email-font-select {
+    min-width: 280px;
+    max-width: 100%;
+}
+
+.sn-email-font-control .sn-email-font-custom {
+    display: block;
+    margin-top: 8px;
+}
+
+.sn-email-font-preview {
+    margin: 10px 0 6px;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.sn-email-font-control[data-preview-kind="heading"] .sn-email-font-preview {
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.3;
+}

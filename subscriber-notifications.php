@@ -3,7 +3,7 @@
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
  * Description: Configurable subscriber notification system with per-site Content Types (any public post type and taxonomy), JSON preferences, theme-native form, and brandable emails.
- * Version: 3.6.1
+ * Version: 3.6.2
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.6.1');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.6.2');
 define('SUBSCRIBER_NOTIFICATIONS_DB_VERSION', '4');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -240,6 +240,7 @@ class SubscriberNotifications {
             'includes/class-term-checklist.php',
             'includes/class-preferences.php',
             'includes/log-date-helpers.php',
+            'includes/email-font-presets.php',
             'includes/class-database.php',
             'includes/class-email-formatter.php',
             'includes/class-content-types-admin.php',

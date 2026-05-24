@@ -264,7 +264,7 @@ Delivery frequency: [delivery_frequency]
 1. Go to **Notifications > Settings** and open the **Email Design** tab
 2. **Header & Footer** — global header logo (JPG, PNG, GIF; max 700×200px, 200KB), header content (WYSIWYG), and footer content (WYSIWYG). Header/footer are added to every notification email. Default footer: `[site_title] | [manage_preferences_link]` if empty
 3. **Brand Colors** — body text, link, link hover (`a:hover` in clients that support it), outer background, content card background, footer background, footer text. CTAs use text links (e.g. `[manage_preferences_link]`), not button styles
-4. **Typography** — body font and optional heading font (leave heading blank to use body font)
+4. **Typography** — body font and heading font chosen from email-safe presets (with optional custom stack); live preview on the settings screen
 5. **Advanced** — custom CSS appended after generated branding CSS for fine-tuning
 6. Shortcodes work in header/footer content: `[site_title]`, `[manage_preferences_link]`, `[subscriber_name]`, etc.
 
@@ -392,6 +392,11 @@ define('DISABLE_WP_CRON', true);
 This guarantees the send queue drains on a strict one-minute cadence regardless of site traffic.
 
 ## Changelog
+
+### Version 3.6.2
+
+- **Admin — Email Design typography** — body and heading fonts use email-safe preset dropdowns with optional custom stack, live preview, and “Same as body” for headings
+- **Fix — footer link color with custom font stacks** — custom stacks with quoted font names no longer break email CSS; footer links (including manage preferences) keep the footer text color
 
 ### Version 3.6.1
 

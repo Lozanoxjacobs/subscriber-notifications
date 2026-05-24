@@ -453,6 +453,64 @@ jQuery(document).ready(function($) {
         });
     }
 
+    // Settings → Email Design: typography font pickers.
+    if ($('.sn-email-font-control').length && subscriberNotifications.emailDesign) {
+        var fontCfg = subscriberNotifications.emailDesign;
+
+        function snResolveFontStack($control) {
+            var choice = $control.find('.sn-email-font-select').val();
+            if (choice === fontCfg.fontChoiceSameAsBody) {
+                return '';
+            }
+            if (choice === fontCfg.fontChoiceCustom) {
+                return $control.find('.sn-email-font-custom').val();
+            }
+            return fontCfg.fontPresets[choice] || $control.find('.sn-email-font-value').val();
+        }
+
+        function snPreviewStackForControl($control, stack) {
+            if (stack) {
+                return stack;
+            }
+            var $bodyValue = $('#email_font_body');
+            if ($bodyValue.length) {
+                return $bodyValue.val();
+            }
+            return fontCfg.fontPresets.arial || '';
+        }
+
+        function snSyncFontControl($control) {
+            var choice = $control.find('.sn-email-font-select').val();
+            var isCustom = choice === fontCfg.fontChoiceCustom;
+            var stack = snResolveFontStack($control);
+
+            $control.find('.sn-email-font-custom').toggle(isCustom);
+            $control.find('.sn-email-font-value').val(stack);
+            $control.find('.sn-email-font-preview').css(
+                'font-family',
+                snPreviewStackForControl($control, stack)
+            );
+        }
+
+        $('.sn-email-font-control').each(function () {
+            snSyncFontControl($(this));
+        });
+
+        $(document).on('change', '.sn-email-font-select', function () {
+            snSyncFontControl($(this).closest('.sn-email-font-control'));
+        });
+
+        $(document).on('input', '.sn-email-font-custom', function () {
+            snSyncFontControl($(this).closest('.sn-email-font-control'));
+        });
+
+        $(document).on('input change', '#email_font_body', function () {
+            $('.sn-email-font-control').each(function () {
+                snSyncFontControl($(this));
+            });
+        });
+    }
+
     // Settings → Email Design: header logo media uploader.
     if ($('.upload-logo').length && subscriberNotifications.emailDesign) {
         var edCfg = subscriberNotifications.emailDesign;

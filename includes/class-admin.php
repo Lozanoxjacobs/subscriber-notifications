@@ -251,6 +251,11 @@ class SubscriberNotifications_Admin {
                 'fileTooLarge' => __('Image file size must be 200KB or smaller. Please choose a smaller image.', 'subscriber-notifications'),
                 'removeLogo'   => __('Remove Logo', 'subscriber-notifications'),
                 'noLogo'       => __('No logo selected', 'subscriber-notifications'),
+                'fontPresets'  => SubscriberNotifications_Email_Font_Presets::get_preset_stacks_for_js(),
+                'fontChoiceCustom' => SubscriberNotifications_Email_Font_Presets::CHOICE_CUSTOM,
+                'fontChoiceSameAsBody' => SubscriberNotifications_Email_Font_Presets::CHOICE_SAME_AS_BODY,
+                'fontPreviewBody' => __('The quick brown fox jumps over the lazy dog.', 'subscriber-notifications'),
+                'fontPreviewHeading' => __('Sample Heading', 'subscriber-notifications'),
             );
         }
 
@@ -1608,7 +1613,7 @@ class SubscriberNotifications_Admin {
         add_settings_section(
             'subscriber_notifications_email_design_typography',
             __('Typography', 'subscriber-notifications'),
-            '__return_empty_string',
+            array($this, 'render_email_design_typography_section_description'),
             'subscriber-notifications-settings-email-design'
         );
 
@@ -1958,18 +1963,15 @@ class SubscriberNotifications_Admin {
     }
 
     public function sanitize_setting_email_font_body($value) {
-        return $this->sanitize_font_stack($value, 'Arial, Helvetica, sans-serif');
+        return SubscriberNotifications_Email_Font_Presets::sanitize_stack(
+            $value,
+            SubscriberNotifications_Email_Font_Presets::get_default_body_stack(),
+            false
+        );
     }
 
     public function sanitize_setting_email_font_heading($value) {
-        $value = is_string($value) ? trim(wp_strip_all_tags($value)) : '';
-        if ($value === '') {
-            return '';
-        }
-        if (!preg_match('/^[A-Za-z0-9 ,\'"\-]+$/', $value)) {
-            return '';
-        }
-        return $value;
+        return SubscriberNotifications_Email_Font_Presets::sanitize_stack($value, '', true);
     }
 
     public function sanitize_setting_email_color_text($value) {
@@ -1998,20 +2000,6 @@ class SubscriberNotifications_Admin {
 
     public function sanitize_setting_email_color_footer_text($value) {
         return $this->sanitize_hex_color_with_default($value, '#ffffff');
-    }
-
-    /**
-     * Validate a CSS font stack. Allows letters, digits, spaces, quotes, commas, hyphens.
-     */
-    private function sanitize_font_stack($value, $default) {
-        $value = is_string($value) ? trim(wp_strip_all_tags($value)) : '';
-        if ($value === '') {
-            return $default;
-        }
-        if (!preg_match('/^[A-Za-z0-9 ,\'"\-]+$/', $value)) {
-            return $default;
-        }
-        return $value;
     }
 
     /**
@@ -2395,20 +2383,119 @@ class SubscriberNotifications_Admin {
     }
 
     public function render_email_font_body_field() {
-        $name_opt = subscriber_notifications_option_name('email_font_body');
-        $value = subscriber_notifications_get_option('email_font_body', 'Arial, Helvetica, sans-serif');
-        ?>
-        <input type="text" id="email_font_body" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
-        <p class="description"><?php esc_html_e('Font stack for body text (paragraphs, lists, links).', 'subscriber-notifications'); ?></p>
-        <?php
+        $this->render_email_font_field(
+            'email_font_body',
+            SubscriberNotifications_Email_Font_Presets::get_default_body_stack(),
+            false,
+            __('Font for body text (paragraphs, lists, links).', 'subscriber-notifications'),
+            'body'
+        );
     }
 
     public function render_email_font_heading_field() {
-        $name_opt = subscriber_notifications_option_name('email_font_heading');
-        $value = subscriber_notifications_get_option('email_font_heading', '');
+        $this->render_email_font_field(
+            'email_font_heading',
+            '',
+            true,
+            __('Font for headings (h1–h6).', 'subscriber-notifications'),
+            'heading'
+        );
+    }
+
+    /**
+     * Section intro for Email Design → Typography.
+     */
+    public function render_email_design_typography_section_description() {
         ?>
-        <input type="text" id="email_font_heading" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" />
-        <p class="description"><?php esc_html_e('Font stack for headings (h1–h6). Leave blank to use the body font.', 'subscriber-notifications'); ?></p>
+        <p class="description">
+            <?php esc_html_e('Choose email-safe system fonts. Web fonts and Google Fonts are not supported reliably across email clients.', 'subscriber-notifications'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render a preset font picker with optional custom stack and live preview.
+     *
+     * @param string $option_suffix Short option key (e.g. email_font_body).
+     * @param string $default       Default stack when empty is not allowed.
+     * @param bool   $allow_same_as_body Show "Same as body" choice (heading field).
+     * @param string $field_help    Field description below the control.
+     * @param string $preview_kind  body|heading — preview sample style.
+     */
+    private function render_email_font_field($option_suffix, $default, $allow_same_as_body, $field_help, $preview_kind) {
+        $name_opt   = subscriber_notifications_option_name($option_suffix);
+        $field_id   = $option_suffix;
+        $value      = subscriber_notifications_get_option($option_suffix, $default);
+        $choice     = SubscriberNotifications_Email_Font_Presets::get_choice_for_stack((string) $value, $allow_same_as_body);
+        $presets    = SubscriberNotifications_Email_Font_Presets::get_presets();
+        $is_custom  = ($choice === SubscriberNotifications_Email_Font_Presets::CHOICE_CUSTOM);
+        $preview_stack = (string) $value;
+        if ($allow_same_as_body && $preview_stack === '') {
+            $preview_stack = subscriber_notifications_get_option(
+                'email_font_body',
+                SubscriberNotifications_Email_Font_Presets::get_default_body_stack()
+            );
+        }
+        $preview_text = ('heading' === $preview_kind)
+            ? __('Sample Heading', 'subscriber-notifications')
+            : __('The quick brown fox jumps over the lazy dog.', 'subscriber-notifications');
+        ?>
+        <div class="sn-email-font-control" data-preview-kind="<?php echo esc_attr($preview_kind); ?>">
+            <select
+                id="<?php echo esc_attr($field_id); ?>_choice"
+                class="sn-email-font-select"
+                aria-describedby="<?php echo esc_attr($field_id); ?>-description"
+            >
+                <?php if ($allow_same_as_body) : ?>
+                    <option
+                        value="<?php echo esc_attr(SubscriberNotifications_Email_Font_Presets::CHOICE_SAME_AS_BODY); ?>"
+                        <?php selected($choice, SubscriberNotifications_Email_Font_Presets::CHOICE_SAME_AS_BODY); ?>
+                    >
+                        <?php esc_html_e('Same as body', 'subscriber-notifications'); ?>
+                    </option>
+                <?php endif; ?>
+                <?php foreach ($presets as $slug => $preset) : ?>
+                    <option value="<?php echo esc_attr($slug); ?>" <?php selected($choice, $slug); ?>>
+                        <?php echo esc_html($preset['label']); ?>
+                    </option>
+                <?php endforeach; ?>
+                <option
+                    value="<?php echo esc_attr(SubscriberNotifications_Email_Font_Presets::CHOICE_CUSTOM); ?>"
+                    <?php selected($choice, SubscriberNotifications_Email_Font_Presets::CHOICE_CUSTOM); ?>
+                >
+                    <?php esc_html_e('Custom stack…', 'subscriber-notifications'); ?>
+                </option>
+            </select>
+
+            <input
+                type="text"
+                id="<?php echo esc_attr($field_id); ?>_custom"
+                class="sn-email-font-custom regular-text"
+                value="<?php echo $is_custom ? esc_attr($value) : ''; ?>"
+                placeholder="<?php esc_attr_e('e.g. Arial, Helvetica, sans-serif', 'subscriber-notifications'); ?>"
+                <?php echo $is_custom ? '' : 'style="display:none;"'; ?>
+            />
+
+            <input
+                type="hidden"
+                id="<?php echo esc_attr($field_id); ?>"
+                class="sn-email-font-value"
+                name="<?php echo esc_attr($name_opt); ?>"
+                value="<?php echo esc_attr($value); ?>"
+            />
+
+            <p
+                class="sn-email-font-preview"
+                style="<?php echo esc_attr('font-family: ' . $preview_stack . ';'); ?>"
+            >
+                <?php echo esc_html($preview_text); ?>
+            </p>
+
+            <p class="description" id="<?php echo esc_attr($field_id); ?>-description">
+                <?php echo esc_html($field_help); ?>
+                <?php esc_html_e('Preview uses your browser; sent emails use each recipient’s installed fonts from the selected stack.', 'subscriber-notifications'); ?>
+            </p>
+        </div>
         <?php
     }
 

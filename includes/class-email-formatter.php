@@ -64,6 +64,60 @@ class SubscriberNotifications_Email_Formatter {
     }
 
     /**
+     * Prepare a sanitized font stack for CSS (not HTML-attribute escaping).
+     *
+     * esc_attr() must not be used in <style> blocks — encoded entities such as
+     * &#039; contain a semicolon that terminates CSS declarations early.
+     *
+     * @param string $stack Font-family stack from settings.
+     * @return string
+     */
+    private function css_font_family($stack) {
+        $stack = is_string($stack) ? trim(wp_strip_all_tags($stack)) : '';
+        if ($stack === '' || !preg_match('/^[A-Za-z0-9 ,\'"\-]+$/', $stack)) {
+            return 'Arial, Helvetica, sans-serif';
+        }
+        return $stack;
+    }
+
+    /**
+     * Force footer link colors inline for clients that ignore stylesheet rules.
+     *
+     * @param string $html       Footer HTML fragment.
+     * @param string $link_color Footer text/link color (hex).
+     * @return string
+     */
+    private function apply_footer_link_styles($html, $link_color) {
+        if ($html === '' || strpos($html, '<a') === false) {
+            return $html;
+        }
+
+        $style_snippet = 'color: ' . $link_color . ' !important; text-decoration: underline;';
+
+        return preg_replace_callback(
+            '/<a(\s[^>]*)>/i',
+            function ($matches) use ($style_snippet) {
+                $attrs = $matches[1];
+                if (preg_match('/\bstyle=(["\'])(.*?)\1/i', $attrs, $style_match)) {
+                    $quote     = $style_match[1];
+                    $existing  = rtrim($style_match[2], '; ');
+                    $new_style = $existing . '; ' . $style_snippet;
+                    $attrs     = preg_replace(
+                        '/\bstyle=(["\'])(.*?)\1/i',
+                        'style=' . $quote . $new_style . $quote,
+                        $attrs,
+                        1
+                    );
+                } else {
+                    $attrs .= ' style="' . esc_attr($style_snippet) . '"';
+                }
+                return '<a' . $attrs . '>';
+            },
+            $html
+        );
+    }
+
+    /**
      * Get default CSS, generated from configured brand tokens.
      *
      * @return string Default CSS for emails.
@@ -71,8 +125,8 @@ class SubscriberNotifications_Email_Formatter {
     public function get_default_css(): string {
         $t = $this->get_brand_tokens();
 
-        $font_body    = esc_attr($t['font_body']);
-        $font_heading = esc_attr($t['font_heading']);
+        $font_body    = $this->css_font_family($t['font_body']);
+        $font_heading = $this->css_font_family($t['font_heading']);
         $color_text   = esc_attr($t['color_text']);
         $color_link       = esc_attr($t['color_link']);
         $color_link_hover = esc_attr($t['color_link_hover']);
@@ -353,7 +407,7 @@ class SubscriberNotifications_Email_Formatter {
         $color_bg      = esc_attr($t['color_bg']);
         $color_card    = esc_attr($t['color_content']);
         $color_text    = esc_attr($t['color_text']);
-        $font_body     = esc_attr($t['font_body']);
+        $font_body     = $this->css_font_family($t['font_body']);
         $color_ftr_bg  = esc_attr($t['color_footer_bg']);
         $color_ftr_tx  = esc_attr($t['color_footer_tx']);
         $header_style  = 'padding: 20px; color: ' . $color_text . '; font-family: ' . $font_body . ';';
@@ -422,7 +476,7 @@ class SubscriberNotifications_Email_Formatter {
             $processed_content = $shortcodes->process_shortcodes($header_content, $subscriber);
             $t            = $this->get_brand_tokens();
             $color_text   = esc_attr($t['color_text']);
-            $font_body    = esc_attr($t['font_body']);
+            $font_body    = $this->css_font_family($t['font_body']);
             $content_html = '<div class="email-header-content" style="color: ' . $color_text . '; vertical-align: middle; text-align: left;">'
                 . $processed_content
                 . '</div>';
@@ -431,7 +485,7 @@ class SubscriberNotifications_Email_Formatter {
         // If no logo and no content, show site name as fallback
         if (empty($logo_html) && empty($content_html)) {
             $t            = $this->get_brand_tokens();
-            $font_heading = esc_attr($t['font_heading']);
+            $font_heading = $this->css_font_family($t['font_heading']);
             $color_text   = esc_attr($t['color_text']);
             return '<h1 style="margin: 0; font-family: ' . $font_heading . '; font-weight: bold; font-size: 24px; line-height: 28px; color: ' . $color_text . '; text-align: center;">' . esc_html(get_bloginfo('name')) . '</h1>';
         }
@@ -478,7 +532,9 @@ class SubscriberNotifications_Email_Formatter {
 
         $t            = $this->get_brand_tokens();
         $color_ftr_tx = esc_attr($t['color_footer_tx']);
-        $font_body    = esc_attr($t['font_body']);
+        $font_body    = $this->css_font_family($t['font_body']);
+
+        $processed_footer = $this->apply_footer_link_styles($processed_footer, $color_ftr_tx);
 
         return '<div class="email-footer-content" style="color: ' . $color_ftr_tx . '; font-family: ' . $font_body . ';">'
             . $processed_footer
