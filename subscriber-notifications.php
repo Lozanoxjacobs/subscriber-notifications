@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
- * Description: Configurable subscriber notification system with per-site Content Types (any public post type and taxonomy), JSON preferences, theme-native form, and brandable emails.
+ * Description: Let visitors subscribe to your content by post type and taxonomy, then send scheduled, targeted email notifications with personalized digests, templates, and open/click tracking.
  * Version: 3.7.0
  * Author: Jackie Lozano
  * License: GPL v2 or later

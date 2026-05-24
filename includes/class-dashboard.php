@@ -241,6 +241,7 @@ class SubscriberNotifications_Dashboard {
         $captcha_site_key     = subscriber_notifications_get_option('captcha_site_key', '');
         $captcha_secret_key   = subscriber_notifications_get_option('captcha_secret_key', '');
         $captcha_configured   = $captcha_site_key !== '' && $captcha_secret_key !== '';
+        $frontend_configured  = subscriber_notifications_frontend_pages_are_configured();
 
         $items = array(
             array(
@@ -251,6 +252,13 @@ class SubscriberNotifications_Dashboard {
                 'message' => $content_configured
                     ? ''
                     : __('Enable at least one post type and form taxonomy.', 'subscriber-notifications'),
+            ),
+            array(
+                'id'      => 'frontend_pages',
+                'label'   => __('Frontend pages configured', 'subscriber-notifications'),
+                'ok'      => $frontend_configured,
+                'url'     => admin_url('admin.php?page=subscriber-notifications-settings&tab=general'),
+                'message' => $this->get_frontend_pages_health_message($frontend_configured),
             ),
             array(
                 'id'      => 'subscribers',
@@ -314,6 +322,42 @@ class SubscriberNotifications_Dashboard {
         return array(
             'items'           => $items,
             'all_required_ok' => $all_required_ok,
+        );
+    }
+
+    /**
+     * Health checklist message for subscribe and preferences page settings.
+     *
+     * @param bool $configured Whether both frontend pages are set.
+     * @return string
+     */
+    private function get_frontend_pages_health_message(bool $configured): string {
+        if ($configured) {
+            $subscribe_id    = subscriber_notifications_get_subscribe_page_id();
+            $preferences_id  = subscriber_notifications_get_preferences_page_id();
+            $subscribe_title = get_the_title($subscribe_id);
+            $preferences_title = get_the_title($preferences_id);
+
+            return sprintf(
+                /* translators: 1: subscribe page title, 2: preferences page title */
+                __('%1$s and %2$s selected.', 'subscriber-notifications'),
+                $subscribe_title !== '' ? $subscribe_title : __('Subscribe page', 'subscriber-notifications'),
+                $preferences_title !== '' ? $preferences_title : __('Preferences page', 'subscriber-notifications')
+            );
+        }
+
+        $missing = array();
+        if (!subscriber_notifications_subscribe_page_is_configured()) {
+            $missing[] = __('Subscribe page', 'subscriber-notifications');
+        }
+        if (!subscriber_notifications_preferences_page_is_configured()) {
+            $missing[] = __('Preferences page', 'subscriber-notifications');
+        }
+
+        return sprintf(
+            /* translators: %s: comma-separated missing page labels */
+            __('Select %s under Settings → General.', 'subscriber-notifications'),
+            implode(', ', $missing)
         );
     }
 

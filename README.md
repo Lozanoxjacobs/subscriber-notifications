@@ -1,6 +1,6 @@
 # Subscriber Notifications Plugin
 
-A comprehensive WordPress plugin for managing subscriber notifications with immediate subscription, scheduling, and analytics.
+Subscriber Notifications is a complete subscription and delivery system for WordPress. Configure Content Types from any public post type and taxonomy, collect preferences via a theme-native form, and send one-time or recurring notifications on daily, weekly, or monthly schedules. Emails are personalized with shortcodes and content feeds, fully brandable, and delivered through WordPress mail—with logs, analytics, and CSV tools for managing your list.
 
 ## Features
 
@@ -17,7 +17,7 @@ A comprehensive WordPress plugin for managing subscriber notifications with imme
 - **Rate Limiting** - Prevents email flooding for frequent notifications
 
 ### Admin Features
-- **Dashboard** - Overview of subscribers, email statistics, and current settings
+- **Dashboard** - Setup & health checklist (Content Types, frontend pages, subscribers, cron; optional reCAPTCHA and pending notifications), subscriber and notification summaries, time-windowed delivery stats, upcoming sends, send queue, recent activity, schedule and Content Types summaries, inline test email, and quick links
 - **Notification Management** - View, edit, cancel, resend, and delete notifications
 - **Recurring Notification Support** - Create and manage notifications that send repeatedly
 - **Subscriber Management** - View subscribers (including **WP User** link and ID), search, activate/deactivate, delete, and CSV import/export
@@ -179,16 +179,47 @@ Optional parameters:
 - **Empty terms** — by default, terms with no published posts for that post type are hidden on the public form (see **Hide Empty Terms on Subscription Form** under General settings)
 - **Validation** — at least one term must be selected across all sections; frequency is required
 
-#### Logged-in users:
-- **Name and email** are prefilled from the WordPress profile (`first_name`, `last_name`, `user_email`) and shown as **read-only** on the subscribe and preferences forms when the subscriber row is linked to a WordPress account (`user_id`)
-- **Server-side enforcement** — on submit, the plugin uses the account identity and ignores POSTed name/email for linked accounts
-- **Account linking** — the subscriber row stores `user_id`; existing rows are matched by `user_id` first, then by email for legacy guest signups (email match auto-links `user_id` on subscribe or preferences page visit)
-- **Subscribe page (logged in)** — active subscribers see an **Already Subscribed** message with a link to the preferences page; inactive subscribers see the subscribe form prefilled with a reactivation notice
-- **Preferences form** — same term/frequency UI as subscribe (including hide-empty behavior); linked accounts show live profile name and email; guests can edit name only (email is read-only from the subscriber record)
-- **On-site access** — logged-in users with a linked or email-matched subscription can open the preferences page without a token
-- **CAPTCHA** — still required when CAPTCHA is enabled (same as guests)
+#### Guest vs logged-in behavior
 
-Guests continue to enter name on subscribe; email is read-only on the preferences form and never updated on save.
+Both forms share the same term/frequency UI (including hide-empty behavior). Contact fields, page access, and what visitors see depend on whether they are logged in and whether a subscriber row already exists.
+
+**Subscribe form** (`[subscriber_notifications_form]`)
+
+| Visitor | What they see |
+|--------|----------------|
+| **Guest** | Full form — editable name and email, plus term/frequency selections |
+| **Logged in, no subscription** | Form with name and email **read-only** from the WordPress profile (`first_name`, `last_name`, `user_email`); submitting creates a new subscriber row and links `user_id` |
+| **Logged in, active subscriber** | **Already Subscribed** message with a link to the preferences page (no form) |
+| **Logged in, inactive subscriber** | Form prefilled with saved preferences and a reactivation notice; submit reactivates the subscription |
+
+**Preferences form** (`[subscriber_notifications_preferences]`)
+
+| Visitor | What they see |
+|--------|----------------|
+| **Guest with valid email token** (`?token=…`) | Full preferences form; name editable, email read-only from the subscriber record |
+| **Guest without token** | Prompt to use the link from their email, plus a log-in link |
+| **Guest with invalid/expired token** | **Invalid Link** message |
+| **Logged in, linked or email-matched subscription** | Full form without a token; name and email **read-only** from the WordPress profile when `user_id` is set on the row |
+| **Logged in, no subscription** | **Not Subscribed** empty state with a link to the subscribe page |
+| **Active subscriber** | Update Preferences button and Unsubscribe section |
+| **Inactive subscriber** | Red **You are currently unsubscribed** notice, **Reactivate Subscription** button, Unsubscribe section hidden |
+
+**Account linking**
+
+- The subscriber row stores `user_id` when someone subscribes while logged in.
+- Existing rows are matched by `user_id` first, then by email for legacy guest signups.
+- Email match auto-links `user_id` on subscribe or preferences page visit.
+- On save, linked accounts always use the WordPress profile for name and email; POSTed contact fields are ignored.
+
+**Inactive and unsubscribe flows** (guests and logged-in users)
+
+- **Unsubscribe** — AJAX on the preferences page; stays on the page with a green confirmation (`?unsubscribed=1`).
+- **Reactivate** — saving preferences while inactive sets status back to `active`, sends the welcome-back email, and redirects with a green **Welcome back!** confirmation (`?reactivated=1`).
+- Stale `?unsubscribed=1` in the URL is ignored once the subscriber is active again.
+
+**Other**
+
+- **CAPTCHA** — required for both guests and logged-in users when enabled.
 
 ### Managing Notifications
 1. **View All Notifications** - Go to Notifications > Notifications
@@ -318,6 +349,9 @@ Preview emails are not sent to subscribers. They approximate production output b
 - **Imports ignore `user_id`** even if present in the file (prevents incorrect account links from spreadsheets). Link accounts only via the public subscription form when the user is logged in.
 
 ### Subscriber Preference Management
+
+See [Guest vs logged-in behavior](#guest-vs-logged-in-behavior) for how the preferences form differs by visitor type, subscription status, and token access.
+
 1. Subscribers manage preferences on the configured **Notification Preferences** page (`[subscriber_notifications_preferences]`)
 2. **Email links** — `{preferences_page}/?token={management_token}` (from `[manage_preferences_link]` and notification emails)
 3. **Logged-in access** — subscribers with a linked account (`user_id`) or matching account email can open the preferences page without a token
@@ -325,10 +359,9 @@ Preview emails are not sent to subscribers. They approximate production output b
    - Name (guest subscribers only; linked accounts use the WordPress profile)
    - Their selected terms for each configured post type / taxonomy
    - Delivery frequency
-5. Unsubscribe option available on the preferences page
-6. **Inactive subscribers** who save the preferences form are **reactivated** (same as resubscribing via the public form); they receive the welcome-back email. The preferences page shows a notice when the subscriber is currently unsubscribed.
+5. Unsubscribe option available on the preferences page (hidden while inactive)
+6. **Inactive subscribers** who save the preferences form are **reactivated** (same as resubscribing via the public form); they receive the welcome-back email
 7. Active subscribers receive a preferences-update confirmation email after saving
-8. **Linked accounts** — name and email display from the WordPress profile on every visit and sync to the subscriber row on save
 
 ### Flagging Posts for Notifications
 1. Edit any post in an enabled content type
@@ -436,6 +469,8 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 - **Token page caching** — no-cache headers on token-based preferences views so edge caches do not serve stale inactive HTML
 - **Frontend notices** — styled success, inactive, and error banners for subscribe and preferences flows
 - **Integration tests** — `frontend-pages-tests.php` and `preferences-page-tests.php` cover v3.7 frontend pages, shortcodes, session auth, subscribe/unsubscribe/reactivate flows
+- **Admin — dashboard layout** — **Setup & health** is pinned to the top of the sidebar; **Content types** and **Email schedule** moved to the main column. Primary column is configuration plus daily operations; sidebar holds setup checklist, notification/subscriber stats, test email, and quick links
+- **Admin — dashboard setup checklist** — **Frontend pages configured** added as a required health item (links to **Settings → General**; shows selected page titles or missing subscribe/preferences page labels)
 
 ### Version 3.6.7
 

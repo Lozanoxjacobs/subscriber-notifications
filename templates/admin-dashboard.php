@@ -12,9 +12,6 @@ if (!defined('ABSPATH')) {
 $snapshot     = isset($snapshot) && is_array($snapshot) ? $snapshot : array();
 $partial_dir  = SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/partials/';
 $create_url   = $snapshot['urls']['create'] ?? admin_url('admin.php?page=subscriber-notifications-create');
-
-// Setup & health first when action is required; otherwise last so operations stay above the fold.
-$health_first = empty($snapshot['health']['all_required_ok']);
 ?>
 
 <div class="wrap subscriber-notifications-dashboard-wrap">
@@ -27,24 +24,17 @@ $health_first = empty($snapshot['health']['all_required_ok']);
     <div class="subscriber-notifications-dashboard">
         <div class="sn-dashboard-columns">
             <div class="sn-dashboard-column sn-dashboard-column-primary">
-                <?php if ($health_first) : ?>
-                    <?php include $partial_dir . 'dashboard-health.php'; ?>
-                <?php endif; ?>
-
+                <?php include $partial_dir . 'dashboard-content-types.php'; ?>
+                <?php include $partial_dir . 'dashboard-schedule.php'; ?>
                 <?php include $partial_dir . 'dashboard-delivery.php'; ?>
                 <?php include $partial_dir . 'dashboard-send-queue.php'; ?>
                 <?php include $partial_dir . 'dashboard-upcoming.php'; ?>
                 <?php include $partial_dir . 'dashboard-activity.php'; ?>
-
-                <?php if (!$health_first) : ?>
-                    <?php include $partial_dir . 'dashboard-health.php'; ?>
-                <?php endif; ?>
             </div>
             <div class="sn-dashboard-column sn-dashboard-column-secondary">
+                <?php include $partial_dir . 'dashboard-health.php'; ?>
                 <?php include $partial_dir . 'dashboard-notifications.php'; ?>
                 <?php include $partial_dir . 'dashboard-subscribers.php'; ?>
-                <?php include $partial_dir . 'dashboard-schedule.php'; ?>
-                <?php include $partial_dir . 'dashboard-content-types.php'; ?>
                 <?php include $partial_dir . 'dashboard-mail.php'; ?>
                 <?php include $partial_dir . 'dashboard-quick-links.php'; ?>
             </div>
