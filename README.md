@@ -405,6 +405,7 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 ### Version 3.6.6
 
 - **Fix — manage preferences reactivates unsubscribed subscribers** — saving the token-based preferences form now sets `status` back to `active` when the subscriber was inactive (admin Unsubscribe, frontend Unsubscribe, or CSV). Sends the welcome-back email instead of the ordinary preferences-update email. The manage-preferences page shows a notice when the address is currently unsubscribed
+- **Fix — manage preferences UI when unsubscribed** — hide the Unsubscribe section while the subscriber is inactive; page reloads after a successful reactivation so the active layout (including Unsubscribe) appears
 
 ### Version 3.6.5
 

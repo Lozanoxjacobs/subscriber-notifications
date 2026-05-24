@@ -619,6 +619,7 @@ class SubscriberNotifications_Frontend {
                 <div id="preferences-message" class="subscriber-message" style="display: none;"></div>
             </form>
 
+            <?php if ($subscriber->status === 'active') : ?>
             <div class="unsubscribe-section">
                 <hr>
                 <h3><?php esc_html_e('Unsubscribe', 'subscriber-notifications'); ?></h3>
@@ -627,6 +628,7 @@ class SubscriberNotifications_Frontend {
                     <?php esc_html_e('Unsubscribe', 'subscriber-notifications'); ?>
                 </button>
             </div>
+            <?php endif; ?>
         </div>
         <?php
         get_footer();
@@ -668,7 +670,11 @@ class SubscriberNotifications_Frontend {
         $prefs     = SubscriberNotifications_Preferences::prune_to_allowed_terms($prefs, 'public');
 
         if (SubscriberNotifications_Content_Config::is_configured() && !SubscriberNotifications_Preferences::has_at_least_one_term($prefs)) {
-            wp_send_json_error(__('Please select at least one option, or use the Unsubscribe button below.', 'subscriber-notifications'));
+            if ($subscriber->status === 'inactive') {
+                wp_send_json_error(__('Please select at least one option to reactivate your subscription.', 'subscriber-notifications'));
+            } else {
+                wp_send_json_error(__('Please select at least one option, or use the Unsubscribe button below.', 'subscriber-notifications'));
+            }
             return;
         }
 

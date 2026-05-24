@@ -194,6 +194,10 @@
                 success: function (response) {
                     if (response && response.success) {
                         $message.removeClass('error').addClass('success').text(response.data).show();
+                        if ($('.subscriber-notifications-notice').length) {
+                            window.location.reload();
+                            return;
+                        }
                     } else {
                         $message.removeClass('success').addClass('error').text((response && response.data) || i18n.genericError).show();
                     }
