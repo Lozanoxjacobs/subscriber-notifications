@@ -22,6 +22,9 @@ if (!defined('ABSPATH')) {
         <a href="?page=subscriber-notifications-settings&tab=security" class="nav-tab <?php echo $active_tab == 'security' ? 'nav-tab-active' : ''; ?>">
             <?php _e('Security', 'subscriber-notifications'); ?>
         </a>
+        <a href="?page=subscriber-notifications-settings&tab=data" class="nav-tab <?php echo $active_tab == 'data' ? 'nav-tab-active' : ''; ?>">
+            <?php _e('Data', 'subscriber-notifications'); ?>
+        </a>
         <a href="?page=subscriber-notifications-settings&tab=email-design" class="nav-tab <?php echo $active_tab == 'email-design' ? 'nav-tab-active' : ''; ?>">
             <?php _e('Email Design', 'subscriber-notifications'); ?>
         </a>
@@ -64,6 +67,8 @@ if (!defined('ABSPATH')) {
         </form>
     <?php elseif ($active_tab === 'shortcodes') : ?>
         <?php include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/partials/admin-settings-shortcodes.php'; ?>
+    <?php elseif ($active_tab === 'data') : ?>
+        <?php include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/partials/admin-settings-data.php'; ?>
     <?php endif; ?>
 </div>
 

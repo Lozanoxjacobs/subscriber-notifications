@@ -133,6 +133,11 @@ Under **Notifications > Settings > General**:
 
 - **Test Email Address** — address used by **Send Test Email** (`wp_mail()`)
 - **Hide Empty Terms on Subscription Form** (default **on**) — on the public subscribe and preferences forms, hide terms that have zero **published** posts for the configured post type (e.g. empty `Uncategorized`). Admin notification targets, Content Types configuration, and CSV import reference lists always show every configured term. Uncheck to show all configured terms on the public form regardless of post count.
+
+### Data Settings
+Under **Notifications > Settings > Data**:
+
+- **Email logs** — purge log entries older than 30 / 90 / 180 / 365 days (with match counts and confirmation)
 - **Delete Data on Uninstall** — when checked, uninstall removes subscribers, logs, queue, and plugin options
 
 ### Email Templates
@@ -392,6 +397,10 @@ define('DISABLE_WP_CRON', true);
 This guarantees the send queue drains on a strict one-minute cadence regardless of site traffic.
 
 ## Changelog
+
+### Version 3.6.4
+
+- **Admin — Settings Data tab** — email log purge and **Delete Data on Uninstall** moved from Email Logs / General to **Settings > Data**; purge uses standard Settings `form-table` layout (separate POST form for the destructive action)
 
 ### Version 3.6.3
 

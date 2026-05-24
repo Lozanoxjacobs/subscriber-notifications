@@ -256,32 +256,20 @@
     max-width: 160px;
 }
 
-.logs-maintenance {
-    margin: 0 0 20px;
-    padding: 15px;
-    background: #fff;
-    border: 1px solid #ccd0d4;
-    border-left: 4px solid #d63638;
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+.sn-settings-data {
+    margin-top: 10px;
+    max-width: none;
 }
 
-.logs-maintenance form {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
+.sn-settings-data #sn-purge-logs-form select {
+    max-width: 25em;
 }
 
-.logs-maintenance select {
-    min-width: 120px;
+.sn-settings-data #sn-purge-match-summary {
+    margin: 8px 0 0;
 }
 
-.logs-maintenance #sn-purge-match-summary {
-    flex: 1 1 100%;
-    margin: 0;
-}
-
-.logs-maintenance button:disabled {
+.sn-settings-data #sn-purge-logs-form button:disabled {
     cursor: not-allowed;
     opacity: 0.6;
 }

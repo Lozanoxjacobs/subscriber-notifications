@@ -27,16 +27,6 @@ foreach ($sn_logs_filter_args as $key => $value) {
     $sn_logs_export_url = add_query_arg($key, $value, $sn_logs_export_url);
 }
 $sn_logs_export_url = wp_nonce_url($sn_logs_export_url, 'export_logs');
-
-if (!isset($sn_purge_presets)) {
-    $sn_purge_presets = array(30, 90, 180, 365);
-}
-if (!isset($sn_purge_counts)) {
-    $sn_purge_counts = array();
-    foreach ($sn_purge_presets as $purge_days) {
-        $sn_purge_counts[ $purge_days ] = 0;
-    }
-}
 ?>
 
 <div class="wrap subscriber-notifications-logs">
@@ -45,32 +35,6 @@ if (!isset($sn_purge_counts)) {
         <?php esc_html_e('Export Logs', 'subscriber-notifications'); ?>
     </a>
     <hr class="wp-header-end">
-
-    <div class="logs-maintenance">
-        <h2 class="screen-reader-text"><?php esc_html_e('Log maintenance', 'subscriber-notifications'); ?></h2>
-        <form id="sn-purge-logs-form" method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-            <input type="hidden" name="action" value="subscriber_notifications_purge_logs">
-            <?php wp_nonce_field('sn_purge_logs', 'sn_purge_logs_nonce'); ?>
-            <label for="sn-purge-days"><?php esc_html_e('Purge logs older than', 'subscriber-notifications'); ?></label>
-            <select name="purge_days" id="sn-purge-days">
-                <?php foreach ($sn_purge_presets as $days) : ?>
-                    <option value="<?php echo esc_attr((string) $days); ?>" data-match-count="<?php echo esc_attr((string) (int) ($sn_purge_counts[ $days ] ?? 0)); ?>">
-                        <?php
-                        echo esc_html(
-                            sprintf(
-                                _n('%1$d day (%2$d match)', '%1$d days (%2$d match)', $days, 'subscriber-notifications'),
-                                $days,
-                                (int) ($sn_purge_counts[ $days ] ?? 0)
-                            )
-                        );
-                        ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <span id="sn-purge-match-summary" class="description" aria-live="polite"></span>
-            <button type="submit" class="button"><?php esc_html_e('Purge', 'subscriber-notifications'); ?></button>
-        </form>
-    </div>
 
     <form method="get">
         <input type="hidden" name="page" value="subscriber-notifications-logs">

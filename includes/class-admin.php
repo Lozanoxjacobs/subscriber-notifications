@@ -40,7 +40,7 @@ class SubscriberNotifications_Admin {
         add_action('admin_init', array($this, 'register_settings'));
         add_action('admin_notices', array($this, 'maybe_render_notification_flash_notice'));
         add_action('admin_notices', array($this, 'maybe_render_subscribers_flash_notice'));
-        add_action('admin_notices', array($this, 'maybe_render_logs_flash_notice'));
+        add_action('admin_notices', array($this, 'maybe_render_data_flash_notice'));
         add_action('admin_post_subscriber_notifications_purge_logs', array($this, 'handle_purge_logs'));
         $this->register_scheduling_side_effects();
         add_action('wp_ajax_test_wp_mail', array($this, 'test_wp_mail'));
@@ -227,7 +227,7 @@ class SubscriberNotifications_Admin {
             );
         }
 
-        if (strpos($hook, 'subscriber-notifications-logs') !== false) {
+        if (strpos($hook, 'subscriber-notifications-logs') !== false || strpos($hook, 'subscriber-notifications-settings') !== false) {
             $localize['logsMaintenance'] = array(
                 'matchTemplate'     => __('%1$s log entries match this age (older than %2$s days).', 'subscriber-notifications'),
                 'matchNoneTemplate' => __('No log entries are older than %2$s days.', 'subscriber-notifications'),
@@ -844,14 +844,15 @@ class SubscriberNotifications_Admin {
     
 
     /**
-     * Admin URL for the email logs screen.
+     * Admin URL for the Settings > Data tab.
      *
      * @param string $message Optional flash message key (e.g. `logs_purged`).
      * @return string
      */
-    private function get_logs_admin_url($message = '') {
+    private function get_data_settings_url($message = '') {
         $args = array(
-            'page' => 'subscriber-notifications-logs',
+            'page' => 'subscriber-notifications-settings',
+            'tab'  => 'data',
         );
 
         if ($message !== '') {
@@ -864,12 +865,12 @@ class SubscriberNotifications_Admin {
     /**
      * Show a one-time admin notice after log purge redirect (Post-Redirect-Get).
      */
-    public function maybe_render_logs_flash_notice() {
-        if (!isset($_GET['page'], $_GET['message'])) {
+    public function maybe_render_data_flash_notice() {
+        if (!isset($_GET['page'], $_GET['tab'], $_GET['message'])) {
             return;
         }
 
-        if ($_GET['page'] !== 'subscriber-notifications-logs') {
+        if ($_GET['page'] !== 'subscriber-notifications-settings' || $_GET['tab'] !== 'data') {
             return;
         }
 
@@ -878,20 +879,38 @@ class SubscriberNotifications_Admin {
             return;
         }
 
-        $transient_key = 'sn_logs_purge_count_' . get_current_user_id();
-        $deleted_count = get_transient($transient_key);
+        $transient_key = 'sn_logs_purge_result_' . get_current_user_id();
+        $result        = get_transient($transient_key);
         delete_transient($transient_key);
 
-        if ($deleted_count === false) {
-            $deleted_count = 0;
+        if (!is_array($result)) {
+            return;
         }
 
-        $text = sprintf(
-            _n('%d log entry deleted.', '%d log entries deleted.', (int) $deleted_count, 'subscriber-notifications'),
-            (int) $deleted_count
-        );
+        $deleted = isset($result['deleted']) ? (int) $result['deleted'] : 0;
+        $days    = isset($result['days']) ? (int) $result['days'] : 0;
 
-        echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
+        if ($deleted > 0) {
+            $text = sprintf(
+                _n(
+                    '%1$d log entry older than %2$d days was deleted.',
+                    '%1$d log entries older than %2$d days were deleted.',
+                    $deleted,
+                    'subscriber-notifications'
+                ),
+                $deleted,
+                $days
+            );
+            $class = 'notice-success';
+        } else {
+            $text = sprintf(
+                __('No log entries were older than %d days.', 'subscriber-notifications'),
+                $days
+            );
+            $class = 'notice-warning';
+        }
+
+        echo '<div class="notice ' . esc_attr($class) . ' is-dismissible"><p>' . esc_html($text) . '</p></div>';
     }
 
     /**
@@ -921,7 +940,7 @@ class SubscriberNotifications_Admin {
             MINUTE_IN_SECONDS
         );
 
-        wp_safe_redirect($this->get_logs_admin_url('logs_purged'));
+        wp_safe_redirect($this->get_data_settings_url('logs_purged'));
         exit;
     }
     
@@ -1309,12 +1328,6 @@ class SubscriberNotifications_Admin {
         $list_table = new SubscriberNotifications_Logs_List_Table($this->database);
         $list_table->prepare_items();
 
-        $sn_purge_presets = array(30, 90, 180, 365);
-        $sn_purge_counts  = array();
-        foreach ($sn_purge_presets as $purge_days) {
-            $sn_purge_counts[ $purge_days ] = $this->database->count_logs_older_than($purge_days);
-        }
-
         include SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'templates/admin-logs.php';
     }
     
@@ -1445,7 +1458,7 @@ class SubscriberNotifications_Admin {
         $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'general';
         
         // Validate tab name
-        $valid_tabs = array('general', 'email-templates', 'scheduling', 'security', 'email-design', 'shortcodes');
+        $valid_tabs = array('general', 'email-templates', 'scheduling', 'security', 'data', 'email-design', 'shortcodes');
         if (!in_array($active_tab, $valid_tabs)) {
             $active_tab = 'general';
         }
@@ -1502,8 +1515,7 @@ class SubscriberNotifications_Admin {
         $tabs = array(
             'general' => array(
                 'test_email',
-                'delete_data_on_uninstall',
-                'hide_terms_without_published_content'
+                'hide_terms_without_published_content',
             ),
             'email-templates' => array(
                 'welcome_email_subject',
@@ -1523,6 +1535,9 @@ class SubscriberNotifications_Admin {
             'security' => array(
                 'captcha_site_key',
                 'captcha_secret_key'
+            ),
+            'data' => array(
+                'delete_data_on_uninstall',
             ),
             'email-design' => array(
                 'global_header_logo',
@@ -1597,6 +1612,20 @@ class SubscriberNotifications_Admin {
         );
 
         add_settings_section(
+            'subscriber_notifications_data_logs_section',
+            __('Email logs', 'subscriber-notifications'),
+            array($this, 'render_data_logs_section_description'),
+            'subscriber-notifications-settings-data'
+        );
+
+        add_settings_section(
+            'subscriber_notifications_data_uninstall_section',
+            __('Uninstall', 'subscriber-notifications'),
+            array($this, 'render_data_uninstall_section_description'),
+            'subscriber-notifications-settings-data'
+        );
+
+        add_settings_section(
             'subscriber_notifications_email_design_header_footer',
             __('Header & Footer', 'subscriber-notifications'),
             '__return_empty_string',
@@ -1641,6 +1670,24 @@ class SubscriberNotifications_Admin {
     }
 
     /**
+     * Section description for the Data tab email log maintenance controls.
+     */
+    public function render_data_logs_section_description() {
+        ?>
+        <p><?php esc_html_e('Permanently remove email log entries older than the selected age. This cannot be undone.', 'subscriber-notifications'); ?></p>
+        <?php
+    }
+
+    /**
+     * Section description for the Data tab uninstall settings.
+     */
+    public function render_data_uninstall_section_description() {
+        ?>
+        <p><?php esc_html_e('Control whether plugin data is removed when the plugin is deleted from WordPress.', 'subscriber-notifications'); ?></p>
+        <?php
+    }
+
+    /**
      * Add settings fields for each tab and section.
      */
     private function add_settings_fields() {
@@ -1665,8 +1712,16 @@ class SubscriberNotifications_Admin {
             'delete_data_on_uninstall',
             __('Delete Data on Uninstall', 'subscriber-notifications'),
             array($this, 'render_delete_data_on_uninstall_field'),
-            'subscriber-notifications-settings-general',
-            'subscriber_notifications_general_section'
+            'subscriber-notifications-settings-data',
+            'subscriber_notifications_data_uninstall_section'
+        );
+
+        add_settings_field(
+            'purge_logs',
+            __('Purge old entries', 'subscriber-notifications'),
+            array($this, 'render_purge_logs_field'),
+            'subscriber-notifications-settings-data',
+            'subscriber_notifications_data_logs_section'
         );
 
         // Email Templates tab fields
@@ -2054,6 +2109,75 @@ class SubscriberNotifications_Admin {
             <?php endif; ?>
         </p>
         <?php
+    }
+
+    /**
+     * Render the log purge maintenance form (display-only Settings field).
+     */
+    public function render_purge_logs_field() {
+        $presets = array(30, 90, 180, 365);
+        $counts  = array();
+
+        foreach ($presets as $days) {
+            $counts[ $days ] = $this->database->count_logs_older_than($days);
+        }
+        ?>
+        <form id="sn-purge-logs-form" method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+            <input type="hidden" name="action" value="subscriber_notifications_purge_logs">
+            <?php wp_nonce_field('sn_purge_logs', 'sn_purge_logs_nonce'); ?>
+            <select name="purge_days" id="sn-purge-days" class="regular-text">
+                <?php foreach ($presets as $days) : ?>
+                    <option value="<?php echo esc_attr((string) $days); ?>" data-match-count="<?php echo esc_attr((string) (int) ($counts[ $days ] ?? 0)); ?>">
+                        <?php
+                        echo esc_html(
+                            sprintf(
+                                _n('%1$d day (%2$d match)', '%1$d days (%2$d match)', $days, 'subscriber-notifications'),
+                                $days,
+                                (int) ($counts[ $days ] ?? 0)
+                            )
+                        );
+                        ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <p id="sn-purge-match-summary" class="description" aria-live="polite"></p>
+            <p class="submit" style="padding-bottom: 0; margin-top: 0;">
+                <button type="submit" class="button"><?php esc_html_e('Purge', 'subscriber-notifications'); ?></button>
+            </p>
+        </form>
+        <?php
+    }
+
+    /**
+     * Render one Settings API section (title, description, and fields table).
+     *
+     * @param string $page       Settings page slug.
+     * @param string $section_id Section id.
+     */
+    public function render_settings_section(string $page, string $section_id): void {
+        global $wp_settings_sections, $wp_settings_fields;
+
+        if (!isset($wp_settings_sections[ $page ][ $section_id ])) {
+            return;
+        }
+
+        $section = $wp_settings_sections[ $page ][ $section_id ];
+
+        if ($section['title'] !== '') {
+            echo '<h2>' . esc_html($section['title']) . '</h2>';
+        }
+
+        if ($section['callback']) {
+            call_user_func($section['callback'], $section);
+        }
+
+        if (empty($wp_settings_fields[ $page ][ $section_id ])) {
+            return;
+        }
+
+        echo '<table class="form-table" role="presentation">';
+        do_settings_fields($page, $section_id);
+        echo '</table>';
     }
 
     public function render_hide_terms_without_published_content_field() {
