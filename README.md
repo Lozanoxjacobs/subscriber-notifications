@@ -402,6 +402,11 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.6.7
+
+- **Fix — convert sent one-time notification to recurring** — editing a sent one-time notification to recurring now resets `status` to `pending`, recalculates `next_send_date`, and clears stale send-queue rows so the recurring cron pipeline picks it up; re-saving already-broken rows is also repaired
+- **Admin — recurring status display** — notifications list no longer shows misleading "Pending" for recurring rows that are still `status = sent` before re-queuing
+
 ### Version 3.6.6
 
 - **Fix — manage preferences reactivates unsubscribed subscribers** — saving the token-based preferences form now sets `status` back to `active` when the subscriber was inactive (admin Unsubscribe, frontend Unsubscribe, or CSV). Sends the welcome-back email instead of the ordinary preferences-update email. The manage-preferences page shows a notice when the address is currently unsubscribed

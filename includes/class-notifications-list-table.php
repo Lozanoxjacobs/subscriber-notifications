@@ -409,6 +409,15 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
                 );
             }
 
+            // A sent one-time row converted to recurring without re-queuing still
+            // has status = 'sent' until the edit handler resets it to pending.
+            if ($notification->status === 'sent') {
+                return array(
+                    'class' => 'status-sent',
+                    'text'  => __('Sent', 'subscriber-notifications'),
+                );
+            }
+
             if (isset($notification->recurrence_count) && $notification->recurrence_count > 0) {
                 return array(
                     'class' => 'status-active',

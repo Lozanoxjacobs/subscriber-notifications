@@ -14,7 +14,7 @@ $database = new SubscriberNotifications_Database();
 
 sn_test_assert(
     'B1 plugin version 3.6.6',
-    defined('SUBSCRIBER_NOTIFICATIONS_VERSION') && SUBSCRIBER_NOTIFICATIONS_VERSION === '3.6.6'
+    defined('SUBSCRIBER_NOTIFICATIONS_VERSION') && SUBSCRIBER_NOTIFICATIONS_VERSION === '3.6.7'
 );
 
 $footer = subscriber_notifications_get_option('global_footer', '');

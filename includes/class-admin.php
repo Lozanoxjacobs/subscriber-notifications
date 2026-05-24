@@ -483,7 +483,7 @@ class SubscriberNotifications_Admin {
         // Fetch current notification state before updating (including frequency_target for comparison)
         global $wpdb;
         $current_notification = $wpdb->get_row($wpdb->prepare(
-            "SELECT status, next_send_date, is_recurring, frequency_target FROM {$wpdb->prefix}subscriber_notifications_queue WHERE id = %d",
+            "SELECT status, next_send_date, is_recurring, frequency_target, recurrence_count, sent_date FROM {$wpdb->prefix}subscriber_notifications_queue WHERE id = %d",
             $notification_id
         ));
         
@@ -504,15 +504,45 @@ class SubscriberNotifications_Admin {
         $is_recurring      = (int) $form['is_recurring'];
         $allowed_freqs     = $this->get_allowed_notification_frequencies();
 
+        // Converting a one-time notification to recurring must re-queue it: the cron
+        // handlers only pick up rows with status = 'pending' and a non-null
+        // next_send_date. Previously, editing a sent one-time to recurring left
+        // status = 'sent' and next_send_date unchanged, so it never entered the
+        // recurring send pipeline.
+        $became_recurring = ($is_recurring === 1 && (int) $current_notification->is_recurring !== 1);
+        $stuck_sent_recurring = (
+            $is_recurring === 1
+            && !$became_recurring
+            && $current_notification->status === 'sent'
+            && (int) $current_notification->recurrence_count === 0
+        );
+        $reactivate_for_recurring = $became_recurring || $stuck_sent_recurring;
+
+        if ($reactivate_for_recurring) {
+            $wpdb->delete(
+                $wpdb->prefix . 'subscriber_notifications_send_queue',
+                array('notification_id' => $notification_id),
+                array('%d')
+            );
+        }
+
+        $effective_status = $current_notification->status;
+        if ($reactivate_for_recurring && in_array($current_notification->status, array('sent', 'cancelled'), true)) {
+            $effective_status = 'pending';
+        }
+
         // Determine next_send_date based on current state and new settings.
         // Both one-time and recurring notifications have a next_send_date so
         // process_queue() can filter on a single SQL predicate.
-        $next_send_date = $current_notification->next_send_date; // Preserve by default
-        
-        if ($current_notification->status === 'pending' && in_array($frequency_target, $allowed_freqs, true)) {
+        $next_send_date  = $current_notification->next_send_date; // Preserve by default
+        $clear_sent_date = false;
+
+        if ($effective_status === 'pending' && in_array($frequency_target, $allowed_freqs, true)) {
             $should_recalculate = false;
-            
-            if ($current_notification->frequency_target !== $frequency_target) {
+
+            if ($reactivate_for_recurring) {
+                $should_recalculate = true;
+            } elseif ($current_notification->frequency_target !== $frequency_target) {
                 $should_recalculate = true;
             } elseif ((int) $current_notification->is_recurring !== $is_recurring) {
                 $should_recalculate = true;
@@ -526,35 +556,48 @@ class SubscriberNotifications_Admin {
                     $should_recalculate = true;
                 }
             }
-            
+
             if ($should_recalculate) {
                 $next_send_date = (new SubscriberNotifications_Schedule_Calculator())->next_one_time($frequency_target);
-                
+
                 // Add 5-minute safety buffer to prevent immediate sending due to race conditions
                 $tz         = wp_timezone();
                 $calculated = new DateTimeImmutable($next_send_date, $tz);
                 $threshold  = (new DateTimeImmutable('now', $tz))->modify('+5 minutes');
-                
+
                 if ($calculated <= $threshold) {
                     $next_send_date = $threshold->format('Y-m-d H:i:s');
                 }
+
+                if ($reactivate_for_recurring && $current_notification->status === 'sent') {
+                    $clear_sent_date = true;
+                }
             }
         }
-        // If status is 'sent' or 'cancelled', preserve existing next_send_date (already set above)
-        
+
+        $update_data = array(
+            'title'              => $form['title'],
+            'subject'            => $form['subject'],
+            'content'            => $form['content'],
+            'target_preferences' => $target_prefs_json,
+            'frequency_target'   => $frequency_target,
+            'is_recurring'       => $is_recurring,
+            'next_send_date'     => $next_send_date,
+        );
+
+        if ($effective_status !== $current_notification->status) {
+            $update_data['status'] = $effective_status;
+        }
+
+        if ($clear_sent_date) {
+            $update_data['sent_date'] = null;
+        }
+
         $result = $wpdb->update(
             $wpdb->prefix . 'subscriber_notifications_queue',
-            array(
-                'title'              => $form['title'],
-                'subject'            => $form['subject'],
-                'content'            => $form['content'],
-                'target_preferences' => $target_prefs_json,
-                'frequency_target'   => $frequency_target,
-                'is_recurring'       => $is_recurring,
-                'next_send_date'     => $next_send_date,
-            ),
+            $update_data,
             array('id' => $notification_id),
-            array('%s', '%s', '%s', '%s', '%s', '%d', '%s'),
+            null,
             array('%d')
         );
         
