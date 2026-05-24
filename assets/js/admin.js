@@ -76,27 +76,6 @@ jQuery(document).ready(function($) {
         }
     });
 
-    // Handle notification preview
-    $('#notification_content').on('input', function() {
-        var content = $(this).val();
-        if (content) {
-            // Replace shortcodes with sample data
-            content = content.replace(/\[subscriber_name\]/g, 'John Doe');
-            content = content.replace(/\[subscriber_email\]/g, 'john@example.com');
-            content = content.replace(/\[selected_subscriptions\]/g, 'Sample selections across configured taxonomies');
-            content = content.replace(/\[selected_terms[^\]]*\]/g, 'Sample term, Another term');
-            content = content.replace(/\[content_feed[^\]]*\]/g, '<ul><li>Sample feed item</li></ul>');
-            content = content.replace(/\[delivery_frequency\]/g, 'Weekly');
-            content = content.replace(/\[site_title\]/g, subscriberNotifications.siteTitle || 'Site Title');
-            content = content.replace(/\[manage_preferences_link\]/g, '<a href="#">Manage Preferences</a>');
-            content = content.replace(/\[manage_preferences_link text="([^"]+)"\]/g, '<a href="#">$1</a>');
-            
-            $('#preview-content').html(content);
-        } else {
-            $('#preview-content').html('<p>Preview will appear here when you type in the content field.</p>');
-        }
-    });
-    
     // Handle notification checkbox toggle
     $(document).on('change', '#notify_subscribers', function() {
         var isChecked = $(this).is(':checked');
@@ -352,12 +331,41 @@ jQuery(document).ready(function($) {
     if ($('#send-preview-email').length && subscriberNotifications.previewEmail) {
         var peCfg = subscriberNotifications.previewEmail;
 
+        function collectTargetPreferences($form) {
+            var prefs = {};
+
+            $form.find('input[name^="target_preferences["]:checked').each(function () {
+                var name = $(this).attr('name');
+                var match = name.match(/^target_preferences\[([^\]]+)\]\[([^\]]+)\]\[\]$/);
+
+                if (!match) {
+                    return;
+                }
+
+                var postType = match[1];
+                var taxonomy = match[2];
+                var termId = parseInt($(this).val(), 10);
+
+                if (!prefs[postType]) {
+                    prefs[postType] = {};
+                }
+                if (!prefs[postType][taxonomy]) {
+                    prefs[postType][taxonomy] = [];
+                }
+                prefs[postType][taxonomy].push(termId);
+            });
+
+            return prefs;
+        }
+
         $('#send-preview-email').on('click', function (e) {
             e.preventDefault();
 
+            var $form = $('#create-notification-form, #edit-notification-form').first();
             var email = $('#preview_email').val();
             var subject = $('#notification_subject').val();
             var content = '';
+            var targetPreferences = collectTargetPreferences($form);
 
             if (typeof tinymce !== 'undefined' && tinymce.get('notification_content')) {
                 content = tinymce.get('notification_content').getContent();
@@ -377,6 +385,14 @@ jQuery(document).ready(function($) {
                 alert(peCfg.enterContent);
                 return;
             }
+            if ($.isEmptyObject(targetPreferences)) {
+                alert(peCfg.enterTargets);
+                var $targets = $form.find('.sn-targets').first();
+                if ($targets.length) {
+                    $('html, body').animate({ scrollTop: $targets.offset().top - 50 }, 200);
+                }
+                return;
+            }
 
             var $button = $(this);
             var $resultDiv = $('#preview-email-result');
@@ -392,7 +408,8 @@ jQuery(document).ready(function($) {
                     nonce: peCfg.nonce,
                     email: email,
                     subject: subject,
-                    content: content
+                    content: content,
+                    target_preferences: targetPreferences
                 },
                 success: function (response) {
                     if (response.success) {

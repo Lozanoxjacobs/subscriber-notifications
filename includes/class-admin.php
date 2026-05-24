@@ -199,7 +199,6 @@ class SubscriberNotifications_Admin {
         $localize = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce'   => wp_create_nonce('subscriber_notifications_nonce'),
-            'siteTitle' => get_bloginfo('name'),
             'notificationList' => array(
                 'previewNonce' => wp_create_nonce('get_notification_preview'),
             ),
@@ -208,6 +207,7 @@ class SubscriberNotifications_Admin {
                 'enterEmail'     => __('Please enter an email address.', 'subscriber-notifications'),
                 'enterSubject'   => __('Please enter a subject.', 'subscriber-notifications'),
                 'enterContent'   => __('Please enter content.', 'subscriber-notifications'),
+                'enterTargets'   => __('Please select at least one target term in Target Content.', 'subscriber-notifications'),
                 'sending'        => __('Sending...', 'subscriber-notifications'),
                 'sendingPreview' => __('Sending preview email...', 'subscriber-notifications'),
                 'sentSuccess'    => __('Preview email sent successfully!', 'subscriber-notifications'),
@@ -669,6 +669,30 @@ class SubscriberNotifications_Admin {
         }
 
         return $errors;
+    }
+
+    /**
+     * Parse target preferences from a preview-email AJAX request.
+     *
+     * @return array Normalized target preferences array.
+     */
+    private function parse_preview_target_preferences_from_request() {
+        $raw_targets = isset($_POST['target_preferences']) ? wp_unslash($_POST['target_preferences']) : array();
+        $target_prefs = SubscriberNotifications_Preferences::sanitize_from_post($raw_targets);
+
+        return SubscriberNotifications_Preferences::prune_to_allowed_terms($target_prefs);
+    }
+
+    /**
+     * Build a minimal notification object for preview shortcode processing.
+     *
+     * @param array $target_prefs Parsed target preferences.
+     * @return object
+     */
+    private function build_preview_notification_stub(array $target_prefs) {
+        return (object) array(
+            'target_preferences' => SubscriberNotifications_Preferences::encode($target_prefs),
+        );
     }
 
     /**
@@ -2797,7 +2821,12 @@ class SubscriberNotifications_Admin {
         if (empty($content)) {
             wp_send_json_error(__('Please enter content.', 'subscriber-notifications'));
         }
-        
+
+        $target_prefs = $this->parse_preview_target_preferences_from_request();
+        if (!SubscriberNotifications_Preferences::has_at_least_one_term($target_prefs)) {
+            wp_send_json_error(__('Please select at least one target term in Target Content.', 'subscriber-notifications'));
+        }
+
         try {
             // Create a sample subscriber for shortcode processing
             $sample_subscriber = (object) array(
@@ -2806,11 +2835,13 @@ class SubscriberNotifications_Admin {
                 'subscription_preferences' => '{}',
                 'frequency' => 'weekly'
             );
-            
+
+            $preview_notification = $this->build_preview_notification_stub($target_prefs);
+
             // Process shortcodes
             $shortcodes = new SubscriberNotifications_Shortcodes();
-            $processed_subject = $shortcodes->process_shortcodes($subject, $sample_subscriber);
-            $processed_content = $shortcodes->process_shortcodes($content, $sample_subscriber);
+            $processed_subject = $shortcodes->process_shortcodes($subject, $sample_subscriber, $preview_notification);
+            $processed_content = $shortcodes->process_shortcodes($content, $sample_subscriber, $preview_notification);
             
             // Apply CSS (default CSS or custom CSS)
             $email_css = subscriber_notifications_get_option('email_css', '');

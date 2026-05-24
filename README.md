@@ -21,7 +21,7 @@ A comprehensive WordPress plugin for managing subscriber notifications with imme
 - **Notification Management** - View, edit, cancel, resend, and delete notifications
 - **Recurring Notification Support** - Create and manage notifications that send repeatedly
 - **Subscriber Management** - View subscribers (including **WP User** link and ID), search, activate/deactivate, delete, and CSV import/export
-- **Notification Creation** - Rich text editor with shortcodes and live preview
+- **Notification Creation** - Rich text editor with shortcodes and send preview email
 - **Email Logs** - Track all email activity with open/click counts and log type (notification, welcome, preferences update, test, etc.)
 - **Content Types** - Enable public post types and taxonomies, term display rules (all / children of / include / exclude), and form labels
 - **Settings** - Scheduling, CAPTCHA, email templates, Email Design branding, and general options (test email, hide empty terms on form, delete on uninstall)
@@ -198,8 +198,8 @@ Guests continue to enter and edit name and email normally.
    - **Monthly** - Sent on configured monthly schedule
 6. Use shortcodes for dynamic content in both subject and body
 7. Global footer automatically added to all notifications
-8. Live preview shows exactly what subscribers will receive
-9. Preview includes subject, content, footer, and custom CSS styling
+8. Use **Send Preview Email** (below the form) to send a test message to your inbox — uses current unsaved subject, content, and target terms, full branding, and shortcode processing
+9. Preview emails include subject, content, global header/footer, and custom CSS styling (logged in Email Logs as **Test**)
 
 ### Recurring Notifications
 
@@ -274,11 +274,14 @@ Delivery frequency: [delivery_frequency]
 6. Shortcodes work in header/footer content: `[site_title]`, `[manage_preferences_link]`, `[subscriber_name]`, etc.
 
 ### Preview Functionality
-1. **Live Preview** - Preview updates automatically as you type in create form
-2. **Complete Preview** - Shows subject, content, global footer, and custom CSS
-3. **Shortcode Processing** - Preview processes shortcodes with sample data
-4. **Modal Preview** - View complete email preview in modal for existing notifications
-5. **Realistic Preview** - Shows exactly what subscribers will receive
+
+Two preview paths are available in the admin:
+
+1. **Send Preview Email** (Create / Edit notification) — Enter an address and click **Send Preview Email** below the form. Sends a real email via `wp_mail()` using the current subject, content, and **Target Content** selections (saved or unsaved), global header/footer, brand styling, and server-side shortcode processing. Logged in **Email Logs** as type **Test**. Uses a sample subscriber (`Preview User`, weekly frequency, empty preferences), so personalized shortcodes such as `[manage_preferences_link]` show placeholders; `[content_feed]` resolves from the form’s target terms (same as the modal preview).
+2. **Modal preview** (Notifications list) — Click **View** on a saved notification to open an in-browser preview. Loads stored notification data, processes shortcodes with sample data (`John Doe`), applies the same email wrapper/CSS as production sends, and can resolve `[content_feed]` from the notification’s target terms (even though the sample subscriber has no preferences).
+3. **Email Design typography preview** (Settings → Email Design) — Font preset dropdowns show a live browser preview of body/heading stacks; this is settings-only and does not preview notification content.
+
+Preview emails are not sent to subscribers. They approximate production output but do not fully simulate a real subscriber’s term selections or working manage-preferences links.
 
 ### Managing Subscribers
 1. View all subscribers in **Notifications > Subscribers**
@@ -397,6 +400,12 @@ define('DISABLE_WP_CRON', true);
 This guarantees the send queue drains on a strict one-minute cadence regardless of site traffic.
 
 ## Changelog
+
+### Version 3.6.5
+
+- **Fix — Send Preview Email content feeds** — preview sends now include Target Content from the form so `[content_feed]` shortcodes resolve the same way as the notifications list modal preview (including unsaved target changes while drafting)
+- **Admin — preview cleanup** — removed unused client-side live preview JS/CSS and outdated README references to an inline typing preview
+- **Docs — preview functionality** — README documents Send Preview Email, modal preview, and preview limitations
 
 ### Version 3.6.4
 
