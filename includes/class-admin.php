@@ -41,6 +41,7 @@ class SubscriberNotifications_Admin {
         add_action('admin_notices', array($this, 'maybe_render_notification_flash_notice'));
         add_action('admin_notices', array($this, 'maybe_render_subscribers_flash_notice'));
         add_action('admin_notices', array($this, 'maybe_render_data_flash_notice'));
+        add_action('admin_notices', array($this, 'maybe_render_frontend_pages_notice'));
         add_action('admin_post_subscriber_notifications_purge_logs', array($this, 'handle_purge_logs'));
         $this->register_scheduling_side_effects();
         add_action('wp_ajax_test_wp_mail', array($this, 'test_wp_mail'));
@@ -981,6 +982,46 @@ class SubscriberNotifications_Admin {
     }
 
     /**
+     * Admin notice when subscribe or preferences page is not configured.
+     */
+    public function maybe_render_frontend_pages_notice() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        if (subscriber_notifications_frontend_pages_are_configured()) {
+            return;
+        }
+
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen || strpos((string) $screen->id, 'subscriber-notifications') === false) {
+            return;
+        }
+
+        $missing = array();
+        if (!subscriber_notifications_subscribe_page_is_configured()) {
+            $missing[] = __('Subscribe page', 'subscriber-notifications');
+        }
+        if (!subscriber_notifications_preferences_page_is_configured()) {
+            $missing[] = __('Preferences page', 'subscriber-notifications');
+        }
+
+        if (empty($missing)) {
+            return;
+        }
+
+        $settings_url = admin_url('admin.php?page=subscriber-notifications-settings&tab=general');
+        $message      = sprintf(
+            /* translators: 1: comma-separated missing page labels, 2: settings link */
+            __('Subscriber Notifications: select %1$s under %2$s.', 'subscriber-notifications'),
+            esc_html(implode(', ', $missing)),
+            '<a href="' . esc_url($settings_url) . '">' . esc_html__('Settings → General → Frontend pages', 'subscriber-notifications') . '</a>'
+        );
+
+        echo '<div class="notice notice-warning is-dismissible"><p>' . wp_kses_post($message) . '</p></div>';
+    }
+
+    /**
      * Handle purge logs POST (delete entries older than N days).
      */
     public function handle_purge_logs() {
@@ -1582,6 +1623,8 @@ class SubscriberNotifications_Admin {
         $tabs = array(
             'general' => array(
                 'test_email',
+                'subscribe_page_id',
+                'preferences_page_id',
                 'hide_terms_without_published_content',
             ),
             'email-templates' => array(
@@ -1654,6 +1697,13 @@ class SubscriberNotifications_Admin {
             'subscriber_notifications_general_section',
             '',
             array($this, 'render_general_section_description'),
+            'subscriber-notifications-settings-general'
+        );
+
+        add_settings_section(
+            'subscriber_notifications_frontend_pages_section',
+            __('Frontend pages', 'subscriber-notifications'),
+            array($this, 'render_frontend_pages_section_description'),
             'subscriber-notifications-settings-general'
         );
 
@@ -1737,6 +1787,15 @@ class SubscriberNotifications_Admin {
     }
 
     /**
+     * Section description for Frontend pages settings.
+     */
+    public function render_frontend_pages_section_description() {
+        ?>
+        <p><?php esc_html_e('Create WordPress pages for the public subscribe and preferences forms, then select both here. Both pages are required for a complete frontend setup.', 'subscriber-notifications'); ?></p>
+        <?php
+    }
+
+    /**
      * Section description for the Data tab email log maintenance controls.
      */
     public function render_data_logs_section_description() {
@@ -1765,6 +1824,22 @@ class SubscriberNotifications_Admin {
             array($this, 'render_test_email_field'),
             'subscriber-notifications-settings-general',
             'subscriber_notifications_general_section'
+        );
+
+        add_settings_field(
+            'subscribe_page_id',
+            __('Subscribe page', 'subscriber-notifications'),
+            array($this, 'render_subscribe_page_id_field'),
+            'subscriber-notifications-settings-general',
+            'subscriber_notifications_frontend_pages_section'
+        );
+
+        add_settings_field(
+            'preferences_page_id',
+            __('Preferences page', 'subscriber-notifications'),
+            array($this, 'render_preferences_page_id_field'),
+            'subscriber-notifications-settings-general',
+            'subscriber_notifications_frontend_pages_section'
         );
 
         add_settings_field(
@@ -2141,6 +2216,14 @@ class SubscriberNotifications_Admin {
         return !empty($value) ? 1 : 0;
     }
 
+    public function sanitize_setting_subscribe_page_id($value) {
+        return subscriber_notifications_validate_page_id((int) $value);
+    }
+
+    public function sanitize_setting_preferences_page_id($value) {
+        return subscriber_notifications_validate_page_id((int) $value);
+    }
+
     /**
      * Field render methods - General tab
      */
@@ -2155,7 +2238,55 @@ class SubscriberNotifications_Admin {
         <div id="wp-mail-test-result"></div>
         <?php
     }
-    
+
+    /**
+     * Subscribe page picker.
+     */
+    public function render_subscribe_page_id_field() {
+        $name_opt = subscriber_notifications_option_name('subscribe_page_id');
+        $page_id  = (int) subscriber_notifications_get_option('subscribe_page_id', 0);
+        ?>
+        <?php
+        wp_dropdown_pages(
+            array(
+                'name'              => $name_opt,
+                'id'                => 'subscribe_page_id',
+                'selected'          => $page_id,
+                'show_option_none'  => __('— Select —', 'subscriber-notifications'),
+                'option_none_value' => '0',
+            )
+        );
+        ?>
+        <p class="description">
+            <?php esc_html_e('Page containing the [subscriber_notifications_form] shortcode. Required for subscribe links on the preferences page and consistent site navigation.', 'subscriber-notifications'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Preferences page picker (required for email manage links).
+     */
+    public function render_preferences_page_id_field() {
+        $name_opt = subscriber_notifications_option_name('preferences_page_id');
+        $page_id  = (int) subscriber_notifications_get_option('preferences_page_id', 0);
+        ?>
+        <?php
+        wp_dropdown_pages(
+            array(
+                'name'              => $name_opt,
+                'id'                => 'preferences_page_id',
+                'selected'          => $page_id,
+                'show_option_none'  => __('— Select —', 'subscriber-notifications'),
+                'option_none_value' => '0',
+            )
+        );
+        ?>
+        <p class="description">
+            <?php esc_html_e('Page containing the [subscriber_notifications_preferences] shortcode. Required for [manage_preferences_link], email manage URLs, and on-site preference management.', 'subscriber-notifications'); ?>
+        </p>
+        <?php
+    }
+
     public function render_delete_data_on_uninstall_field() {
         $name_opt = subscriber_notifications_option_name('delete_data_on_uninstall');
         $value = (int) subscriber_notifications_get_option('delete_data_on_uninstall', 0);

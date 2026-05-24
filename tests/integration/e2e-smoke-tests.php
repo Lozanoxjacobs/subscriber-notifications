@@ -13,8 +13,8 @@ global $wpdb;
 $database = new SubscriberNotifications_Database();
 
 sn_test_assert(
-    'B1 plugin version 3.6.6',
-    defined('SUBSCRIBER_NOTIFICATIONS_VERSION') && SUBSCRIBER_NOTIFICATIONS_VERSION === '3.6.7'
+    'B1 plugin version 3.7.0',
+    defined('SUBSCRIBER_NOTIFICATIONS_VERSION') && SUBSCRIBER_NOTIFICATIONS_VERSION === '3.7.0'
 );
 
 $footer = subscriber_notifications_get_option('global_footer', '');
@@ -73,5 +73,23 @@ $token_subscriber_id = $database->add_subscriber(array(
 ));
 $token_row = $database->get_subscriber((int) $token_subscriber_id);
 sn_test_assert('B7 token subscriber created', $token_row && !empty($token_row->management_token));
+
+if (!subscriber_notifications_preferences_page_is_configured()) {
+    $prefs_page_id = wp_insert_post(
+        array(
+            'post_title'   => 'Notification Preferences (Test)',
+            'post_status'  => 'publish',
+            'post_type'    => 'page',
+            'post_content' => '[subscriber_notifications_preferences]',
+        )
+    );
+    if ($prefs_page_id && !is_wp_error($prefs_page_id)) {
+        update_option(subscriber_notifications_option_name('preferences_page_id'), (int) $prefs_page_id);
+    }
+}
+sn_test_assert(
+    'B7 preferences page configured for manage URLs',
+    subscriber_notifications_preferences_page_is_configured()
+);
 
 sn_test_finish();

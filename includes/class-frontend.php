@@ -47,14 +47,16 @@ class SubscriberNotifications_Frontend {
         add_action('wp_ajax_nopriv_subscriber_notifications_update_preferences', array($this, 'handle_preferences_update'));
         add_action('wp_ajax_subscriber_notifications_unsubscribe', array($this, 'handle_unsubscribe_action'));
         add_action('wp_ajax_nopriv_subscriber_notifications_unsubscribe', array($this, 'handle_unsubscribe_action'));
-        add_action('template_redirect', array($this, 'handle_manage_preferences_route'));
         add_shortcode('subscriber_notifications_form', array($this, 'subscription_form_shortcode'));
+        add_shortcode('subscriber_notifications_preferences', array($this, 'preferences_form_shortcode'));
     }
 
     /**
      * Enqueue CSS/JS when subscription or preferences UI is rendered.
+     *
+     * @param array<string, mixed> $script_overrides Optional overrides for wp_localize_script.
      */
-    private function enqueue_subscription_form_assets() {
+    private function enqueue_subscription_form_assets(array $script_overrides = array()) {
         static $enqueued = false;
         if ($enqueued) {
             return;
@@ -85,34 +87,40 @@ class SubscriberNotifications_Frontend {
         $logged_in_contact = $this->get_logged_in_contact_for_form();
         $is_logged_in      = is_user_logged_in();
 
+        $script_data = array(
+            'ajaxUrl'          => admin_url('admin-ajax.php'),
+            'homeUrl'          => home_url('/'),
+            'nonce'            => wp_create_nonce('subscriber_notifications_nonce'),
+            'unsubscribeNonce' => wp_create_nonce('subscriber_notifications_unsubscribe'),
+            'siteKey'          => $site_key,
+            'isLoggedIn'       => $is_logged_in,
+            'lockedName'       => $logged_in_contact ? $logged_in_contact['name'] : '',
+            'lockedEmail'      => $logged_in_contact ? $logged_in_contact['email'] : '',
+            'preferencesProfileLocked' => false,
+            'i18n'             => array(
+                'subscribing'         => __('Subscribing...', 'subscriber-notifications'),
+                'subscribe'           => __('Subscribe', 'subscriber-notifications'),
+                'updating'            => __('Updating...', 'subscriber-notifications'),
+                'update'              => __('Update Preferences', 'subscriber-notifications'),
+                'reactivate'          => __('Reactivate Subscription', 'subscriber-notifications'),
+                'unsubscribing'       => __('Unsubscribing...', 'subscriber-notifications'),
+                'unsubscribe'         => __('Unsubscribe', 'subscriber-notifications'),
+                'confirmUnsubscribe'  => __('Are you sure you want to unsubscribe? You will no longer receive any notifications.', 'subscriber-notifications'),
+                'genericError'        => __('An error occurred. Please try again.', 'subscriber-notifications'),
+                'errorAtLeastOneTerm' => __('Please select at least one option to subscribe to.', 'subscriber-notifications'),
+                'errorNameLength'     => __('Name must be at least 2 characters long.', 'subscriber-notifications'),
+                'errorEmail'          => __('Please enter a valid email address.', 'subscriber-notifications'),
+                'errorFrequency'      => __('Please select a frequency preference.', 'subscriber-notifications'),
+                'errorMissingProfileName' => __('Please add your name to your account profile before subscribing.', 'subscriber-notifications'),
+            ),
+        );
+
+        $script_data = array_merge($script_data, $script_overrides);
+
         wp_localize_script(
             'subscriber-notifications-frontend',
             'subscriberNotifications',
-            array(
-                'ajaxUrl'          => admin_url('admin-ajax.php'),
-                'homeUrl'          => home_url('/'),
-                'nonce'            => wp_create_nonce('subscriber_notifications_nonce'),
-                'unsubscribeNonce' => wp_create_nonce('subscriber_notifications_unsubscribe'),
-                'siteKey'          => $site_key,
-                'isLoggedIn'       => $is_logged_in,
-                'lockedName'       => $logged_in_contact ? $logged_in_contact['name'] : '',
-                'lockedEmail'      => $logged_in_contact ? $logged_in_contact['email'] : '',
-                'i18n'             => array(
-                    'subscribing'         => __('Subscribing...', 'subscriber-notifications'),
-                    'subscribe'           => __('Subscribe', 'subscriber-notifications'),
-                    'updating'            => __('Updating...', 'subscriber-notifications'),
-                    'update'              => __('Update Preferences', 'subscriber-notifications'),
-                    'unsubscribing'       => __('Unsubscribing...', 'subscriber-notifications'),
-                    'unsubscribe'         => __('Unsubscribe', 'subscriber-notifications'),
-                    'confirmUnsubscribe'  => __('Are you sure you want to unsubscribe? You will no longer receive any notifications.', 'subscriber-notifications'),
-                    'genericError'        => __('An error occurred. Please try again.', 'subscriber-notifications'),
-                    'errorAtLeastOneTerm' => __('Please select at least one option to subscribe to.', 'subscriber-notifications'),
-                    'errorNameLength'     => __('Name must be at least 2 characters long.', 'subscriber-notifications'),
-                    'errorEmail'          => __('Please enter a valid email address.', 'subscriber-notifications'),
-                    'errorFrequency'      => __('Please select a frequency preference.', 'subscriber-notifications'),
-                    'errorMissingProfileName' => __('Please add your name to your account profile before subscribing.', 'subscriber-notifications'),
-                ),
-            )
+            $script_data
         );
 
         wp_enqueue_style(
@@ -138,11 +146,407 @@ class SubscriberNotifications_Frontend {
             return $this->render_not_configured_message();
         }
 
+        $reactivation_subscriber = null;
+        if (is_user_logged_in()) {
+            $subscriber = $this->resolve_subscriber_for_logged_in_session();
+            if ($subscriber) {
+                $subscriber = $this->ensure_linked_subscriber_integrity($subscriber);
+                if (!$subscriber) {
+                    // Orphan row removed; allow fresh subscribe.
+                } elseif ($subscriber->status === 'active') {
+                    return $this->render_subscribe_already_subscribed_state();
+                } else {
+                    $reactivation_subscriber = $subscriber;
+                }
+            }
+        }
+
         $this->enqueue_subscription_form_assets();
 
         ob_start();
-        $this->render_subscription_form($atts);
+        $this->render_subscription_form($atts, $reactivation_subscriber);
         return ob_get_clean();
+    }
+
+    /**
+     * Preferences management shortcode.
+     *
+     * @param array $atts Shortcode attributes.
+     * @return string Form HTML or empty-state message.
+     */
+    public function preferences_form_shortcode($atts) {
+        $atts = shortcode_atts(array(), $atts);
+
+        $subscriber = $this->resolve_subscriber_for_preferences_page();
+        if (!$subscriber) {
+            return $this->render_preferences_empty_state();
+        }
+
+        $subscriber = $this->ensure_linked_subscriber_integrity($subscriber);
+        if (!$subscriber) {
+            return $this->render_preferences_empty_state('logged_in');
+        }
+
+        $this->maybe_prevent_preferences_page_cache();
+
+        $token = $this->ensure_management_token($subscriber);
+
+        $is_linked = $this->subscriber_has_linked_account($subscriber);
+        $linked_contact = $is_linked ? $this->get_linked_contact_for_subscriber($subscriber) : null;
+
+        $script_overrides = array();
+        if ($is_linked && $linked_contact) {
+            $script_overrides = array(
+                'preferencesProfileLocked' => true,
+                'lockedName'               => $linked_contact['name'],
+                'lockedEmail'              => $linked_contact['email'],
+            );
+        }
+
+        $this->enqueue_subscription_form_assets($script_overrides);
+
+        ob_start();
+        $this->render_preferences_form_content($subscriber, $token, $atts);
+        return ob_get_clean();
+    }
+
+    /**
+     * Resolve subscriber for the preferences page (token URL or logged-in session).
+     *
+     * @return object|null
+     */
+    private function resolve_subscriber_for_preferences_page() {
+        $token = isset($_GET['token']) ? sanitize_text_field(wp_unslash($_GET['token'])) : '';
+        if ($token !== '') {
+            $subscriber = $this->database->get_subscriber_by_management_token($token);
+            if ($subscriber) {
+                $fresh = $this->database->get_subscriber($subscriber->id);
+                if ($fresh && $fresh->management_token === $token) {
+                    return $fresh;
+                }
+            }
+            return null;
+        }
+
+        if (!is_user_logged_in()) {
+            return null;
+        }
+
+        return $this->resolve_subscriber_for_logged_in_session();
+    }
+
+    /**
+     * Prevent full-page caching for token-based preferences views.
+     */
+    private function maybe_prevent_preferences_page_cache() {
+        $token = isset($_GET['token']) ? sanitize_text_field(wp_unslash($_GET['token'])) : '';
+        if ($token === '') {
+            return;
+        }
+
+        if (!defined('DONOTCACHEPAGE')) {
+            define('DONOTCACHEPAGE', true);
+        }
+
+        if (!headers_sent()) {
+            nocache_headers();
+        }
+    }
+
+    /**
+     * Resolve subscriber for a logged-in visitor (user_id, then email auto-link).
+     *
+     * @return object|null
+     */
+    private function resolve_subscriber_for_logged_in_session() {
+        $user_id = get_current_user_id();
+        $subscriber = $this->database->get_subscriber_by_user_id($user_id);
+        if ($subscriber) {
+            return $subscriber;
+        }
+
+        $user = get_userdata($user_id);
+        if (!$user instanceof WP_User) {
+            return null;
+        }
+
+        $email = sanitize_email($user->user_email);
+        if ($email === '' || !is_email($email)) {
+            return null;
+        }
+
+        $by_email = $this->database->get_subscriber_by_email($email);
+        if (!$by_email) {
+            return null;
+        }
+
+        $this->database->update_subscriber((int) $by_email->id, array('user_id' => $user_id));
+
+        return $this->database->get_subscriber((int) $by_email->id);
+    }
+
+    /**
+     * Delete orphaned linked rows when the WordPress user no longer exists.
+     *
+     * @param object $subscriber Subscriber row.
+     * @return object|null Fresh subscriber or null when removed.
+     */
+    private function ensure_linked_subscriber_integrity($subscriber) {
+        if (!$this->subscriber_has_linked_account($subscriber)) {
+            return $subscriber;
+        }
+
+        $user_id = absint($subscriber->user_id);
+        if ($user_id < 1 || get_userdata($user_id) instanceof WP_User) {
+            return $subscriber;
+        }
+
+        $this->database->delete_subscriber((int) $subscriber->id);
+        return null;
+    }
+
+    /**
+     * Whether the subscriber row is linked to a WordPress account.
+     *
+     * @param object $subscriber Subscriber row.
+     * @return bool
+     */
+    private function subscriber_has_linked_account($subscriber) {
+        return isset($subscriber->user_id) && absint($subscriber->user_id) > 0;
+    }
+
+    /**
+     * Live name and email from the linked WordPress user.
+     *
+     * @param object $subscriber Subscriber row.
+     * @return array{name: string, email: string}|null
+     */
+    private function get_linked_contact_for_subscriber($subscriber) {
+        if (!$this->subscriber_has_linked_account($subscriber)) {
+            return null;
+        }
+
+        $user = get_userdata(absint($subscriber->user_id));
+        if (!$user instanceof WP_User) {
+            return null;
+        }
+
+        $email = sanitize_email($user->user_email);
+        if ($email === '' || !is_email($email)) {
+            return null;
+        }
+
+        return array(
+            'name'  => $this->build_display_name_from_user($user),
+            'email' => $email,
+        );
+    }
+
+    /**
+     * Ensure management token exists on subscriber row.
+     *
+     * @param object $subscriber Subscriber row.
+     * @return string Token string.
+     */
+    private function ensure_management_token($subscriber) {
+        $token = isset($subscriber->management_token) ? trim((string) $subscriber->management_token) : '';
+        if ($token !== '') {
+            return $token;
+        }
+
+        $token = wp_generate_password(32, false);
+        $this->database->update_subscriber((int) $subscriber->id, array('management_token' => $token));
+
+        return $token;
+    }
+
+    /**
+     * Empty-state markup when no subscriber could be resolved.
+     *
+     * @param string $context logged_in|guest|invalid_token
+     * @return string
+     */
+    private function render_preferences_empty_state($context = 'guest') {
+        $token = isset($_GET['token']) ? sanitize_text_field(wp_unslash($_GET['token'])) : '';
+        if ($token !== '') {
+            $context = 'invalid_token';
+        } elseif (is_user_logged_in()) {
+            $context = 'logged_in';
+        }
+
+        ob_start();
+        ?>
+        <div class="subscriber-notifications-form subscriber-notifications-empty">
+            <?php if ($context === 'invalid_token') : ?>
+                <h2><?php esc_html_e('Invalid Link', 'subscriber-notifications'); ?></h2>
+                <p><?php esc_html_e('This management link is invalid or has expired. Please use the most recent link from your email.', 'subscriber-notifications'); ?></p>
+            <?php elseif ($context === 'logged_in') : ?>
+                <h2><?php esc_html_e('Not Subscribed', 'subscriber-notifications'); ?></h2>
+                <p><?php esc_html_e('You do not have an active notification subscription.', 'subscriber-notifications'); ?></p>
+            <?php else : ?>
+                <p><?php esc_html_e('Use the link from your email to manage your notification preferences.', 'subscriber-notifications'); ?></p>
+                <?php if (!is_user_logged_in()) : ?>
+                    <p>
+                        <a href="<?php echo esc_url(wp_login_url(get_permalink())); ?>">
+                            <?php esc_html_e('Log in', 'subscriber-notifications'); ?>
+                        </a>
+                    </p>
+                <?php endif; ?>
+            <?php endif; ?>
+
+            <?php
+            $subscribe_url = subscriber_notifications_get_subscribe_page_url();
+            if ($subscribe_url !== '') :
+                ?>
+                <p>
+                    <a href="<?php echo esc_url($subscribe_url); ?>">
+                        <?php esc_html_e('Subscribe to notifications', 'subscriber-notifications'); ?>
+                    </a>
+                </p>
+            <?php endif; ?>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Message when a logged-in user with an active subscription visits the subscribe page.
+     *
+     * @return string
+     */
+    private function render_subscribe_already_subscribed_state() {
+        ob_start();
+        ?>
+        <div class="subscriber-notifications-form subscriber-notifications-empty">
+            <h2><?php esc_html_e('Already Subscribed', 'subscriber-notifications'); ?></h2>
+            <p><?php esc_html_e('You already have an active notification subscription.', 'subscriber-notifications'); ?></p>
+            <?php
+            $preferences_url = subscriber_notifications_get_preferences_page_url();
+            if ($preferences_url !== '') :
+                ?>
+                <p>
+                    <a href="<?php echo esc_url($preferences_url); ?>">
+                        <?php esc_html_e('Manage your preferences', 'subscriber-notifications'); ?>
+                    </a>
+                </p>
+            <?php endif; ?>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Render preferences form markup (theme layout; no get_header/get_footer).
+     *
+     * @param object $subscriber Subscriber row.
+     * @param string $token      Management token.
+     * @param array  $atts       Shortcode attributes.
+     */
+    private function render_preferences_form_content($subscriber, $token, $atts = array()) {
+        $current_prefs = SubscriberNotifications_Preferences::decode($subscriber->subscription_preferences ?? '');
+        $is_linked     = $this->subscriber_has_linked_account($subscriber);
+        $linked_contact = $is_linked ? $this->get_linked_contact_for_subscriber($subscriber) : null;
+
+        if ($is_linked && !$linked_contact) {
+            echo $this->render_preferences_empty_state('logged_in');
+            return;
+        }
+
+        $name_value  = $is_linked && $linked_contact ? $linked_contact['name'] : $subscriber->name;
+        $email_value = $is_linked && $linked_contact ? $linked_contact['email'] : $subscriber->email;
+        $locked_class = $is_linked ? 'subscriber-notifications-field--locked' : '';
+        $profile_locked_attr = $is_linked ? ' data-profile-locked="1"' : '';
+        $is_inactive                    = ($subscriber->status === 'inactive');
+        $show_unsubscribed_confirmation = isset($_GET['unsubscribed']) && sanitize_text_field(wp_unslash($_GET['unsubscribed'])) === '1' && $is_inactive;
+        $show_reactivated_confirmation  = isset($_GET['reactivated']) && sanitize_text_field(wp_unslash($_GET['reactivated'])) === '1' && !$is_inactive;
+        ?>
+        <div class="subscriber-notifications-form">
+            <?php if ($show_reactivated_confirmation) : ?>
+                <div class="subscriber-notifications-notice subscriber-notifications-notice--success" role="status">
+                    <p class="subscriber-notifications-notice__title"><?php esc_html_e('Welcome back!', 'subscriber-notifications'); ?></p>
+                    <p><?php esc_html_e('Your subscription has been reactivated. You will receive notifications according to your preferences below.', 'subscriber-notifications'); ?></p>
+                </div>
+            <?php elseif ($show_unsubscribed_confirmation) : ?>
+                <div class="subscriber-notifications-notice subscriber-notifications-notice--success" role="status">
+                    <p class="subscriber-notifications-notice__title"><?php esc_html_e('You have been unsubscribed', 'subscriber-notifications'); ?></p>
+                    <p><?php esc_html_e('You will no longer receive notifications. Update your preferences below and save to subscribe again.', 'subscriber-notifications'); ?></p>
+                </div>
+            <?php elseif ($is_inactive) : ?>
+                <div class="subscriber-notifications-notice subscriber-notifications-notice--inactive" role="status">
+                    <p class="subscriber-notifications-notice__title"><?php esc_html_e('You are currently unsubscribed', 'subscriber-notifications'); ?></p>
+                    <p><?php esc_html_e('You will not receive notifications until you update your preferences below and save to reactivate your subscription.', 'subscriber-notifications'); ?></p>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!SubscriberNotifications_Content_Config::is_configured()) : ?>
+                <p><?php esc_html_e('Subscriptions are not currently configured. You can still unsubscribe below.', 'subscriber-notifications'); ?></p>
+            <?php endif; ?>
+
+            <form id="subscriber-preferences-form" method="post"<?php echo $profile_locked_attr . ($is_inactive ? ' data-reactivating="1"' : ''); ?>>
+                <?php wp_nonce_field('subscriber_notifications_update_preferences', 'preferences_nonce'); ?>
+                <input type="hidden" name="token" value="<?php echo esc_attr($token); ?>">
+
+                <h3><?php esc_html_e('Contact Information', 'subscriber-notifications'); ?></h3>
+
+                <p>
+                    <label for="subscriber_name"><?php esc_html_e('Name', 'subscriber-notifications'); ?> <span class="required">*</span></label>
+                    <input type="text" id="subscriber_name" name="subscriber_name"
+                        value="<?php echo esc_attr($name_value); ?>"
+                        class="<?php echo esc_attr($locked_class); ?>"
+                        <?php echo $is_linked ? 'readonly' : ''; ?> required>
+                    <?php if ($is_linked) : ?>
+                        <small class="description"><?php esc_html_e('Taken from your account profile.', 'subscriber-notifications'); ?></small>
+                    <?php endif; ?>
+                </p>
+
+                <p>
+                    <label for="subscriber_email"><?php esc_html_e('Email', 'subscriber-notifications'); ?></label>
+                    <input type="email" id="subscriber_email" name="subscriber_email"
+                        value="<?php echo esc_attr($email_value); ?>"
+                        class="<?php echo esc_attr($locked_class); ?>"
+                        readonly>
+                    <?php if ($is_linked) : ?>
+                        <small class="description"><?php esc_html_e('Taken from your account email address.', 'subscriber-notifications'); ?></small>
+                    <?php else : ?>
+                        <small class="description"><?php esc_html_e('Email address cannot be changed.', 'subscriber-notifications'); ?></small>
+                    <?php endif; ?>
+                </p>
+
+                <?php if (SubscriberNotifications_Content_Config::is_configured()) : ?>
+                    <h3><?php esc_html_e('Your subscriptions', 'subscriber-notifications'); ?></h3>
+                    <?php $this->render_preferences_sections($current_prefs); ?>
+                <?php endif; ?>
+
+                <h3><?php esc_html_e('How often would you like to receive notifications?', 'subscriber-notifications'); ?></h3>
+                <?php $this->render_frequency_fieldset($subscriber->frequency); ?>
+
+                <p>
+                    <button type="submit" class="subscriber-notifications-submit wp-element-button">
+                        <?php
+                        echo esc_html(
+                            $is_inactive
+                                ? __('Reactivate Subscription', 'subscriber-notifications')
+                                : __('Update Preferences', 'subscriber-notifications')
+                        );
+                        ?>
+                    </button>
+                </p>
+
+                <div id="preferences-message" class="subscriber-message" style="display: none;"></div>
+            </form>
+
+            <?php if ($subscriber->status === 'active') : ?>
+            <div class="unsubscribe-section">
+                <hr>
+                <h3><?php esc_html_e('Unsubscribe', 'subscriber-notifications'); ?></h3>
+                <p><?php esc_html_e('If you no longer wish to receive notifications, you can unsubscribe below.', 'subscriber-notifications'); ?></p>
+                <button type="button" id="unsubscribe-button" class="subscriber-notifications-submit wp-element-button unsubscribe-button">
+                    <?php esc_html_e('Unsubscribe', 'subscriber-notifications'); ?>
+                </button>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php
     }
 
     /**
@@ -159,16 +563,31 @@ class SubscriberNotifications_Frontend {
     /**
      * Render the subscription form (logged-in or anonymous).
      *
-     * @param array $atts Form attributes.
+     * @param array       $atts                    Form attributes.
+     * @param object|null $reactivation_subscriber Inactive subscriber to prefill and reactivate.
      */
-    private function render_subscription_form($atts) {
+    private function render_subscription_form($atts, $reactivation_subscriber = null) {
         $logged_in_contact = $this->get_logged_in_contact_for_form();
         $is_locked         = is_user_logged_in() && null !== $logged_in_contact;
         $name_value        = $is_locked ? $logged_in_contact['name'] : '';
         $email_value       = $is_locked ? $logged_in_contact['email'] : '';
         $locked_class      = $is_locked ? 'subscriber-notifications-field--locked' : '';
+        $current_prefs     = array();
+        $frequency         = '';
+
+        if ($reactivation_subscriber) {
+            $current_prefs = SubscriberNotifications_Preferences::decode($reactivation_subscriber->subscription_preferences ?? '');
+            $frequency     = isset($reactivation_subscriber->frequency) ? (string) $reactivation_subscriber->frequency : '';
+        }
+
         ?>
         <div class="subscriber-notifications-form">
+            <?php if ($reactivation_subscriber && $reactivation_subscriber->status === 'inactive') : ?>
+                <p class="subscriber-notifications-notice">
+                    <?php esc_html_e('You are currently unsubscribed. Submitting this form will reactivate your subscription.', 'subscriber-notifications'); ?>
+                </p>
+            <?php endif; ?>
+
             <form id="subscriber-notifications-form" method="post">
                 <?php wp_nonce_field('subscriber_notifications_subscribe', 'subscriber_nonce'); ?>
 
@@ -197,10 +616,10 @@ class SubscriberNotifications_Frontend {
                 </p>
 
                 <h3><?php esc_html_e('Choose your subscriptions', 'subscriber-notifications'); ?></h3>
-                <?php $this->render_preferences_sections(array()); ?>
+                <?php $this->render_preferences_sections($current_prefs); ?>
 
                 <h3><?php esc_html_e('How often would you like to receive notifications?', 'subscriber-notifications'); ?></h3>
-                <?php $this->render_frequency_fieldset(''); ?>
+                <?php $this->render_frequency_fieldset($frequency); ?>
 
                 <?php if (!empty(subscriber_notifications_get_option('captcha_site_key', ''))): ?>
                     <p>
@@ -516,122 +935,76 @@ class SubscriberNotifications_Frontend {
         $mailer->send_email($subscriber->email, $processed_subject, $processed_content, $subscriber->id, 0, 'welcome_back');
     }
 
+
     /**
-     * Handle manage preferences route.
+     * Resolve subscriber for preferences AJAX from token and/or logged-in session.
+     *
+     * @return object|null
      */
-    public function handle_manage_preferences_route() {
-        if (!isset($_GET['action'], $_GET['token'])) {
-            return;
+    private function resolve_subscriber_for_preferences_request() {
+        $token      = isset($_POST['token']) ? sanitize_text_field(wp_unslash($_POST['token'])) : '';
+        $subscriber = null;
+
+        if ($token !== '') {
+            $subscriber = $this->database->get_subscriber_by_management_token($token);
         }
 
-        $action = sanitize_text_field(wp_unslash($_GET['action']));
-        $token  = sanitize_text_field(wp_unslash($_GET['token']));
+        if (is_user_logged_in()) {
+            $user_id = get_current_user_id();
+            $by_user = $this->database->get_subscriber_by_user_id($user_id);
 
-        if ($action === 'manage') {
-            $this->render_preferences_form($token);
-            exit;
+            if ($by_user) {
+                if ($subscriber && (int) $subscriber->id !== (int) $by_user->id) {
+                    return null;
+                }
+                return $by_user;
+            }
+
+            if ($subscriber && $this->subscriber_has_linked_account($subscriber)) {
+                if ((int) $subscriber->user_id !== $user_id) {
+                    return null;
+                }
+            }
         }
+
+        return $subscriber;
     }
 
     /**
-     * Render preferences management form.
+     * Name for preferences update (profile for linked accounts, POST for guests).
      *
-     * @param string $token Management token.
+     * @param object $subscriber Subscriber row.
+     * @return string
      */
-    private function render_preferences_form($token) {
-        $this->enqueue_subscription_form_assets();
-        $token = trim($token);
-
-        if (empty($token)) {
-            wp_die(esc_html__('Invalid management link.', 'subscriber-notifications'), esc_html__('Error', 'subscriber-notifications'), array('response' => 404));
+    private function resolve_preferences_contact_name($subscriber) {
+        if ($this->subscriber_has_linked_account($subscriber)) {
+            $linked = $this->get_linked_contact_for_subscriber($subscriber);
+            if ($linked && $linked['name'] !== '') {
+                return $linked['name'];
+            }
+            return '';
         }
 
-        $subscriber = $this->database->get_subscriber_by_management_token($token);
+        return isset($_POST['subscriber_name']) ? sanitize_text_field(wp_unslash($_POST['subscriber_name'])) : '';
+    }
 
-        if (!$subscriber) {
-            wp_die(esc_html__('Invalid management link.', 'subscriber-notifications'), esc_html__('Error', 'subscriber-notifications'), array('response' => 404));
+    /**
+     * Email for preferences update (profile for linked accounts; unchanged for guests).
+     *
+     * @param object $subscriber Subscriber row.
+     * @return string|null Email when linked account should sync; null to omit from update.
+     */
+    private function resolve_preferences_contact_email_for_update($subscriber) {
+        if (!$this->subscriber_has_linked_account($subscriber)) {
+            return null;
         }
 
-        $fresh_subscriber = $this->database->get_subscriber($subscriber->id);
-        if (!$fresh_subscriber || $fresh_subscriber->management_token !== $token) {
-            get_header();
-            ?>
-            <div class="subscriber-notifications-form">
-                <h2><?php esc_html_e('Link Expired', 'subscriber-notifications'); ?></h2>
-                <p><?php esc_html_e('This management link has expired. Please use the most recent link from your email, or subscribe again using the form below.', 'subscriber-notifications'); ?></p>
-                <?php echo do_shortcode('[subscriber_notifications_form]'); ?>
-            </div>
-            <?php
-            get_footer();
-            exit;
+        $linked = $this->get_linked_contact_for_subscriber($subscriber);
+        if (!$linked || $linked['email'] === '') {
+            return null;
         }
 
-        $subscriber = $fresh_subscriber;
-
-        $current_prefs = SubscriberNotifications_Preferences::decode($subscriber->subscription_preferences ?? '');
-
-        get_header();
-        ?>
-        <div class="subscriber-notifications-form">
-            <h2><?php esc_html_e('Manage Your Preferences', 'subscriber-notifications'); ?></h2>
-
-            <?php if ($subscriber->status === 'inactive') : ?>
-                <p class="subscriber-notifications-notice">
-                    <?php esc_html_e('You are currently unsubscribed. Saving your preferences below will reactivate your subscription.', 'subscriber-notifications'); ?>
-                </p>
-            <?php endif; ?>
-
-            <?php if (!SubscriberNotifications_Content_Config::is_configured()) : ?>
-                <p><?php esc_html_e('Subscriptions are not currently configured. You can still unsubscribe below.', 'subscriber-notifications'); ?></p>
-            <?php endif; ?>
-
-            <form id="subscriber-preferences-form" method="post">
-                <?php wp_nonce_field('subscriber_notifications_update_preferences', 'preferences_nonce'); ?>
-                <input type="hidden" name="token" value="<?php echo esc_attr($token); ?>">
-
-                <h3><?php esc_html_e('Contact Information', 'subscriber-notifications'); ?></h3>
-
-                <p>
-                    <label for="subscriber_name"><?php esc_html_e('Name', 'subscriber-notifications'); ?> <span class="required">*</span></label>
-                    <input type="text" id="subscriber_name" name="subscriber_name" value="<?php echo esc_attr($subscriber->name); ?>" required>
-                </p>
-
-                <p>
-                    <label for="subscriber_email"><?php esc_html_e('Email', 'subscriber-notifications'); ?></label>
-                    <input type="email" id="subscriber_email" name="subscriber_email" value="<?php echo esc_attr($subscriber->email); ?>" disabled>
-                    <small class="description"><?php esc_html_e('Email address cannot be changed.', 'subscriber-notifications'); ?></small>
-                </p>
-
-                <?php if (SubscriberNotifications_Content_Config::is_configured()) : ?>
-                    <h3><?php esc_html_e('Your subscriptions', 'subscriber-notifications'); ?></h3>
-                    <?php $this->render_preferences_sections($current_prefs); ?>
-                <?php endif; ?>
-
-                <h3><?php esc_html_e('How often would you like to receive notifications?', 'subscriber-notifications'); ?></h3>
-                <?php $this->render_frequency_fieldset($subscriber->frequency); ?>
-
-                <p>
-                    <button type="submit" class="subscriber-notifications-submit wp-element-button">
-                        <?php esc_html_e('Update Preferences', 'subscriber-notifications'); ?>
-                    </button>
-                </p>
-
-                <div id="preferences-message" class="subscriber-message" style="display: none;"></div>
-            </form>
-
-            <?php if ($subscriber->status === 'active') : ?>
-            <div class="unsubscribe-section">
-                <hr>
-                <h3><?php esc_html_e('Unsubscribe', 'subscriber-notifications'); ?></h3>
-                <p><?php esc_html_e('If you no longer wish to receive notifications, you can unsubscribe below.', 'subscriber-notifications'); ?></p>
-                <button type="button" id="unsubscribe-button" class="subscriber-notifications-submit wp-element-button unsubscribe-button">
-                    <?php esc_html_e('Unsubscribe', 'subscriber-notifications'); ?>
-                </button>
-            </div>
-            <?php endif; ?>
-        </div>
-        <?php
-        get_footer();
+        return $linked['email'];
     }
 
     /**
@@ -644,15 +1017,20 @@ class SubscriberNotifications_Frontend {
             return;
         }
 
-        $token      = isset($_POST['token']) ? sanitize_text_field(wp_unslash($_POST['token'])) : '';
-        $subscriber = $this->database->get_subscriber_by_management_token($token);
+        $subscriber = $this->resolve_subscriber_for_preferences_request();
 
         if (!$subscriber) {
             wp_send_json_error(__('Invalid management link.', 'subscriber-notifications'));
             return;
         }
 
-        $name      = isset($_POST['subscriber_name']) ? sanitize_text_field(wp_unslash($_POST['subscriber_name'])) : '';
+        $subscriber = $this->ensure_linked_subscriber_integrity($subscriber);
+        if (!$subscriber) {
+            wp_send_json_error(__('Invalid management link.', 'subscriber-notifications'));
+            return;
+        }
+
+        $name      = $this->resolve_preferences_contact_name($subscriber);
         $frequency = isset($_POST['frequency']) ? sanitize_text_field(wp_unslash($_POST['frequency'])) : '';
 
         if (!in_array($frequency, array('daily', 'weekly', 'monthly'), true)) {
@@ -660,8 +1038,12 @@ class SubscriberNotifications_Frontend {
             return;
         }
 
-        if (empty($name)) {
-            wp_send_json_error(__('Please provide a valid name.', 'subscriber-notifications'));
+        if ($name === '') {
+            if ($this->subscriber_has_linked_account($subscriber)) {
+                wp_send_json_error(__('Please add your first or last name to your profile before updating preferences.', 'subscriber-notifications'));
+            } else {
+                wp_send_json_error(__('Please provide a valid name.', 'subscriber-notifications'));
+            }
             return;
         }
 
@@ -685,6 +1067,11 @@ class SubscriberNotifications_Frontend {
             'subscription_preferences' => $prefs,
             'frequency'                => $frequency,
         );
+
+        $sync_email = $this->resolve_preferences_contact_email_for_update($subscriber);
+        if ($sync_email !== null) {
+            $update_data['email'] = $sync_email;
+        }
 
         if ($was_inactive) {
             $update_data['status'] = 'active';
@@ -721,8 +1108,7 @@ class SubscriberNotifications_Frontend {
             return;
         }
 
-        $token      = isset($_POST['token']) ? sanitize_text_field(wp_unslash($_POST['token'])) : '';
-        $subscriber = $this->database->get_subscriber_by_management_token($token);
+        $subscriber = $this->resolve_subscriber_for_preferences_request();
 
         if (!$subscriber) {
             wp_send_json_error(__('Invalid management link.', 'subscriber-notifications'));

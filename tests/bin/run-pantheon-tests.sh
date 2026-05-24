@@ -25,15 +25,26 @@ terminus wp "${SITE}" -- eval-file "${REMOTE}/tests/integration/db-schema-tests.
 echo "==> Smoke tests"
 terminus wp "${SITE}" -- eval-file "${REMOTE}/tests/integration/e2e-smoke-tests.php"
 
+echo "==> Preferences page tests"
+terminus wp "${SITE}" -- eval-file "${REMOTE}/tests/integration/preferences-page-tests.php"
+
+echo "==> Frontend pages tests (v3.7)"
+terminus wp "${SITE}" -- eval-file "${REMOTE}/tests/integration/frontend-pages-tests.php"
+
 BASE_URL=$(terminus wp "${SITE}" -- option get siteurl 2>/dev/null | head -1 | tr -d '[:space:]')
 TOKEN=$(terminus wp "${SITE}" -- db query "SELECT management_token FROM wp_subscriber_notifications WHERE email LIKE 'token-test-%' ORDER BY id DESC LIMIT 1" --skip-column-names 2>/dev/null | head -1 | tr -d '[:space:]')
 
 if [[ -n "${TOKEN}" && -n "${BASE_URL}" ]]; then
-  echo "==> HTTP manage token tests"
-  VALID_HTML=$(curl -sSL "${BASE_URL}/?action=manage&token=${TOKEN}")
-  echo "${VALID_HTML}" | grep -q "Manage Your Preferences" && echo "PASS: B7 valid manage URL" || { echo "FAIL: B7 valid manage URL"; exit 1; }
-  INVALID_HTML=$(curl -sSL "${BASE_URL}/?action=manage&token=invalidtoken123")
-  echo "${INVALID_HTML}" | grep -qi "invalid" && echo "PASS: B7 invalid manage token rejected" || { echo "FAIL: B7 invalid manage token rejected"; exit 1; }
+  MANAGE_URL=$(terminus wp "${SITE}" -- eval "echo esc_url_raw(subscriber_notifications_get_preferences_page_url(array('token' => '${TOKEN}')));" 2>/dev/null | head -1 | tr -d '[:space:]')
+  if [[ -n "${MANAGE_URL}" ]]; then
+    echo "==> HTTP manage token tests"
+    VALID_HTML=$(curl -sSL "${MANAGE_URL}")
+    echo "${VALID_HTML}" | grep -q "Contact Information" && echo "PASS: B7 valid manage URL" || { echo "FAIL: B7 valid manage URL"; exit 1; }
+    INVALID_HTML=$(curl -sSL "$(terminus wp "${SITE}" -- eval "echo esc_url_raw(subscriber_notifications_get_preferences_page_url(array('token' => 'invalidtoken123')));" 2>/dev/null | head -1 | tr -d '[:space:]')")
+    echo "${INVALID_HTML}" | grep -qi "invalid" && echo "PASS: B7 invalid manage token rejected" || { echo "FAIL: B7 invalid manage token rejected"; exit 1; }
+  else
+    echo "SKIP: B7 HTTP manage token tests (preferences page not configured)"
+  fi
 fi
 
 echo "==> B8 uninstall/reinstall (delete data on uninstall)"

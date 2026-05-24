@@ -3,7 +3,7 @@
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
  * Description: Configurable subscriber notification system with per-site Content Types (any public post type and taxonomy), JSON preferences, theme-native form, and brandable emails.
- * Version: 3.6.7
+ * Version: 3.7.0
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.6.7');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.7.0');
 define('SUBSCRIBER_NOTIFICATIONS_DB_VERSION', '4');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -28,6 +28,7 @@ define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
 require_once SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'includes/options-helpers.php';
+require_once SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR . 'includes/pages-helpers.php';
 
 /**
  * Main plugin class
@@ -115,6 +116,22 @@ class SubscriberNotifications {
         if (!has_action('init', array($this, 'setup_rewrite_rules'))) {
             add_action('init', array($this, 'setup_rewrite_rules'), 20);
         }
+
+        add_action('delete_user', array($this, 'handle_deleted_wordpress_user'), 10, 1);
+    }
+
+    /**
+     * Remove linked subscriber row when a WordPress user is deleted.
+     *
+     * @param int $user_id WordPress user ID being deleted.
+     */
+    public function handle_deleted_wordpress_user($user_id) {
+        if (!class_exists('SubscriberNotifications_Database')) {
+            return;
+        }
+
+        $database = $this->database ?? new SubscriberNotifications_Database();
+        $database->delete_subscriber_by_user_id((int) $user_id);
     }
 
     /**

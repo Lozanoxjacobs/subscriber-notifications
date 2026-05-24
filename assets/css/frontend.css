@@ -145,6 +145,33 @@
     padding-left: 1.25em;
 }
 
+.subscriber-notifications-form .subscriber-notifications-notice {
+    margin: 0 0 1em;
+    padding: 0.75em 1em;
+    border-left: 4px solid #dba617;
+    background: #fcf9e8;
+    border-radius: 4px;
+}
+
+.subscriber-notifications-form .subscriber-notifications-notice__title {
+    margin: 0 0 0.35em;
+    font-weight: 600;
+}
+
+.subscriber-notifications-form .subscriber-notifications-notice p {
+    margin: 0;
+}
+
+.subscriber-notifications-form .subscriber-notifications-notice--success {
+    border-left-color: #00a32a;
+    background: #edfaef;
+}
+
+.subscriber-notifications-form .subscriber-notifications-notice--inactive {
+    border-left-color: #b32d2e;
+    background: #fcf0f1;
+}
+
 .subscriber-notifications-form .unsubscribe-section {
     margin-top: 1.5em;
 }

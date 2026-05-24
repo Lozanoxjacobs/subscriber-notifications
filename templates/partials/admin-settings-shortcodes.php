@@ -340,6 +340,37 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
     <p><strong><?php esc_html_e('Example', 'subscriber-notifications'); ?>:</strong></p>
     <pre class="sn-shortcode-code">[subscriber_notifications_form title="Subscribe to updates"]</pre>
 
+    <h2><code>[subscriber_notifications_preferences]</code></h2>
+    <p>
+        <?php
+        printf(
+            esc_html__('Displays the manage-preferences form on a public page. %s — do not use in notification email subject or body. Select the page under %s. Email manage links use that page with a unique %s query parameter.', 'subscriber-notifications'),
+            '<strong>' . esc_html__('Public website only', 'subscriber-notifications') . '</strong>',
+            '<a href="' . esc_url(admin_url('admin.php?page=subscriber-notifications-settings&tab=general')) . '"><strong>' . esc_html__('Settings → General → Frontend pages', 'subscriber-notifications') . '</strong></a>',
+            '<code>token</code>'
+        );
+        ?>
+    </p>
+    <h3><?php esc_html_e('Attributes', 'subscriber-notifications'); ?></h3>
+    <table class="widefat striped sn-shortcode-table">
+        <thead>
+            <tr>
+                <th><?php esc_html_e('Attribute', 'subscriber-notifications'); ?></th>
+                <th><?php esc_html_e('Values', 'subscriber-notifications'); ?></th>
+                <th><?php esc_html_e('Notes', 'subscriber-notifications'); ?></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>title</code></td>
+                <td><?php esc_html_e('any text', 'subscriber-notifications'); ?></td>
+                <td><?php esc_html_e('Optional. Rarely needed when the page already has a title.', 'subscriber-notifications'); ?></td>
+            </tr>
+        </tbody>
+    </table>
+    <p><strong><?php esc_html_e('Example', 'subscriber-notifications'); ?>:</strong></p>
+    <pre class="sn-shortcode-code">[subscriber_notifications_preferences]</pre>
+
     <h2><?php esc_html_e('Where shortcodes work', 'subscriber-notifications'); ?></h2>
     <ul class="sn-where-list">
         <li><?php esc_html_e('Notifications → Add New / Edit (subject and body)', 'subscriber-notifications'); ?></li>

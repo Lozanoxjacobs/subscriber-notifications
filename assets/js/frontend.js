@@ -48,7 +48,13 @@
         }).filter(':checked').length > 0;
     }
 
-    function isLockedContact() {
+    function isLockedContact($form) {
+        if (window.subscriberNotifications && window.subscriberNotifications.preferencesProfileLocked) {
+            return true;
+        }
+        if ($form && $form.length && $form.attr('data-profile-locked') === '1') {
+            return true;
+        }
         return !!(window.subscriberNotifications && window.subscriberNotifications.isLoggedIn);
     }
 
@@ -87,7 +93,7 @@
 
         clearFrequencyValidity($form);
 
-        if (!isLockedContact()) {
+        if (!isLockedContact($form)) {
             if (($name.val() || '').trim().length < 2) {
                 errors.push(i18n.errorNameLength || 'Name must be at least 2 characters long.');
             }
@@ -193,11 +199,17 @@
                 data: formData,
                 success: function (response) {
                     if (response && response.success) {
-                        $message.removeClass('error').addClass('success').text(response.data).show();
-                        if ($('.subscriber-notifications-notice').length) {
-                            window.location.reload();
+                        var url = new URL(window.location.href);
+                        var isReactivating = $form.data('reactivating') === 1 || $form.attr('data-reactivating') === '1';
+
+                        if (isReactivating || url.searchParams.get('unsubscribed') === '1') {
+                            url.searchParams.delete('unsubscribed');
+                            url.searchParams.set('reactivated', '1');
+                            window.location.assign(url.toString());
                             return;
                         }
+
+                        $message.removeClass('error').addClass('success').text(response.data).show();
                     } else {
                         $message.removeClass('success').addClass('error').text((response && response.data) || i18n.genericError).show();
                     }
@@ -232,7 +244,9 @@
                 },
                 success: function (response) {
                     if (response && response.success) {
-                        window.location.href = window.subscriberNotifications.homeUrl;
+                        var url = new URL(window.location.href);
+                        url.searchParams.set('unsubscribed', '1');
+                        window.location.assign(url.toString());
                     } else {
                         window.alert((response && response.data) || (i18n.genericError || 'An error occurred. Please try again.'));
                         $button.prop('disabled', false).text(originalText || i18n.unsubscribe || 'Unsubscribe');

@@ -284,6 +284,10 @@ class SubscriberNotifications_Shortcodes {
             return __('[Manage Preferences Link]', 'subscriber-notifications');
         }
 
+        if (!subscriber_notifications_preferences_page_is_configured()) {
+            return __('[Manage Preferences Link]', 'subscriber-notifications');
+        }
+
         $subscriber = $subscriber_notifications_current_subscriber;
         $database = new SubscriberNotifications_Database();
         $fresh_subscriber = $database->get_subscriber($subscriber->id);
@@ -297,10 +301,13 @@ class SubscriberNotifications_Shortcodes {
             $database->update_subscriber($subscriber->id, array('management_token' => $token));
         }
 
-        $manage_url = add_query_arg(array(
-            'action' => 'manage',
+        $manage_url = subscriber_notifications_get_preferences_page_url(array(
             'token' => $token,
-        ), home_url());
+        ));
+
+        if ($manage_url === '') {
+            return __('[Manage Preferences Link]', 'subscriber-notifications');
+        }
 
         return '<a href="' . esc_url($manage_url) . '">' . esc_html($atts['text']) . '</a>';
     }

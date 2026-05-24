@@ -481,6 +481,21 @@ class SubscriberNotifications_Database {
     }
 
     /**
+     * Delete subscriber linked to a WordPress user ID.
+     *
+     * @param int $user_id WordPress user ID.
+     * @return bool True when a row was deleted.
+     */
+    public function delete_subscriber_by_user_id(int $user_id): bool {
+        $subscriber = $this->get_subscriber_by_user_id($user_id);
+        if (!$subscriber) {
+            return false;
+        }
+
+        return $this->delete_subscriber((int) $subscriber->id);
+    }
+
+    /**
      * Remove terminal send-queue rows for a notification.
      *
      * @param int          $notification_id Notification ID.

@@ -70,6 +70,7 @@ Use in notification **subject** and **body**, welcome/preference emails, and glo
 | `[site_title]` | Site name |
 | `[manage_preferences_link]` | Clickable HTML link to the subscriber's preferences page. Default link text **Manage Preferences**; override with `text="…"` |
 | `[subscriber_notifications_form]` | Public subscribe form (`title="…"` optional) |
+| `[subscriber_notifications_preferences]` | Public manage-preferences form (`title="…"` optional). Requires **Preferences page** in Settings → General |
 
 ### `[content_feed]` (personalized post lists)
 
@@ -132,6 +133,7 @@ Only includes **published** posts flagged for the feed, notified within the `dur
 Under **Notifications > Settings > General**:
 
 - **Test Email Address** — address used by **Send Test Email** (`wp_mail()`)
+- **Frontend pages** — select the WordPress pages that contain the subscribe and preferences shortcodes; both are required for a complete setup (see [Frontend pages setup](#frontend-pages-setup))
 - **Hide Empty Terms on Subscription Form** (default **on**) — on the public subscribe and preferences forms, hide terms that have zero **published** posts for the configured post type (e.g. empty `Uncategorized`). Admin notification targets, Content Types configuration, and CSV import reference lists always show every configured term. Uncheck to show all configured terms on the public form regardless of post count.
 
 ### Data Settings
@@ -148,10 +150,23 @@ Under **Notifications > Settings > Data**:
 
 ## Usage
 
+### Frontend pages setup
+
+1. Create a **Subscribe** page and add `[subscriber_notifications_form]`.
+2. Create a **Notification Preferences** page and add `[subscriber_notifications_preferences]`.
+3. Go to **Notifications > Settings > General > Frontend pages** and select both pages. Both are **required** for a complete setup (subscribe links, email manage links, and on-site preference management).
+
+Email manage URLs use `{preferences_page_permalink}/?token={management_token}` only.
+
 ### Frontend Form
-Add the subscription form to any page or post:
+Add the subscription form to your subscribe page:
 ```
 [subscriber_notifications_form]
+```
+
+Add the preferences form to your preferences page:
+```
+[subscriber_notifications_preferences]
 ```
 
 Optional parameters:
@@ -165,13 +180,15 @@ Optional parameters:
 - **Validation** — at least one term must be selected across all sections; frequency is required
 
 #### Logged-in users:
-- **Name and email** are prefilled from the WordPress profile (`first_name`, `last_name`, `user_email`) and shown as **read-only** on the form
-- **Server-side enforcement** — on submit, the plugin uses the account identity and ignores POSTed name/email for logged-in users
-- **Account linking** — the subscriber row stores `user_id`; existing rows are matched by `user_id` first, then by email for legacy guest signups
-- **Preferences form** — same term/frequency UI as subscribe (including hide-empty behavior); name/email on that form are not locked to the WP account
+- **Name and email** are prefilled from the WordPress profile (`first_name`, `last_name`, `user_email`) and shown as **read-only** on the subscribe and preferences forms when the subscriber row is linked to a WordPress account (`user_id`)
+- **Server-side enforcement** — on submit, the plugin uses the account identity and ignores POSTed name/email for linked accounts
+- **Account linking** — the subscriber row stores `user_id`; existing rows are matched by `user_id` first, then by email for legacy guest signups (email match auto-links `user_id` on subscribe or preferences page visit)
+- **Subscribe page (logged in)** — active subscribers see an **Already Subscribed** message with a link to the preferences page; inactive subscribers see the subscribe form prefilled with a reactivation notice
+- **Preferences form** — same term/frequency UI as subscribe (including hide-empty behavior); linked accounts show live profile name and email; guests can edit name only (email is read-only from the subscriber record)
+- **On-site access** — logged-in users with a linked or email-matched subscription can open the preferences page without a token
 - **CAPTCHA** — still required when CAPTCHA is enabled (same as guests)
 
-Guests continue to enter and edit name and email normally.
+Guests continue to enter name on subscribe; email is read-only on the preferences form and never updated on save.
 
 ### Managing Notifications
 1. **View All Notifications** - Go to Notifications > Notifications
@@ -286,7 +303,7 @@ Preview emails are not sent to subscribers. They approximate production output b
 ### Managing Subscribers
 1. View all subscribers in **Notifications > Subscribers**
 2. Filter by status; search by **name**, **email**, or a numeric **WordPress user ID**
-3. **WP User** column — login linked to the user profile when `user_id` is set; em dash (—) for guests; **ID {n} (user not found)** if the linked WordPress user was deleted but the subscriber row still has `user_id`
+3. **WP User** column — login linked to the user profile when `user_id` is set; em dash (—) for guests. Deleting a WordPress user automatically removes their linked subscriber row
 4. Activate, deactivate, or delete subscribers from the list (admin actions do not set or change `user_id`; linking happens on logged-in frontend subscribe/reactivate only)
 5. **Import/export** — see [CSV import and export](#csv-import-and-export) below
 
@@ -301,15 +318,17 @@ Preview emails are not sent to subscribers. They approximate production output b
 - **Imports ignore `user_id`** even if present in the file (prevents incorrect account links from spreadsheets). Link accounts only via the public subscription form when the user is logged in.
 
 ### Subscriber Preference Management
-1. Subscribers can manage their own preferences using a token-based link
-2. Access preferences page via `?action=manage&token={management_token}`
-3. Subscribers can update:
-   - Name
+1. Subscribers manage preferences on the configured **Notification Preferences** page (`[subscriber_notifications_preferences]`)
+2. **Email links** — `{preferences_page}/?token={management_token}` (from `[manage_preferences_link]` and notification emails)
+3. **Logged-in access** — subscribers with a linked account (`user_id`) or matching account email can open the preferences page without a token
+4. Subscribers can update:
+   - Name (guest subscribers only; linked accounts use the WordPress profile)
    - Their selected terms for each configured post type / taxonomy
    - Delivery frequency
-4. Unsubscribe option available on preferences page
-5. **Inactive subscribers** who save the manage-preferences form are **reactivated** (same as resubscribing via the public form); they receive the welcome-back email. The preferences page shows a notice when the link belongs to an unsubscribed address.
-6. Active subscribers receive a preferences-update confirmation email after saving
+5. Unsubscribe option available on the preferences page
+6. **Inactive subscribers** who save the preferences form are **reactivated** (same as resubscribing via the public form); they receive the welcome-back email. The preferences page shows a notice when the subscriber is currently unsubscribed.
+7. Active subscribers receive a preferences-update confirmation email after saving
+8. **Linked accounts** — name and email display from the WordPress profile on every visit and sync to the subscriber row on save
 
 ### Flagging Posts for Notifications
 1. Edit any post in an enabled content type
@@ -402,6 +421,22 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.7.0
+
+- **Preferences page shortcode** — `[subscriber_notifications_preferences]` on a dedicated WordPress page replaces the homepage `?action=manage&token=...` route
+- **Frontend pages settings** — **Settings → General → Frontend pages** with subscribe and preferences page pickers; admin notice when either is unset
+- **Email manage URLs** — `[manage_preferences_link]` and notification emails use `{preferences_page}/?token={token}` only
+- **Logged-in session access** — linked subscribers can manage preferences on-site without a token; email match auto-links `user_id`
+- **Linked account contact sync** — preferences form shows live WP profile name and email; both sync to the subscriber row on save (POST ignored)
+- **User deletion cleanup** — deleting a WordPress user removes their linked subscriber row (cascade delete logs/queue)
+- **Subscribe page (logged in)** — active subscribers see **Already Subscribed** with a link to preferences; inactive subscribers see a prefilled form with a reactivation notice
+- **Unsubscribe confirmation** — frontend unsubscribe stays on the preferences page with a green confirmation banner (`?unsubscribed=1`) instead of redirecting to the homepage
+- **Inactive subscriber UX** — prominent notice when returning via an old email link; **Reactivate Subscription** submit label; Unsubscribe section hidden while inactive
+- **Reactivation redirect** — after reactivating, redirect to a clean URL with a welcome-back confirmation (`?reactivated=1`); stale `?unsubscribed=1` is ignored once the subscriber is active
+- **Token page caching** — no-cache headers on token-based preferences views so edge caches do not serve stale inactive HTML
+- **Frontend notices** — styled success, inactive, and error banners for subscribe and preferences flows
+- **Integration tests** — `frontend-pages-tests.php` and `preferences-page-tests.php` cover v3.7 frontend pages, shortcodes, session auth, subscribe/unsubscribe/reactivate flows
+
 ### Version 3.6.7
 
 - **Fix — convert sent one-time notification to recurring** — editing a sent one-time notification to recurring now resets `status` to `pending`, recalculates `next_send_date`, and clears stale send-queue rows so the recurring cron pipeline picks it up; re-saving already-broken rows is also repaired
@@ -409,8 +444,8 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ### Version 3.6.6
 
-- **Fix — manage preferences reactivates unsubscribed subscribers** — saving the token-based preferences form now sets `status` back to `active` when the subscriber was inactive (admin Unsubscribe, frontend Unsubscribe, or CSV). Sends the welcome-back email instead of the ordinary preferences-update email. The manage-preferences page shows a notice when the address is currently unsubscribed
-- **Fix — manage preferences UI when unsubscribed** — hide the Unsubscribe section while the subscriber is inactive; page reloads after a successful reactivation so the active layout (including Unsubscribe) appears
+- **Fix — manage preferences reactivates unsubscribed subscribers** — saving the token-based preferences form now sets `status` back to `active` when the subscriber was inactive (admin Unsubscribe, frontend Unsubscribe, or CSV). Sends the welcome-back email instead of the ordinary preferences-update email
+- **Fix — manage preferences UI when unsubscribed** — hide the Unsubscribe section while the subscriber is inactive
 
 ### Version 3.6.5
 
@@ -448,7 +483,7 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 - **Send-queue retention** — purge `sent` and `skipped` queue rows when a notification finishes; retain `failed` for dashboard visibility
 - **Site timezone datetimes** — all plugin timestamps written with `current_time( 'mysql' )`; removed UTC conversion helpers (`sn_format_log_date_utc`, log filter UTC bounds)
 - **Greenfield cleanup** — removed legacy DB migration methods and unprefixed options migration; `SUBSCRIBER_NOTIFICATIONS_DB_VERSION` decoupled from plugin version
-- **Integration tests** — `tests/integration/db-schema-tests.php`, `e2e-smoke-tests.php`, and B8 uninstall/reinstall verification via `tests/bin/run-pantheon-tests.sh`
+- **Integration tests** — `tests/integration/db-schema-tests.php`, `e2e-smoke-tests.php`, `preferences-page-tests.php`, `frontend-pages-tests.php` (v3.7 frontend pages + preferences shortcode), and B8 uninstall/reinstall verification via `tests/bin/run-pantheon-tests.sh`
 
 ### Version 3.5.3
 

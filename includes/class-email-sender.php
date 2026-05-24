@@ -201,10 +201,9 @@ class SubscriberNotifications_Email_Sender {
             return false;
         }
 
-        return add_query_arg(array(
-            'action' => 'manage',
-            'token'  => $subscriber->management_token,
-        ), home_url());
+        return subscriber_notifications_get_preferences_page_url(array(
+            'token' => $subscriber->management_token,
+        )) ?: false;
     }
 
     /**
