@@ -575,6 +575,12 @@ class SubscriberNotifications_Frontend {
         <div class="subscriber-notifications-form">
             <h2><?php esc_html_e('Manage Your Preferences', 'subscriber-notifications'); ?></h2>
 
+            <?php if ($subscriber->status === 'inactive') : ?>
+                <p class="subscriber-notifications-notice">
+                    <?php esc_html_e('You are currently unsubscribed. Saving your preferences below will reactivate your subscription.', 'subscriber-notifications'); ?>
+                </p>
+            <?php endif; ?>
+
             <?php if (!SubscriberNotifications_Content_Config::is_configured()) : ?>
                 <p><?php esc_html_e('Subscriptions are not currently configured. You can still unsubscribe below.', 'subscriber-notifications'); ?></p>
             <?php endif; ?>
@@ -666,20 +672,34 @@ class SubscriberNotifications_Frontend {
             return;
         }
 
+        $was_inactive = ($subscriber->status === 'inactive');
+
         $update_data = array(
             'name'                     => $name,
             'subscription_preferences' => $prefs,
             'frequency'                => $frequency,
         );
 
+        if ($was_inactive) {
+            $update_data['status'] = 'active';
+        }
+
         $result = $this->database->update_subscriber($subscriber->id, $update_data);
 
         if ($result !== false) {
             $updated_subscriber = $this->database->get_subscriber($subscriber->id);
             if ($updated_subscriber) {
-                $this->send_preferences_update_email($updated_subscriber);
+                if ($was_inactive) {
+                    $this->send_welcome_back_email($updated_subscriber);
+                } else {
+                    $this->send_preferences_update_email($updated_subscriber);
+                }
             }
-            wp_send_json_success(__('Your preferences have been updated successfully.', 'subscriber-notifications'));
+            if ($was_inactive) {
+                wp_send_json_success(__('Welcome back! Your subscription has been reactivated.', 'subscriber-notifications'));
+            } else {
+                wp_send_json_success(__('Your preferences have been updated successfully.', 'subscriber-notifications'));
+            }
         } else {
             wp_send_json_error(__('An error occurred while updating your preferences. Please try again.', 'subscriber-notifications'));
         }

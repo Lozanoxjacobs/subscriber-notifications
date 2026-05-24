@@ -308,7 +308,8 @@ Preview emails are not sent to subscribers. They approximate production output b
    - Their selected terms for each configured post type / taxonomy
    - Delivery frequency
 4. Unsubscribe option available on preferences page
-5. Confirmation email sent after preference updates
+5. **Inactive subscribers** who save the manage-preferences form are **reactivated** (same as resubscribing via the public form); they receive the welcome-back email. The preferences page shows a notice when the link belongs to an unsubscribed address.
+6. Active subscribers receive a preferences-update confirmation email after saving
 
 ### Flagging Posts for Notifications
 1. Edit any post in an enabled content type
@@ -400,6 +401,10 @@ define('DISABLE_WP_CRON', true);
 This guarantees the send queue drains on a strict one-minute cadence regardless of site traffic.
 
 ## Changelog
+
+### Version 3.6.6
+
+- **Fix — manage preferences reactivates unsubscribed subscribers** — saving the token-based preferences form now sets `status` back to `active` when the subscriber was inactive (admin Unsubscribe, frontend Unsubscribe, or CSV). Sends the welcome-back email instead of the ordinary preferences-update email. The manage-preferences page shows a notice when the address is currently unsubscribed
 
 ### Version 3.6.5
 
