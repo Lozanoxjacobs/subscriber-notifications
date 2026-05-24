@@ -393,6 +393,10 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 3.6.1
+
+- **Fix — email click/open tracking 404** — register `/track/click/` and `/track/open/` rewrite rules before `flush_rewrite_rules()` on activation; re-flush when rules are missing from the saved ruleset (fixes manage-preferences and content-feed links after reinstall)
+
 ### Version 3.6.0
 
 **Upgrade note:** Not an in-place upgrade from 3.5.x — back up, export if needed, then fresh install or wipe plugin data before deploying 3.6.0.

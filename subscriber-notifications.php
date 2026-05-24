@@ -3,7 +3,7 @@
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
  * Description: Configurable subscriber notification system with per-site Content Types (any public post type and taxonomy), JSON preferences, theme-native form, and brandable emails.
- * Version: 3.6.0
+ * Version: 3.6.1
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.6.0');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.6.1');
 define('SUBSCRIBER_NOTIFICATIONS_DB_VERSION', '4');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -116,14 +116,46 @@ class SubscriberNotifications {
             add_action('init', array($this, 'setup_rewrite_rules'), 20);
         }
     }
+
+    /**
+     * Register click/open tracking rewrite rules (must run before flush_rewrite_rules()).
+     */
+    private function register_tracking_rewrite_rules() {
+        add_rewrite_rule('^track/click/?$', 'index.php?subscriber_track=click', 'top');
+        add_rewrite_rule('^track/open/?$', 'index.php?subscriber_track=open', 'top');
+    }
+
+    /**
+     * Whether tracking rewrite rules are missing from the saved ruleset.
+     */
+    private function tracking_rewrite_rules_missing() {
+        $rules = get_option('rewrite_rules');
+        if (!is_array($rules)) {
+            return true;
+        }
+
+        return !array_key_exists('track/click/?$', $rules) || !array_key_exists('track/open/?$', $rules);
+    }
+
+    /**
+     * Persist tracking rewrite rules when the plugin version changes or rules are absent.
+     */
+    private function maybe_flush_tracking_rewrite_rules() {
+        $stored_version = get_option('subscriber_notifications_rewrite_version', '0.0.0');
+        if (
+            version_compare($stored_version, SUBSCRIBER_NOTIFICATIONS_VERSION, '<')
+            || $this->tracking_rewrite_rules_missing()
+        ) {
+            flush_rewrite_rules(false);
+            update_option('subscriber_notifications_rewrite_version', SUBSCRIBER_NOTIFICATIONS_VERSION);
+        }
+    }
     
     /**
      * Setup rewrite rules for email tracking
      */
     public function setup_rewrite_rules() {
-        // Add rewrite rules (these can be added multiple times safely)
-        add_rewrite_rule('^track/click/?$', 'index.php?subscriber_track=click', 'top');
-        add_rewrite_rule('^track/open/?$', 'index.php?subscriber_track=open', 'top');
+        $this->register_tracking_rewrite_rules();
         
         // Use WordPress-native has_action() to prevent duplicate hook registrations
         // This checks WordPress's actual hook registry, which is more reliable than static flags
@@ -134,19 +166,8 @@ class SubscriberNotifications {
         if (!has_action('template_redirect', array($this, 'handle_tracking_request'))) {
             add_action('template_redirect', array($this, 'handle_tracking_request'));
         }
-        
-        // Flush rewrite rules once after version update (for existing sites)
-        // Use transient to avoid flushing on every page load
-        $flush_transient = get_transient('subscriber_notifications_rewrite_flush_' . SUBSCRIBER_NOTIFICATIONS_VERSION);
-        if (!$flush_transient) {
-            $last_flush_version = get_option('subscriber_notifications_rewrite_version', '0.0.0');
-            if (version_compare($last_flush_version, SUBSCRIBER_NOTIFICATIONS_VERSION, '<')) {
-                flush_rewrite_rules(false);
-                update_option('subscriber_notifications_rewrite_version', SUBSCRIBER_NOTIFICATIONS_VERSION);
-                // Set transient to prevent flushing again for this version (24 hour expiry)
-                set_transient('subscriber_notifications_rewrite_flush_' . SUBSCRIBER_NOTIFICATIONS_VERSION, true, DAY_IN_SECONDS);
-            }
-        }
+
+        $this->maybe_flush_tracking_rewrite_rules();
     }
     
     /**
@@ -309,11 +330,9 @@ class SubscriberNotifications {
         // Set default options
         $this->set_default_options();
 
-        // Cron events are scheduled by SubscriberNotifications_Scheduler on every
-        // load; nothing to do here at activation time.
-
-        // Flush rewrite rules
-        flush_rewrite_rules();
+        // Register tracking routes before flush — init has not run yet at activation time.
+        $this->register_tracking_rewrite_rules();
+        $this->maybe_flush_tracking_rewrite_rules();
     }
 
     /**
