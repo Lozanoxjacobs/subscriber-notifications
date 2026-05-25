@@ -447,29 +447,29 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
         <thead>
             <tr>
                 <th><?php esc_html_e('Attribute', 'subscriber-notifications'); ?></th>
-                <th><?php esc_html_e('Example', 'subscriber-notifications'); ?></th>
+                <th><?php esc_html_e('Values', 'subscriber-notifications'); ?></th>
                 <th><?php esc_html_e('Notes', 'subscriber-notifications'); ?></th>
             </tr>
         </thead>
         <tbody>
             <tr>
                 <td><code>include</code></td>
-                <td><code>privacy-policy,cookies-policy</code></td>
-                <td><?php esc_html_e('Allowlist — show only when the current post slug matches one entry (comma-separated).', 'subscriber-notifications'); ?></td>
+                <td><?php esc_html_e('comma-separated post slugs (e.g.', 'subscriber-notifications'); ?> <code>privacy-policy</code>, <code>cookies-policy</code>)</td>
+                <td><?php esc_html_e('Allowlist — show only when the current post slug matches one entry.', 'subscriber-notifications'); ?></td>
             </tr>
             <tr>
                 <td><code>exclude</code></td>
-                <td><code>sitemap,sample-page</code></td>
+                <td><?php esc_html_e('comma-separated post slugs (e.g.', 'subscriber-notifications'); ?> <code>sitemap</code>, <code>sample-page</code>)</td>
                 <td><?php esc_html_e('Denylist — hide when the current post slug matches one entry.', 'subscriber-notifications'); ?></td>
             </tr>
             <tr>
                 <td><code>include_terms</code></td>
-                <td><code>project-status:in-progress</code></td>
-                <td><?php esc_html_e('Allowlist by taxonomy term. Format: taxonomy-slug:term-slug pairs, comma-separated. Match any listed term (OR).', 'subscriber-notifications'); ?></td>
+                <td><?php esc_html_e('comma-separated pairs (e.g.', 'subscriber-notifications'); ?> <code>project-status:in-progress</code>, <code>project-status:planning</code>)</td>
+                <td><?php esc_html_e('Allowlist by taxonomy term. Format: taxonomy-slug:term-slug. Match any listed term (OR).', 'subscriber-notifications'); ?></td>
             </tr>
             <tr>
                 <td><code>exclude_terms</code></td>
-                <td><code>project-status:on-hold</code></td>
+                <td><?php esc_html_e('comma-separated pairs (e.g.', 'subscriber-notifications'); ?> <code>project-status:on-hold</code>)</td>
                 <td><?php esc_html_e('Denylist by taxonomy term. Same format as include_terms.', 'subscriber-notifications'); ?></td>
             </tr>
         </tbody>
@@ -482,17 +482,40 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
         <thead>
             <tr>
                 <th><?php esc_html_e('Attribute', 'subscriber-notifications'); ?></th>
-                <th><?php esc_html_e('When shown', 'subscriber-notifications'); ?></th>
+                <th><?php esc_html_e('Values', 'subscriber-notifications'); ?></th>
+                <th><?php esc_html_e('Notes', 'subscriber-notifications'); ?></th>
             </tr>
         </thead>
         <tbody>
             <tr>
-                <td><code>heading</code>, <code>description</code>, <code>button</code></td>
-                <td><?php esc_html_e('Subscribe form', 'subscriber-notifications'); ?></td>
+                <td><code>heading</code></td>
+                <td><?php esc_html_e('any text', 'subscriber-notifications'); ?></td>
+                <td><?php esc_html_e('Subscribe form heading. Leave empty for the default.', 'subscriber-notifications'); ?></td>
             </tr>
             <tr>
-                <td><code>heading_subscribed</code>, <code>description_subscribed</code>, <code>button_manage</code></td>
-                <td><?php esc_html_e('Already subscribed state (logged-in visitors may also see Manage)', 'subscriber-notifications'); ?></td>
+                <td><code>description</code></td>
+                <td><?php esc_html_e('any text', 'subscriber-notifications'); ?></td>
+                <td><?php esc_html_e('Subscribe form description. Leave empty for the default.', 'subscriber-notifications'); ?></td>
+            </tr>
+            <tr>
+                <td><code>button</code></td>
+                <td><?php esc_html_e('any text', 'subscriber-notifications'); ?></td>
+                <td><?php esc_html_e('Subscribe button label. Leave empty for the default.', 'subscriber-notifications'); ?></td>
+            </tr>
+            <tr>
+                <td><code>heading_subscribed</code></td>
+                <td><?php esc_html_e('any text', 'subscriber-notifications'); ?></td>
+                <td><?php esc_html_e('Heading when the visitor is already subscribed.', 'subscriber-notifications'); ?></td>
+            </tr>
+            <tr>
+                <td><code>description_subscribed</code></td>
+                <td><?php esc_html_e('any text', 'subscriber-notifications'); ?></td>
+                <td><?php esc_html_e('Description when the visitor is already subscribed.', 'subscriber-notifications'); ?></td>
+            </tr>
+            <tr>
+                <td><code>button_manage</code></td>
+                <td><?php esc_html_e('any text', 'subscriber-notifications'); ?></td>
+                <td><?php esc_html_e('Manage link label for logged-in subscribers.', 'subscriber-notifications'); ?></td>
             </tr>
         </tbody>
     </table>
