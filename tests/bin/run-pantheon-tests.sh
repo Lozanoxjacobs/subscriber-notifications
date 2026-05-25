@@ -56,6 +56,14 @@ fi
 echo "==> B8 uninstall/reinstall (delete data on uninstall)"
 terminus wp "${SITE}" -- eval ' $db = new SubscriberNotifications_Database(); $db->add_subscriber(array("name" => "B8 Seed", "email" => "b8-seed-" . wp_generate_password(8, false) . "@example.com")); '
 terminus wp "${SITE}" -- option update subscriber_notifications_delete_data_on_uninstall 1
+terminus wp "${SITE}" -- eval '
+$post_id = wp_insert_post(array("post_title" => "B8 Meta Seed", "post_status" => "publish", "post_type" => "page", "post_content" => "[subscriber_notifications_form]"), true);
+if (!is_wp_error($post_id)) {
+    update_post_meta($post_id, "_subscriber_notifications_include_in_feed", "1");
+    update_post_meta($post_id, "_subscriber_notifications_feed_since", current_time("mysql"));
+    update_option("subscriber_notifications_prefixed_options_migrated", 1);
+}
+'
 
 TABLES_BEFORE=$(terminus wp "${SITE}" -- db query "SHOW TABLES LIKE 'wp_subscriber_%'" --skip-column-names 2>/dev/null | grep -c 'wp_subscriber_' || true)
 [[ "${TABLES_BEFORE}" -eq 4 ]] && echo "PASS: B8 four tables exist before uninstall" || { echo "FAIL: B8 four tables exist before uninstall (found ${TABLES_BEFORE})"; exit 1; }
@@ -64,6 +72,12 @@ terminus wp "${SITE}" -- plugin uninstall subscriber-notifications --deactivate 
 
 TABLES_AFTER=$(terminus wp "${SITE}" -- db query "SHOW TABLES LIKE 'wp_subscriber_%'" --skip-column-names 2>/dev/null | grep -c 'wp_subscriber_' || true)
 [[ "${TABLES_AFTER}" -eq 0 ]] && echo "PASS: B8 tables removed on uninstall" || { echo "FAIL: B8 tables removed on uninstall (found ${TABLES_AFTER})"; exit 1; }
+
+OPTIONS_LEFT=$(terminus wp "${SITE}" -- db query "SELECT COUNT(*) FROM wp_options WHERE option_name LIKE 'subscriber_notifications_%'" --skip-column-names 2>/dev/null | head -1 | tr -d '[:space:]')
+[[ "${OPTIONS_LEFT}" -eq 0 ]] && echo "PASS: B8 plugin options removed on uninstall" || { echo "FAIL: B8 plugin options removed on uninstall (found ${OPTIONS_LEFT})"; exit 1; }
+
+POSTMETA_LEFT=$(terminus wp "${SITE}" -- db query "SELECT COUNT(*) FROM wp_postmeta WHERE meta_key LIKE '_subscriber_notifications_%'" --skip-column-names 2>/dev/null | head -1 | tr -d '[:space:]')
+[[ "${POSTMETA_LEFT}" -eq 0 ]] && echo "PASS: B8 plugin post meta removed on uninstall" || { echo "FAIL: B8 plugin post meta removed on uninstall (found ${POSTMETA_LEFT})"; exit 1; }
 
 if terminus wp "${SITE}" -- option get subscriber_notifications_db_version >/dev/null 2>&1; then
   echo "FAIL: B8 db_version option removed on uninstall"

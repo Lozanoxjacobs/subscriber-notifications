@@ -160,7 +160,7 @@ Under **Notifications > Settings > General**:
 Under **Notifications > Settings > Data**:
 
 - **Email logs** — purge log entries older than 30 / 90 / 180 / 365 days (with match counts and confirmation)
-- **Delete Data on Uninstall** — when checked, uninstall removes subscribers, logs, queue, and plugin options
+- **Delete Data on Uninstall** — when checked, uninstall removes subscribers, logs, queues, all plugin options, post meta (feed/item flags), and admin screen preferences; shortcodes in page content are intentionally left as plain text
 
 ### Email Templates
 - Customize welcome email subject and content
@@ -473,6 +473,12 @@ define('DISABLE_WP_CRON', true);
 This guarantees the send queue drains on a strict one-minute cadence regardless of site traffic.
 
 ## Changelog
+
+### Version 3.8.1
+
+- **Delete Data on Uninstall — full reset** — Removes all `subscriber_notifications_*` options (including subscribe/preferences page IDs and orphaned migration flags), post meta (`_subscriber_notifications_*`), admin screen preferences, and plugin transients; shortcodes in page or template content are intentionally left as plain text
+- **Settings → Data** — Updated uninstall checkbox description to match full-reset behavior
+- **Integration tests** — B8 uninstall verification now asserts zero plugin options and post meta remain after uninstall
 
 ### Version 3.8.0
 

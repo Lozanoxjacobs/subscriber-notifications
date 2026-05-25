@@ -3,7 +3,7 @@
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
  * Description: Let visitors subscribe to your content by post type and taxonomy, then send scheduled, targeted email notifications with personalized digests, templates, and open/click tracking.
- * Version: 3.8.0
+ * Version: 3.8.1
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.8.0');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.8.1');
 define('SUBSCRIBER_NOTIFICATIONS_DB_VERSION', '4');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -411,86 +411,64 @@ class SubscriberNotifications {
             return;
         }
         
-        // User has opted to delete all data - proceed with full cleanup
+        self::purge_all_plugin_data();
+    }
+
+    /**
+     * Remove all plugin-owned storage (tables, options, meta, transients, cron).
+     *
+     * Intentionally does not edit post_content — shortcodes placed in pages or
+     * templates remain as plain text after uninstall.
+     */
+    private static function purge_all_plugin_data() {
         global $wpdb;
-        
-        // Drop database tables
+
         $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}subscriber_notifications");
         $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}subscriber_notification_logs");
         $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}subscriber_notifications_queue");
         $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}subscriber_notifications_send_queue");
-        
-        // Delete all plugin options (prefixed plus legacy leftovers).
-        $prefixed_suffixes = array(
-            'welcome_email_subject',
-            'welcome_email_content',
-            'welcome_back_email_subject',
-            'welcome_back_email_content',
-            'preferences_update_email_subject',
-            'preferences_update_email_content',
-            'item_subscribe_email_subject',
-            'item_subscribe_email_content',
-            'item_update_email_subject',
-            'item_update_email_content',
-            'captcha_site_key',
-            'captcha_secret_key',
-            'global_header_logo',
-            'global_header_content',
-            'global_footer',
-            'email_css',
-            'email_font_body',
-            'email_font_heading',
-            'email_color_text',
-            'email_color_link',
-            'email_color_background',
-            'email_color_content_bg',
-            'email_color_link_hover',
-            'email_color_footer_bg',
-            'email_color_footer_text',
-            'daily_send_time',
-            'weekly_send_time',
-            'weekly_send_day',
-            'monthly_send_time',
-            'monthly_send_day',
-            'test_email',
-            'delete_data_on_uninstall',
-            'hide_terms_without_published_content',
-        );
-        $options_to_delete = array_merge(
-            array(
-                'subscriber_notifications_db_version',
-                'subscriber_notifications_rewrite_version',
-                'subscriber_notifications_content_config',
-            ),
-            array_map(
-                'subscriber_notifications_option_name',
-                $prefixed_suffixes
-            ),
-            array(
-                'mail_method',
-                'sendgrid_api_key',
-                'sendgrid_from_email',
-                'sendgrid_from_name',
+
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+                $wpdb->esc_like('subscriber_notifications_') . '%'
             )
         );
 
-        foreach (array_unique($options_to_delete) as $option) {
-            delete_option($option);
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE %s",
+                $wpdb->esc_like('_subscriber_notifications_') . '%'
+            )
+        );
+
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->usermeta} WHERE meta_key LIKE %s",
+                $wpdb->esc_like('subscriber_notifications_') . '%'
+            )
+        );
+
+        $transient_prefixes = array('subscriber_notifications_', 'sn_', 'subscriber_track_');
+        foreach ($transient_prefixes as $prefix) {
+            $like = $wpdb->esc_like('_transient_' . $prefix) . '%';
+            $timeout_like = $wpdb->esc_like('_transient_timeout_' . $prefix) . '%';
+            $wpdb->query(
+                $wpdb->prepare(
+                    "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+                    $like,
+                    $timeout_like
+                )
+            );
         }
-        
-        // Clear all scheduled events
+
         wp_clear_scheduled_hook('subscriber_notifications_process_queue');
         wp_clear_scheduled_hook('subscriber_notifications_send_daily');
         wp_clear_scheduled_hook('subscriber_notifications_send_weekly');
         wp_clear_scheduled_hook('subscriber_notifications_send_monthly');
         wp_clear_scheduled_hook('subscriber_notifications_drain_queue');
         wp_clear_scheduled_hook('subscriber_notifications_send_item_updates');
-        
-        // Delete transients
-        delete_transient('subscriber_notifications_tokens_checked');
-        delete_option('subscriber_notifications_item_update_queue');
-        
-        // Flush rewrite rules
+
         flush_rewrite_rules();
     }
     

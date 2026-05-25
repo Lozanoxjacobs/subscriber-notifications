@@ -13,8 +13,8 @@ global $wpdb;
 $database = new SubscriberNotifications_Database();
 
 sn_test_assert(
-    'B1 plugin version 3.8.0',
-    defined('SUBSCRIBER_NOTIFICATIONS_VERSION') && SUBSCRIBER_NOTIFICATIONS_VERSION === '3.8.0'
+    'B1 plugin version 3.8.1',
+    defined('SUBSCRIBER_NOTIFICATIONS_VERSION') && SUBSCRIBER_NOTIFICATIONS_VERSION === '3.8.1'
 );
 
 sn_test_assert(

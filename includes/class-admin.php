@@ -2353,10 +2353,10 @@ class SubscriberNotifications_Admin {
         <label>
             <input type="hidden" name="<?php echo esc_attr($name_opt); ?>" value="0">
             <input type="checkbox" name="<?php echo esc_attr($name_opt); ?>" value="1" <?php checked($value, 1); ?>>
-            <?php _e('Delete all plugin data (subscribers, logs, settings) when the plugin is uninstalled', 'subscriber-notifications'); ?>
+            <?php _e('Delete all plugin data when the plugin is uninstalled', 'subscriber-notifications'); ?>
         </label>
         <p class="description">
-            <?php _e('By default, all data is preserved when you uninstall the plugin. Check this box if you want all data to be deleted when uninstalling. This includes all subscribers, email logs, notification queues, and plugin settings.', 'subscriber-notifications'); ?>
+            <?php _e('By default, all data is preserved when you uninstall the plugin. Check this box for a full reset: subscribers, email logs, queues, settings, post meta (feed flags), and admin screen preferences are removed. Shortcodes already placed in page or template content are left as plain text.', 'subscriber-notifications'); ?>
             <br><br>
             <strong><?php _e('Current Status:', 'subscriber-notifications'); ?></strong> 
             <?php if ($value): ?>
