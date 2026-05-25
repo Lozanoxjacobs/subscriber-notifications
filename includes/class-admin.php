@@ -1633,7 +1633,11 @@ class SubscriberNotifications_Admin {
                 'welcome_back_email_subject',
                 'welcome_back_email_content',
                 'preferences_update_email_subject',
-                'preferences_update_email_content'
+                'preferences_update_email_content',
+                'item_subscribe_email_subject',
+                'item_subscribe_email_content',
+                'item_update_email_subject',
+                'item_update_email_content',
             ),
             'scheduling' => array(
                 'daily_send_time',
@@ -1711,6 +1715,13 @@ class SubscriberNotifications_Admin {
             'subscriber_notifications_email_templates_section',
             '',
             '__return_empty_string',
+            'subscriber-notifications-settings-email-templates'
+        );
+
+        add_settings_section(
+            'subscriber_notifications_item_email_templates_section',
+            __('Item subscriptions', 'subscriber-notifications'),
+            array($this, 'render_item_email_templates_section_description'),
             'subscriber-notifications-settings-email-templates'
         );
 
@@ -1915,6 +1926,38 @@ class SubscriberNotifications_Admin {
             'subscriber_notifications_email_templates_section'
         );
 
+        add_settings_field(
+            'item_subscribe_email_subject',
+            __('Item subscription confirmation subject', 'subscriber-notifications'),
+            array($this, 'render_item_subscribe_email_subject_field'),
+            'subscriber-notifications-settings-email-templates',
+            'subscriber_notifications_item_email_templates_section'
+        );
+
+        add_settings_field(
+            'item_subscribe_email_content',
+            __('Item subscription confirmation content', 'subscriber-notifications'),
+            array($this, 'render_item_subscribe_email_content_field'),
+            'subscriber-notifications-settings-email-templates',
+            'subscriber_notifications_item_email_templates_section'
+        );
+
+        add_settings_field(
+            'item_update_email_subject',
+            __('Item update notification subject', 'subscriber-notifications'),
+            array($this, 'render_item_update_email_subject_field'),
+            'subscriber-notifications-settings-email-templates',
+            'subscriber_notifications_item_email_templates_section'
+        );
+
+        add_settings_field(
+            'item_update_email_content',
+            __('Item update notification content', 'subscriber-notifications'),
+            array($this, 'render_item_update_email_content_field'),
+            'subscriber-notifications-settings-email-templates',
+            'subscriber_notifications_item_email_templates_section'
+        );
+
         // Scheduling tab fields
         add_settings_field(
             'daily_send_time',
@@ -2110,6 +2153,22 @@ class SubscriberNotifications_Admin {
     }
     
     public function sanitize_setting_preferences_update_email_content($value) {
+        return $this->sanitize_content_with_shortcodes($value);
+    }
+
+    public function sanitize_setting_item_subscribe_email_subject($value) {
+        return sanitize_textarea_field($value);
+    }
+
+    public function sanitize_setting_item_subscribe_email_content($value) {
+        return $this->sanitize_content_with_shortcodes($value);
+    }
+
+    public function sanitize_setting_item_update_email_subject($value) {
+        return sanitize_textarea_field($value);
+    }
+
+    public function sanitize_setting_item_update_email_content($value) {
         return $this->sanitize_content_with_shortcodes($value);
     }
     
@@ -2478,6 +2537,72 @@ class SubscriberNotifications_Admin {
         <p class="description"><?php _e('Sent when a subscriber updates their preferences.', 'subscriber-notifications'); ?></p>
         <?php self::render_shortcode_reference_description(); ?>
         <?php
+    }
+
+    /**
+     * Section description for item email templates.
+     */
+    public function render_item_email_templates_section_description() {
+        echo '<p class="description">' . esc_html__(
+            'Sent for on-page post subscriptions and immediate item update notifications. Use post shortcodes such as [post_title] and [post_link]. Avoid [delivery_frequency] and [content_feed] here.',
+            'subscriber-notifications'
+        ) . '</p>';
+    }
+
+    public function render_item_subscribe_email_subject_field() {
+        $name_opt = subscriber_notifications_option_name('item_subscribe_email_subject');
+        $value    = subscriber_notifications_get_option(
+            'item_subscribe_email_subject',
+            __('[site_title] You\'re subscribed to updates for [post_title]', 'subscriber-notifications')
+        );
+        ?>
+        <input type="text" id="item_subscribe_email_subject" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" required>
+        <p class="description"><?php esc_html_e('Sent when someone subscribes to a specific page from the on-page widget.', 'subscriber-notifications'); ?></p>
+        <?php
+    }
+
+    public function render_item_subscribe_email_content_field() {
+        $name_opt = subscriber_notifications_option_name('item_subscribe_email_content');
+        $default  = __("Hello [subscriber_name],\n\nYou're subscribed to receive email when [post_title] is updated.\n\nView page: [post_link]\n\n[manage_preferences_link]", 'subscriber-notifications');
+        $value    = subscriber_notifications_get_option('item_subscribe_email_content', $default);
+        wp_editor(
+            wp_unslash($value),
+            'item_subscribe_email_content',
+            array(
+                'textarea_name' => $name_opt,
+                'media_buttons' => false,
+                'textarea_rows' => 8,
+                'teeny'         => false,
+            )
+        );
+    }
+
+    public function render_item_update_email_subject_field() {
+        $name_opt = subscriber_notifications_option_name('item_update_email_subject');
+        $value    = subscriber_notifications_get_option(
+            'item_update_email_subject',
+            __('[site_title] Update: [post_title]', 'subscriber-notifications')
+        );
+        ?>
+        <input type="text" id="item_update_email_subject" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" required>
+        <p class="description"><?php esc_html_e('Sent when an admin checks “Email item subscribers about this update” on save.', 'subscriber-notifications'); ?></p>
+        <?php
+    }
+
+    public function render_item_update_email_content_field() {
+        $name_opt = subscriber_notifications_option_name('item_update_email_content');
+        $default  = __("Hello [subscriber_name],\n\n[post_title] has been updated.\n\n[post_link]\n\n[manage_preferences_link]", 'subscriber-notifications');
+        $value    = subscriber_notifications_get_option('item_update_email_content', $default);
+        wp_editor(
+            wp_unslash($value),
+            'item_update_email_content',
+            array(
+                'textarea_name' => $name_opt,
+                'media_buttons' => false,
+                'textarea_rows' => 8,
+                'teeny'         => false,
+            )
+        );
     }
     
     /**

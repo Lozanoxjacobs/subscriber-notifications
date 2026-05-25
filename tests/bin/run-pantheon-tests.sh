@@ -31,6 +31,12 @@ terminus wp "${SITE}" -- eval-file "${REMOTE}/tests/integration/preferences-page
 echo "==> Frontend pages tests (v3.7)"
 terminus wp "${SITE}" -- eval-file "${REMOTE}/tests/integration/frontend-pages-tests.php"
 
+echo "==> Item subscriptions tests (v3.8)"
+terminus wp "${SITE}" -- eval-file "${REMOTE}/tests/integration/item-subscriptions-tests.php"
+
+echo "==> Post subscribe display tests (v3.8)"
+terminus wp "${SITE}" -- eval-file "${REMOTE}/tests/integration/post-subscribe-display-tests.php"
+
 BASE_URL=$(terminus wp "${SITE}" -- option get siteurl 2>/dev/null | head -1 | tr -d '[:space:]')
 TOKEN=$(terminus wp "${SITE}" -- db query "SELECT management_token FROM wp_subscriber_notifications WHERE email LIKE 'token-test-%' ORDER BY id DESC LIMIT 1" --skip-column-names 2>/dev/null | head -1 | tr -d '[:space:]')
 

@@ -110,7 +110,8 @@
             reportFrequencyRequired($form);
         }
 
-        if (!selectionHasTerm($form) && $form.find('input[name^="preferences["]').length > 0) {
+        var hasPreferenceInputs = $form.find('input[name^="preferences["]').length > 0;
+        if (!selectionHasTerm($form) && hasPreferenceInputs) {
             errors.push(i18n.errorAtLeastOneTerm || 'Please select at least one option to subscribe to.');
         }
 
@@ -286,6 +287,56 @@
         // Initial select-all sync on page load (for preferences form with pre-checked items).
         $('form').each(function () {
             syncSelectAll($(this));
+        });
+
+        // Post subscribe widget.
+        $(document).on('submit', '.sn-post-subscribe-form', function (e) {
+            e.preventDefault();
+            var $form = $(this);
+            var $wrap = $form.closest('.subscriber-notifications-post-subscribe');
+            var $button = $form.find('button[type="submit"]');
+            var $message = $wrap.find('.sn-post-subscribe-message');
+            var originalText = $button.text();
+
+            var name = ($form.find('[name="subscriber_name"]').val() || '').trim();
+            var email = ($form.find('[name="subscriber_email"]').val() || '').trim();
+            if ($form.find('[name="subscriber_name"]').length && name.length < 2) {
+                $message.removeClass('success').addClass('error').text(i18n.errorNameLength || 'Name must be at least 2 characters long.').show();
+                return;
+            }
+            if ($form.find('[name="subscriber_email"]').length) {
+                var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email)) {
+                    $message.removeClass('success').addClass('error').text(i18n.errorEmail || 'Please enter a valid email address.').show();
+                    return;
+                }
+            }
+
+            $button.prop('disabled', true).text(i18n.subscribing || 'Subscribing...');
+            $message.hide();
+
+            var formData = $form.serialize();
+            formData += '&action=subscriber_notifications_post_subscribe';
+
+            $.ajax({
+                url: window.subscriberNotifications.ajaxUrl,
+                type: 'POST',
+                data: formData,
+                success: function (response) {
+                    if (response && response.success && response.data && response.data.html) {
+                        $wrap.replaceWith(response.data.html);
+                    } else if (response && response.success) {
+                        $message.removeClass('error').addClass('success').text(response.data).show();
+                    } else {
+                        $message.removeClass('success').addClass('error').text((response && response.data) || i18n.genericError).show();
+                        $button.prop('disabled', false).text(originalText);
+                    }
+                },
+                error: function () {
+                    $message.removeClass('success').addClass('error').text(i18n.genericError || 'An error occurred. Please try again.').show();
+                    $button.prop('disabled', false).text(originalText);
+                }
+            });
         });
     });
 })(jQuery);

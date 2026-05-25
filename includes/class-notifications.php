@@ -2,11 +2,6 @@
 /**
  * Notification meta box + post-save feed flag handler.
  *
- * In v3 the meta box is registered for every post type enabled in Content Types.
- * A single `save_post` handler sets the feed-inclusion meta when the checkbox is
- * checked; the scheduled digest pipeline still does the actual sending (no
- * immediate blast from the meta box).
- *
  * @package SubscriberNotifications
  * @since 1.0.0
  */
@@ -28,12 +23,18 @@ class SubscriberNotifications_Notifications {
     private $database;
 
     /**
+     * @var SubscriberNotifications_Item_Notifications|null
+     */
+    private $item_notifications;
+
+    /**
      * Constructor.
      *
      * @param SubscriberNotifications_Database $database Database instance.
      */
     public function __construct($database) {
-        $this->database = $database;
+        $this->database           = $database;
+        $this->item_notifications = new SubscriberNotifications_Item_Notifications($database);
         $this->init_hooks();
     }
 
@@ -43,13 +44,14 @@ class SubscriberNotifications_Notifications {
     private function init_hooks() {
         add_action('save_post', array($this, 'handle_post_update'), 10, 2);
         add_action('add_meta_boxes', array($this, 'add_notification_meta_boxes'));
+        add_action('admin_notices', array('SubscriberNotifications_Item_Notifications', 'maybe_show_admin_notice'));
     }
 
     /**
-     * Add the "Notify Subscribers" meta box on each enabled post type.
+     * Add the Notify Subscribers meta box on configured post types.
      */
     public function add_notification_meta_boxes() {
-        $post_types = SubscriberNotifications_Content_Config::get_enabled_post_types();
+        $post_types = SubscriberNotifications_Content_Config::get_meta_box_post_types();
         foreach ($post_types as $post_type) {
             add_meta_box(
                 'subscriber_notifications_update',
@@ -69,29 +71,44 @@ class SubscriberNotifications_Notifications {
      */
     public function notification_meta_box($post) {
         wp_nonce_field('subscriber_notifications_meta_box', 'subscriber_notifications_nonce');
-        $include_in_feed = (int) get_post_meta($post->ID, '_subscriber_notifications_include_in_feed', true);
+        $include_in_feed = (int) get_post_meta($post->ID, SubscriberNotifications_Preferences::META_INCLUDE_IN_FEED, true);
         ?>
         <div class="subscriber-notifications-meta-box">
-            <p><?php esc_html_e('Include this content in the next subscriber digest:', 'subscriber-notifications'); ?></p>
-            <label>
-                <input type="checkbox" id="notify_subscribers" name="notify_subscribers" value="1" <?php checked($include_in_feed, 1); ?>>
-                <?php esc_html_e('Notify subscribers about this content', 'subscriber-notifications'); ?>
-            </label>
+            <p>
+                <label>
+                    <input type="checkbox" id="sn_include_in_feed" name="sn_include_in_feed" value="1" <?php checked($include_in_feed, 1); ?>>
+                    <?php esc_html_e('Include in subscriber digests', 'subscriber-notifications'); ?>
+                </label>
+            </p>
             <p class="description">
-                <?php esc_html_e('Subscribers receive this content in their scheduled digest based on their frequency preference. No email is sent immediately.', 'subscriber-notifications'); ?>
+                <?php esc_html_e('Adds this content to scheduled topic digest emails. Stays checked until you remove it.', 'subscriber-notifications'); ?>
+            </p>
+
+            <p>
+                <label>
+                    <input type="checkbox" id="sn_notify_item_subscribers" name="sn_notify_item_subscribers" value="1">
+                    <?php esc_html_e('Email item subscribers about this update', 'subscriber-notifications'); ?>
+                </label>
+            </p>
+            <p class="description">
+                <?php esc_html_e('Sends immediately to people subscribed to this specific page. Does not stay checked after save.', 'subscriber-notifications'); ?>
             </p>
         </div>
         <?php
     }
 
     /**
-     * Handle save_post for any enabled post type.
+     * Handle save_post for meta box post types.
      *
      * @param int     $post_id Post ID.
      * @param WP_Post $post    Post object.
      */
     public function handle_post_update($post_id, $post) {
         if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+            return;
+        }
+
+        if (wp_is_post_revision($post_id)) {
             return;
         }
 
@@ -103,8 +120,8 @@ class SubscriberNotifications_Notifications {
             return;
         }
 
-        $enabled_post_types = SubscriberNotifications_Content_Config::get_enabled_post_types();
-        if (!in_array($post->post_type, $enabled_post_types, true)) {
+        $meta_box_types = SubscriberNotifications_Content_Config::get_meta_box_post_types();
+        if (!in_array($post->post_type, $meta_box_types, true)) {
             return;
         }
 
@@ -113,11 +130,19 @@ class SubscriberNotifications_Notifications {
             return;
         }
 
-        if (isset($_POST['notify_subscribers']) && $_POST['notify_subscribers'] === '1') {
-            update_post_meta($post_id, '_subscriber_notifications_include_in_feed', 1);
-            update_post_meta($post_id, '_subscriber_notifications_last_notification_date', current_time('mysql'));
+        if (!empty($_POST['sn_include_in_feed']) && $_POST['sn_include_in_feed'] === '1') {
+            update_post_meta($post_id, SubscriberNotifications_Preferences::META_INCLUDE_IN_FEED, 1);
+            update_post_meta($post_id, SubscriberNotifications_Preferences::META_FEED_SINCE, current_time('mysql'));
         } else {
-            update_post_meta($post_id, '_subscriber_notifications_include_in_feed', 0);
+            delete_post_meta($post_id, SubscriberNotifications_Preferences::META_INCLUDE_IN_FEED);
+            delete_post_meta($post_id, SubscriberNotifications_Preferences::META_FEED_SINCE);
+        }
+
+        if (!empty($_POST['sn_notify_item_subscribers']) && $_POST['sn_notify_item_subscribers'] === '1') {
+            $result = $this->item_notifications->send_item_update($post_id);
+            if (!empty($result['message'])) {
+                SubscriberNotifications_Item_Notifications::set_admin_notice(get_current_user_id(), $result['message']);
+            }
         }
     }
 }

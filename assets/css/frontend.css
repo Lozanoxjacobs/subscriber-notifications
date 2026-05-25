@@ -131,6 +131,18 @@
     border: 1px solid #f1c2c7;
 }
 
+.subscriber-notifications-form .sn-form-actions {
+    margin-bottom: 0;
+}
+
+.subscriber-notifications-form .sn-captcha {
+    margin-bottom: 1em;
+}
+
+.subscriber-notifications-post-subscribe .sn-post-subscribe-description {
+    margin-bottom: 1em;
+}
+
 .subscriber-notifications-form .form-errors {
     margin-bottom: 1em;
     padding: 0.75em 1em;

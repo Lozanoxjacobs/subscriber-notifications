@@ -46,6 +46,7 @@ $term_display_modes = array(
                 <?php foreach ($available_post_types as $post_type_slug => $post_type_object) :
                     $pt_config = isset($config[$post_type_slug]) ? $config[$post_type_slug] : array();
                     $pt_enabled = !empty($pt_config['enabled']);
+                    $pt_single_item = !empty($pt_config['allow_single_item_subscriptions']);
                     $pt_label = isset($pt_config['label']) ? (string) $pt_config['label'] : '';
                     $name_prefix = $option_key . '[' . $post_type_slug . ']';
                     $available_taxonomies = SubscriberNotifications_Content_Config::get_available_taxonomies($post_type_slug);
@@ -80,6 +81,26 @@ $term_display_modes = array(
                                         printf(esc_html__('Offer subscriptions for %s.', 'subscriber-notifications'), esc_html($post_type_object->labels->name));
                                         ?>
                                     </label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">
+                                    <label for="<?php echo esc_attr($box_id . '-single-item'); ?>">
+                                        <?php esc_html_e('Allow on-page subscriptions to individual posts', 'subscriber-notifications'); ?>
+                                    </label>
+                                </th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox"
+                                            id="<?php echo esc_attr($box_id . '-single-item'); ?>"
+                                            name="<?php echo esc_attr($name_prefix . '[allow_single_item_subscriptions]'); ?>"
+                                            value="1"
+                                            <?php checked($pt_single_item); ?> />
+                                        <?php esc_html_e('Let visitors subscribe to updates for a specific page via a shortcode on that page.', 'subscriber-notifications'); ?>
+                                    </label>
+                                    <p class="description">
+                                        <?php esc_html_e('Independent of the subscription form. For example, you can disable Pages on the global form but still allow subscriptions on a Careers page.', 'subscriber-notifications'); ?>
+                                    </p>
                                 </td>
                             </tr>
                             <tr>

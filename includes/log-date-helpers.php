@@ -21,6 +21,8 @@ function sn_get_email_log_types(): array {
         'welcome_back'       => __('Welcome back', 'subscriber-notifications'),
         'preferences_update' => __('Preferences update', 'subscriber-notifications'),
         'test'               => __('Test', 'subscriber-notifications'),
+        'item_subscribe'     => __('Item subscription', 'subscriber-notifications'),
+        'item_update'        => __('Item update', 'subscriber-notifications'),
     );
 }
 

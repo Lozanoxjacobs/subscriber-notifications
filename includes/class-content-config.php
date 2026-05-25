@@ -148,10 +148,52 @@ class SubscriberNotifications_Content_Config {
     }
 
     /**
-     * Is the plugin configured enough for a usable form?
+     * Return slugs of post types with allow_single_item_subscriptions enabled.
      *
-     * True when at least one post type is enabled AND has at least one taxonomy
-     * with enabled_on_form === true.
+     * @return string[]
+     */
+    public static function get_single_item_post_types() {
+        $config = self::get_config();
+        $out    = array();
+        foreach ($config as $post_type => $entry) {
+            if (!empty($entry['allow_single_item_subscriptions'])) {
+                $out[] = $post_type;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Post types that show the Notify Subscribers meta box (global form or single-item).
+     *
+     * @return string[]
+     */
+    public static function get_meta_box_post_types() {
+        return array_values(array_unique(array_merge(
+            self::get_enabled_post_types(),
+            self::get_single_item_post_types()
+        )));
+    }
+
+    /**
+     * Whether on-page single-post subscriptions are allowed for a post type.
+     *
+     * @param string $post_type Post type slug.
+     * @return bool
+     */
+    public static function is_single_item_available($post_type) {
+        $post_type = sanitize_key((string) $post_type);
+        if ($post_type === '') {
+            return false;
+        }
+        $config = self::get_config();
+        return !empty($config[ $post_type ]['allow_single_item_subscriptions']);
+    }
+
+    /**
+     * Is the plugin configured enough for subscriptions?
+     *
+     * True when at least one post type has form taxonomies OR single-item subscriptions enabled.
      *
      * @return bool
      */
@@ -161,7 +203,7 @@ class SubscriberNotifications_Content_Config {
                 return true;
             }
         }
-        return false;
+        return !empty(self::get_single_item_post_types());
     }
 
     /**
@@ -266,9 +308,10 @@ class SubscriberNotifications_Content_Config {
             }
 
             $sanitized[$post_type] = array(
-                'enabled'    => !empty($entry['enabled']),
-                'label'      => isset($entry['label']) ? sanitize_text_field((string) $entry['label']) : '',
-                'taxonomies' => array(),
+                'enabled'                         => !empty($entry['enabled']),
+                'allow_single_item_subscriptions' => !empty($entry['allow_single_item_subscriptions']),
+                'label'                           => isset($entry['label']) ? sanitize_text_field((string) $entry['label']) : '',
+                'taxonomies'                      => array(),
             );
 
             $available_taxonomies = self::get_available_taxonomies($post_type);
@@ -321,9 +364,10 @@ class SubscriberNotifications_Content_Config {
                 continue;
             }
             $out[$post_type] = array(
-                'enabled'    => !empty($entry['enabled']),
-                'label'      => isset($entry['label']) ? (string) $entry['label'] : '',
-                'taxonomies' => array(),
+                'enabled'                         => !empty($entry['enabled']),
+                'allow_single_item_subscriptions' => !empty($entry['allow_single_item_subscriptions']),
+                'label'                           => isset($entry['label']) ? (string) $entry['label'] : '',
+                'taxonomies'                      => array(),
             );
             $taxonomies = isset($entry['taxonomies']) && is_array($entry['taxonomies']) ? $entry['taxonomies'] : array();
             foreach ($taxonomies as $tax => $tax_entry) {

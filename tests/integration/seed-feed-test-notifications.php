@@ -81,6 +81,7 @@ foreach ($content_types as $post_type) {
     ));
     foreach ($posts as $post) {
         update_post_meta($post->ID, '_subscriber_notifications_include_in_feed', '1');
+        update_post_meta($post->ID, '_subscriber_notifications_feed_since', $now);
         update_post_meta($post->ID, '_subscriber_notifications_last_notification_date', $now);
     }
     echo "FLAG {$post_type}: " . count($posts) . " posts for feed\n";

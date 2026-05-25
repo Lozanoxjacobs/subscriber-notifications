@@ -23,7 +23,7 @@ Subscriber Notifications is a complete subscription and delivery system for Word
 - **Subscriber Management** - View subscribers (including **WP User** link and ID), search, activate/deactivate, delete, and CSV import/export
 - **Notification Creation** - Rich text editor with shortcodes and send preview email
 - **Email Logs** - Track all email activity with open/click counts and log type (notification, welcome, preferences update, test, etc.)
-- **Content Types** - Enable public post types and taxonomies, term display rules (all / children of / include / exclude), and form labels
+- **Content Types** - Enable public post types and taxonomies, term display rules (all / children of / include / exclude), form labels, and **on-page subscriptions to individual posts** per type
 - **Settings** - Scheduling, CAPTCHA, email templates, Email Design branding, and general options (test email, hide empty terms on form, delete on uninstall)
 - **Test email** - Send a test message to verify mail delivery (`wp_mail()`)
 
@@ -52,7 +52,11 @@ Subscriber Notifications is a complete subscription and delivery system for Word
 4. **What they see** — Email content uses shortcodes. `[content_feed]` builds a personalized list of posts per recipient. Global header, footer, and styling come from **Email Design** settings.
 5. **Delivery** — Mail is sent through WordPress (use SMTP or a mail plugin on your host if needed). Opens and clicks are logged automatically for every send.
 
-Posts can be marked **Notify subscribers** in the editor; that sets feed meta so digests pick them up on the next scheduled run.
+Posts can be marked **Include in subscriber digests** in the editor (sets feed meta for digests). **Email item subscribers about this update** sends an immediate item update to single-post subscribers when saved.
+
+### Single-item subscriptions
+
+Visitors can subscribe to a specific post via `[subscriber_notifications_post_subscribe]` on singular block templates — independent of the global taxonomy subscribe form. Item confirmation and update emails use dedicated templates under **Settings → Email Templates → Item subscriptions**. Subscribers manage item subscriptions on the preferences page under **Specific page updates**.
 
 ## Shortcodes
 
@@ -71,6 +75,22 @@ Use in notification **subject** and **body**, welcome/preference emails, and glo
 | `[manage_preferences_link]` | Clickable HTML link to the subscriber's preferences page. Default link text **Manage Preferences**; override with `text="…"` |
 | `[subscriber_notifications_form]` | Public subscribe form (`title="…"` optional) |
 | `[subscriber_notifications_preferences]` | Public manage-preferences form (`title="…"` optional). Requires **Preferences page** in Settings → General |
+| `[subscriber_notifications_post_subscribe]` | On-page widget to subscribe to the **current post** (singular templates). Requires **Allow on-page subscriptions** for that post type. Supports slug/term filters and plain-text copy overrides — see **Settings → Shortcodes** |
+
+### `[subscriber_notifications_post_subscribe]` (single-post widget)
+
+Place on block templates for a post type (e.g. all Pages). The widget uses the current post; it is never shown on the configured subscribe or preferences pages.
+
+| Attribute | Notes |
+|-----------|--------|
+| `include` | Allowlist of post slugs (comma-separated) |
+| `exclude` | Denylist of post slugs |
+| `include_terms` | Allowlist of `taxonomy:term-slug` pairs (OR within the list) |
+| `exclude_terms` | Denylist of `taxonomy:term-slug` pairs |
+| `heading`, `description`, `button` | Plain-text overrides for the subscribe form |
+| `heading_subscribed`, `description_subscribed`, `button_manage` | Plain-text overrides for the subscribed state |
+
+If `include` or `include_terms` is set, the post must match at least one entry. `exclude` / `exclude_terms` then remove matches. Leave copy attributes empty for plugin defaults (post title and content type label).
 
 ### `[content_feed]` (personalized post lists)
 
@@ -453,6 +473,22 @@ define('DISABLE_WP_CRON', true);
 This guarantees the send queue drains on a strict one-minute cadence regardless of site traffic.
 
 ## Changelog
+
+### Version 3.8.0
+
+- **Single-item subscriptions** — Per-post subscriptions via `[subscriber_notifications_post_subscribe]` on singular block templates (independent of the global taxonomy form)
+- **Post subscribe shortcode attributes** — `include` / `exclude` (post slugs), `include_terms` / `exclude_terms` (`taxonomy:term-slug`), and plain-text copy overrides for subscribe and subscribed states; for use in block templates where one template serves many posts
+- **Frontend page exclusion** — Post subscribe widget never renders on the configured subscribe or preferences pages, even when the shortcode is in a block template
+- **Content Types** — **Allow on-page subscriptions to individual posts** per post type (e.g. Careers page without enabling Pages on the global form)
+- **Admin meta box** — Split into **Include in subscriber digests** (persistent) and **Email item subscribers about this update** (one-time per save, immediate send); item updates queue when more than 10 subscribers
+- **Digest feed meta** — Digests use `_subscriber_notifications_feed_since` for date windows; **updated on** link text still uses `_subscriber_notifications_last_notification_date` when admins notify item subscribers
+- **Preferences** — **Topic digests** accordions plus **Specific page updates** flat list; frequency help text clarifies item mail is always immediate
+- **Email templates** — Item subscription confirmation and Item update notification under **Settings → Email Templates → Item subscriptions**
+- **Shortcodes (email)** — `[post_title]`, `[post_link]`, `[post_permalink]`, `[post_type_label]`, `[post_excerpt]`, `[selected_item_subscriptions]`; `[selected_subscriptions]` includes item subscriptions
+- **Settings → Shortcodes** — Reorganized reference (where shortcodes work, site slugs, topic vs item vs public website sections); full docs for post subscribe attributes
+- **Email logs** — New types **Item subscription** and **Item update**
+- **Fix — post subscribe in block templates** — Strip `wpautop` damage from form shortcode output so subscribe buttons match the main form styling in FSE templates
+- **Integration tests** — `item-subscriptions-tests.php`, `post-subscribe-display-tests.php`, `bootstrap-pantheon-dev.php`; manual QA in `tests/MANUAL-QA-3.8.0.md`
 
 ### Version 3.7.0
 

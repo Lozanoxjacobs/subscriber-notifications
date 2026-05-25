@@ -34,6 +34,25 @@ class SubscriberNotifications_Shortcodes {
         add_shortcode('content_feed', array($this, 'content_feed_shortcode'));
         add_shortcode('site_title', array($this, 'site_title_shortcode'));
         add_shortcode('manage_preferences_link', array($this, 'manage_preferences_link_shortcode'));
+        add_shortcode('post_title', array($this, 'post_title_shortcode'));
+        add_shortcode('post_link', array($this, 'post_link_shortcode'));
+        add_shortcode('post_permalink', array($this, 'post_permalink_shortcode'));
+        add_shortcode('post_type_label', array($this, 'post_type_label_shortcode'));
+        add_shortcode('post_excerpt', array($this, 'post_excerpt_shortcode'));
+        add_shortcode('selected_item_subscriptions', array($this, 'selected_item_subscriptions_shortcode'));
+    }
+
+    /**
+     * Current post from item email context.
+     *
+     * @return WP_Post|null
+     */
+    private function get_current_post() {
+        global $subscriber_notifications_current_post;
+        if (isset($subscriber_notifications_current_post) && $subscriber_notifications_current_post instanceof WP_Post) {
+            return $subscriber_notifications_current_post;
+        }
+        return null;
     }
 
     /**
@@ -141,9 +160,10 @@ class SubscriberNotifications_Shortcodes {
             }
         } else {
             foreach ($prefs as $post_type => $tax_map) {
-                if (isset($tax_map[$atts['taxonomy']])) {
-                    $term_ids = array_merge($term_ids, (array) $tax_map[$atts['taxonomy']]);
+                if (!is_array($tax_map) || !isset($tax_map[ $atts['taxonomy'] ])) {
+                    continue;
                 }
+                $term_ids = array_merge($term_ids, (array) $tax_map[ $atts['taxonomy'] ]);
             }
             $term_ids = array_values(array_unique(array_map('intval', $term_ids)));
         }
@@ -223,7 +243,7 @@ class SubscriberNotifications_Shortcodes {
                     'compare' => '=',
                 ),
                 array(
-                    'key' => '_subscriber_notifications_last_notification_date',
+                    'key' => '_subscriber_notifications_feed_since',
                     'value' => $cutoff_date,
                     'compare' => '>=',
                     // Keep this as a plain string comparison for cross-DB compatibility.
@@ -501,9 +521,96 @@ class SubscriberNotifications_Shortcodes {
     }
 
     /**
-     * Append an update date to titles for posts that have been modified since publish.
+     * Post title shortcode (item emails).
      */
-    private function format_post_title_with_update_date($post) {
+    public function post_title_shortcode($atts, $content = '', $tag = '') {
+        $post = $this->get_current_post();
+        if (!$post) {
+            return __('[Post Title]', 'subscriber-notifications');
+        }
+        return esc_html(get_the_title($post));
+    }
+
+    /**
+     * Linked post title with optional updated-on suffix.
+     */
+    public function post_link_shortcode($atts, $content = '', $tag = '') {
+        $post = $this->get_current_post();
+        if (!$post) {
+            return __('[Post Link]', 'subscriber-notifications');
+        }
+        $title = $this->format_post_title_with_update_date($post);
+        return '<a href="' . esc_url(get_permalink($post)) . '">' . esc_html($title) . '</a>';
+    }
+
+    /**
+     * Post URL only.
+     */
+    public function post_permalink_shortcode($atts, $content = '', $tag = '') {
+        $post = $this->get_current_post();
+        if (!$post) {
+            return '';
+        }
+        return esc_url(get_permalink($post));
+    }
+
+    /**
+     * Content Types label for the current post's type.
+     */
+    public function post_type_label_shortcode($atts, $content = '', $tag = '') {
+        $post = $this->get_current_post();
+        if (!$post) {
+            return '';
+        }
+        return esc_html(SubscriberNotifications_Content_Config::get_post_type_label($post->post_type));
+    }
+
+    /**
+     * Trimmed plain excerpt for the current post.
+     */
+    public function post_excerpt_shortcode($atts, $content = '', $tag = '') {
+        $post = $this->get_current_post();
+        if (!$post) {
+            return '';
+        }
+        $excerpt = has_excerpt($post) ? $post->post_excerpt : $post->post_content;
+        return esc_html(wp_trim_words(wp_strip_all_tags($excerpt), 30, '…'));
+    }
+
+    /**
+     * Human-readable list of item subscriptions for the current subscriber.
+     */
+    public function selected_item_subscriptions_shortcode($atts, $content = '', $tag = '') {
+        global $subscriber_notifications_current_subscriber;
+
+        $atts = shortcode_atts(array(
+            'format' => 'html',
+        ), $atts, 'selected_item_subscriptions');
+
+        if (!isset($subscriber_notifications_current_subscriber)) {
+            return __('[Selected Item Subscriptions]', 'subscriber-notifications');
+        }
+
+        $prefs = SubscriberNotifications_Preferences::decode(
+            $subscriber_notifications_current_subscriber->subscription_preferences ?? ''
+        );
+
+        if ($atts['format'] === 'plain') {
+            $summary = SubscriberNotifications_Preferences::describe_items_plain($prefs);
+            return $summary !== '' ? esc_html($summary) : '';
+        }
+
+        $summary = SubscriberNotifications_Preferences::describe_items_html($prefs, true);
+        return $summary !== '' ? wp_kses_post($summary) : '';
+    }
+
+    /**
+     * Append an update date to titles for posts that have been modified since publish.
+     *
+     * @param WP_Post $post Post object.
+     * @return string
+     */
+    public function format_post_title_with_update_date($post) {
         $post_date_ts = strtotime($post->post_date);
         $post_modified_ts = strtotime($post->post_modified);
         $is_new_post = abs($post_modified_ts - $post_date_ts) <= 5;
@@ -512,7 +619,7 @@ class SubscriberNotifications_Shortcodes {
             return $post->post_title;
         }
 
-        $last_notified = get_post_meta($post->ID, '_subscriber_notifications_last_notification_date', true);
+        $last_notified = get_post_meta($post->ID, SubscriberNotifications_Preferences::META_LAST_NOTIFICATION_DATE, true);
         $timezone = wp_timezone();
 
         if ($last_notified) {
@@ -535,20 +642,28 @@ class SubscriberNotifications_Shortcodes {
     }
 
     /**
-     * Process shortcodes in content using the provided subscriber/notification globals.
+     * Process shortcodes in content using the provided subscriber/notification/post globals.
+     *
+     * @param string        $content      Template content.
+     * @param object|null   $subscriber   Subscriber row.
+     * @param object|null   $notification Notification row.
+     * @param WP_Post|null  $post         Post context for item emails.
+     * @return string
      */
-    public function process_shortcodes($content, $subscriber = null, $notification = null) {
-        global $subscriber_notifications_current_subscriber, $subscriber_notifications_current_notification;
+    public function process_shortcodes($content, $subscriber = null, $notification = null, $post = null) {
+        global $subscriber_notifications_current_subscriber, $subscriber_notifications_current_notification, $subscriber_notifications_current_post;
 
         $content = wp_unslash($content);
 
-        $subscriber_notifications_current_subscriber = $subscriber;
+        $subscriber_notifications_current_subscriber   = $subscriber;
         $subscriber_notifications_current_notification = $notification;
+        $subscriber_notifications_current_post         = $post;
 
         $content = do_shortcode($content);
 
-        $subscriber_notifications_current_subscriber = null;
+        $subscriber_notifications_current_subscriber   = null;
         $subscriber_notifications_current_notification = null;
+        $subscriber_notifications_current_post         = null;
 
         return $content;
     }

@@ -13,8 +13,13 @@ global $wpdb;
 $database = new SubscriberNotifications_Database();
 
 sn_test_assert(
-    'B1 plugin version 3.7.0',
-    defined('SUBSCRIBER_NOTIFICATIONS_VERSION') && SUBSCRIBER_NOTIFICATIONS_VERSION === '3.7.0'
+    'B1 plugin version 3.8.0',
+    defined('SUBSCRIBER_NOTIFICATIONS_VERSION') && SUBSCRIBER_NOTIFICATIONS_VERSION === '3.8.0'
+);
+
+sn_test_assert(
+    'Item_Notifications class loaded',
+    class_exists('SubscriberNotifications_Item_Notifications')
 );
 
 $footer = subscriber_notifications_get_option('global_footer', '');

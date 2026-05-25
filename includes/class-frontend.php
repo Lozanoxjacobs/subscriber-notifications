@@ -33,7 +33,8 @@ class SubscriberNotifications_Frontend {
      * @param SubscriberNotifications_Database $database Database instance.
      */
     public function __construct($database) {
-        $this->database = $database;
+        $this->database           = $database;
+        $this->item_notifications = new SubscriberNotifications_Item_Notifications($database);
         $this->init_hooks();
     }
 
@@ -47,9 +48,17 @@ class SubscriberNotifications_Frontend {
         add_action('wp_ajax_nopriv_subscriber_notifications_update_preferences', array($this, 'handle_preferences_update'));
         add_action('wp_ajax_subscriber_notifications_unsubscribe', array($this, 'handle_unsubscribe_action'));
         add_action('wp_ajax_nopriv_subscriber_notifications_unsubscribe', array($this, 'handle_unsubscribe_action'));
+        add_action('wp_ajax_subscriber_notifications_post_subscribe', array($this, 'handle_post_subscribe'));
+        add_action('wp_ajax_nopriv_subscriber_notifications_post_subscribe', array($this, 'handle_post_subscribe'));
         add_shortcode('subscriber_notifications_form', array($this, 'subscription_form_shortcode'));
         add_shortcode('subscriber_notifications_preferences', array($this, 'preferences_form_shortcode'));
+        add_shortcode('subscriber_notifications_post_subscribe', array($this, 'post_subscribe_shortcode'));
     }
+
+    /**
+     * @var SubscriberNotifications_Item_Notifications|null
+     */
+    private $item_notifications;
 
     /**
      * Enqueue CSS/JS when subscription or preferences UI is rendered.
@@ -137,6 +146,317 @@ class SubscriberNotifications_Frontend {
      * @param array $atts Shortcode attributes.
      * @return string Form HTML.
      */
+    /**
+     * On-page single-post subscription widget.
+     *
+     * @param array $atts Shortcode attributes.
+     * @return string
+     */
+    public function post_subscribe_shortcode($atts) {
+        $atts  = shortcode_atts(SubscriberNotifications_Post_Subscribe_Display::default_atts(), $atts, 'subscriber_notifications_post_subscribe');
+        $rules = SubscriberNotifications_Post_Subscribe_Display::parse_atts($atts);
+
+        $post_id = get_queried_object_id();
+        if (!is_singular() || $post_id < 1) {
+            return '';
+        }
+
+        $post = get_post($post_id);
+        if (!$post || $post->post_status !== 'publish') {
+            return '';
+        }
+
+        if (!SubscriberNotifications_Content_Config::is_single_item_available($post->post_type)) {
+            return '';
+        }
+
+        if (subscriber_notifications_is_frontend_page($post_id)) {
+            return '';
+        }
+
+        if (!SubscriberNotifications_Post_Subscribe_Display::is_visible($post, $rules)) {
+            return '';
+        }
+
+        $this->enqueue_subscription_form_assets(array(
+            'postSubscribePostId' => $post_id,
+        ));
+
+        $subscribed = false;
+        if (is_user_logged_in()) {
+            $subscriber = $this->resolve_subscriber_for_logged_in_session();
+            if ($subscriber && $subscriber->status === 'active') {
+                $prefs      = SubscriberNotifications_Preferences::decode($subscriber->subscription_preferences ?? '');
+                $subscribed = SubscriberNotifications_Preferences::has_item($prefs, $post_id);
+            }
+        }
+
+        ob_start();
+        $this->render_post_subscribe_widget($post, $subscribed, $rules);
+        return subscriber_notifications_prepare_shortcode_html(ob_get_clean());
+    }
+
+    /**
+     * Render post subscribe widget markup.
+     *
+     * @param WP_Post $post       Post object.
+     * @param bool    $subscribed Whether the current visitor is subscribed to this post.
+     * @param array   $rules      Parsed display rules from Post_Subscribe_Display::parse_atts().
+     */
+    private function render_post_subscribe_widget($post, $subscribed = false, array $rules = array()) {
+        $post_title    = get_the_title($post);
+        $display_label = SubscriberNotifications_Content_Config::get_post_type_label($post->post_type);
+        $strings       = $this->get_post_subscribe_strings($post_title, $display_label);
+        $copy          = SubscriberNotifications_Post_Subscribe_Display::copy_for_client($rules);
+        if (!empty($copy)) {
+            $strings = SubscriberNotifications_Post_Subscribe_Display::apply_copy_overrides($strings, $copy);
+        }
+
+        $preferences_url = subscriber_notifications_get_preferences_page_url();
+        ?>
+        <div class="subscriber-notifications-form subscriber-notifications-post-subscribe" id="sn-post-subscribe" data-post-id="<?php echo esc_attr((string) $post->ID); ?>">
+            <?php if ($subscribed) : ?>
+                <h3 class="sn-post-subscribe-heading"><?php echo esc_html($strings['heading_subscribed']); ?></h3>
+                <p class="sn-post-subscribe-description"><?php echo esc_html($strings['description_subscribed']); ?></p>
+                <?php if (is_user_logged_in() && $preferences_url !== '') : ?>
+                    <p class="sn-form-actions">
+                        <a class="subscriber-notifications-submit wp-element-button" href="<?php echo esc_url($preferences_url); ?>"><?php echo esc_html($strings['button_manage']); ?></a>
+                    </p>
+                <?php endif; ?>
+            <?php else : ?>
+                <form class="sn-post-subscribe-form" method="post">
+                    <h3 class="sn-post-subscribe-heading"><?php echo esc_html($strings['heading']); ?></h3>
+                    <p class="sn-post-subscribe-description"><?php echo esc_html($strings['description']); ?></p>
+                    <?php wp_nonce_field('subscriber_notifications_post_subscribe', 'post_subscribe_nonce'); ?>
+                    <input type="hidden" name="post_id" value="<?php echo esc_attr((string) $post->ID); ?>">
+                    <?php if (!empty($copy)) : ?>
+                        <input type="hidden" name="post_subscribe_display" value="<?php echo esc_attr(wp_json_encode($copy)); ?>">
+                    <?php endif; ?>
+                    <?php if (!is_user_logged_in()) : ?>
+                        <p>
+                            <label for="sn_post_subscribe_name"><?php esc_html_e('Name', 'subscriber-notifications'); ?> <span class="required">*</span></label>
+                            <input type="text" id="sn_post_subscribe_name" name="subscriber_name" required>
+                        </p>
+                        <p>
+                            <label for="sn_post_subscribe_email"><?php esc_html_e('Email', 'subscriber-notifications'); ?> <span class="required">*</span></label>
+                            <input type="email" id="sn_post_subscribe_email" name="subscriber_email" required>
+                        </p>
+                        <?php if (!empty(subscriber_notifications_get_option('captcha_site_key', ''))) : ?>
+                            <div class="sn-captcha">
+                                <div class="g-recaptcha sn-post-subscribe-captcha" data-sitekey="<?php echo esc_attr(subscriber_notifications_get_option('captcha_site_key')); ?>"></div>
+                            </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                    <p class="sn-form-actions">
+                        <button type="submit" class="subscriber-notifications-submit wp-element-button"><?php echo esc_html($strings['button_subscribe']); ?></button>
+                    </p>
+                </form>
+            <?php endif; ?>
+            <div class="sn-post-subscribe-message subscriber-message" style="display:none;" role="status"></div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Filterable strings for the post subscribe widget.
+     *
+     * @param string $post_title    Post title.
+     * @param string $display_label Post type display label.
+     * @return array<string, string>
+     */
+    private function get_post_subscribe_strings($post_title, $display_label) {
+        $defaults = array(
+            'heading'              => sprintf(
+                /* translators: %s: content type label */
+                __('Subscribe to %s updates', 'subscriber-notifications'),
+                $display_label
+            ),
+            'description'          => sprintf(
+                /* translators: %s: post title */
+                __('We\'ll email you when %s is updated.', 'subscriber-notifications'),
+                $post_title
+            ),
+            'button_subscribe'     => __('Subscribe', 'subscriber-notifications'),
+            'heading_subscribed'   => sprintf(
+                /* translators: %s: post title */
+                __('You\'re subscribed to %s updates', 'subscriber-notifications'),
+                $post_title
+            ),
+            'description_subscribed' => sprintf(
+                /* translators: %s: post title */
+                __('You\'ll receive an email when %s is updated.', 'subscriber-notifications'),
+                $post_title
+            ),
+            'button_manage'        => __('Manage', 'subscriber-notifications'),
+        );
+
+        return apply_filters('subscriber_notifications_post_subscribe_strings', $defaults, $post_title, $display_label);
+    }
+
+    /**
+     * AJAX: subscribe to a single post.
+     */
+    public function handle_post_subscribe() {
+        $nonce = isset($_POST['post_subscribe_nonce']) ? sanitize_text_field(wp_unslash($_POST['post_subscribe_nonce'])) : '';
+        if (!wp_verify_nonce($nonce, 'subscriber_notifications_post_subscribe')) {
+            wp_send_json_error(__('Security check failed.', 'subscriber-notifications'));
+            return;
+        }
+
+        $post_id = isset($_POST['post_id']) ? absint($_POST['post_id']) : 0;
+        $post    = get_post($post_id);
+        if (!$post || $post->post_status !== 'publish') {
+            wp_send_json_error(__('This page is not available for subscriptions.', 'subscriber-notifications'));
+            return;
+        }
+
+        if (!SubscriberNotifications_Content_Config::is_single_item_available($post->post_type)) {
+            wp_send_json_error(__('Subscriptions are not available for this content type.', 'subscriber-notifications'));
+            return;
+        }
+
+        $display_copy = $this->get_post_subscribe_copy_from_request();
+
+        if (!is_user_logged_in() && !empty(subscriber_notifications_get_option('captcha_site_key', ''))) {
+            $captcha = isset($_POST['g-recaptcha-response']) ? wp_unslash($_POST['g-recaptcha-response']) : '';
+            if (!$this->verify_captcha($captcha)) {
+                wp_send_json_error(__('CAPTCHA verification failed.', 'subscriber-notifications'));
+                return;
+            }
+        }
+
+        $wp_user_id = 0;
+        if (is_user_logged_in()) {
+            $contact = $this->get_logged_in_contact_for_form();
+            if (!$contact || '' === $contact['name'] || empty($contact['email']) || !is_email($contact['email'])) {
+                wp_send_json_error(__('Unable to load your account information. Please try again.', 'subscriber-notifications'));
+                return;
+            }
+            $name       = $contact['name'];
+            $email      = $contact['email'];
+            $wp_user_id = $contact['user_id'];
+        } else {
+            $name  = sanitize_text_field(wp_unslash($_POST['subscriber_name'] ?? ''));
+            $email = sanitize_email(wp_unslash($_POST['subscriber_email'] ?? ''));
+            if (empty($name) || empty($email) || !is_email($email)) {
+                wp_send_json_error(__('Please provide a valid name and email address.', 'subscriber-notifications'));
+                return;
+            }
+        }
+
+        $default_frequency = apply_filters('subscriber_notifications_default_frequency', 'weekly');
+        if (!in_array($default_frequency, array('daily', 'weekly', 'monthly'), true)) {
+            $default_frequency = 'weekly';
+        }
+
+        $existing = $this->find_existing_subscriber_for_subscription($email, $wp_user_id);
+
+        if ($existing && $existing->status === 'active') {
+            $prefs = SubscriberNotifications_Preferences::decode($existing->subscription_preferences ?? '');
+            if (SubscriberNotifications_Preferences::has_item($prefs, $post_id)) {
+                wp_send_json_success(array(
+                    'html' => $this->get_post_subscribe_success_html($post, $display_copy),
+                ));
+                return;
+            }
+            $prefs = SubscriberNotifications_Preferences::add_item($prefs, $post_id);
+            $this->database->update_subscriber((int) $existing->id, array(
+                'subscription_preferences' => $prefs,
+            ));
+            $updated = $this->database->get_subscriber((int) $existing->id);
+            if ($updated) {
+                $this->item_notifications->send_item_subscribe_email($updated, $post_id);
+            }
+            wp_send_json_success(array(
+                'html' => $this->get_post_subscribe_success_html($post, $display_copy),
+            ));
+            return;
+        }
+
+        if ($existing && $existing->status === 'inactive') {
+            $prefs = SubscriberNotifications_Preferences::decode($existing->subscription_preferences ?? '');
+            $prefs = SubscriberNotifications_Preferences::add_item($prefs, $post_id);
+            $update_data = array(
+                'name'                     => $name,
+                'email'                    => $email,
+                'subscription_preferences' => $prefs,
+                'status'                   => 'active',
+                'management_token'         => wp_generate_password(32, false),
+            );
+            if ($wp_user_id > 0) {
+                $update_data['user_id'] = $wp_user_id;
+            }
+            $this->database->update_subscriber((int) $existing->id, $update_data);
+            $updated = $this->database->get_subscriber((int) $existing->id);
+            if ($updated) {
+                $this->item_notifications->send_item_subscribe_email($updated, $post_id);
+            }
+            wp_send_json_success(array(
+                'html' => $this->get_post_subscribe_success_html($post, $display_copy),
+            ));
+            return;
+        }
+
+        if ($existing) {
+            wp_send_json_error(__('This email address is already subscribed.', 'subscriber-notifications'));
+            return;
+        }
+
+        $subscriber_data = array(
+            'name'                     => $name,
+            'email'                    => $email,
+            'subscription_preferences' => SubscriberNotifications_Preferences::add_item(array(), $post_id),
+            'frequency'                => $default_frequency,
+            'status'                   => 'active',
+            'management_token'         => wp_generate_password(32, false),
+        );
+        if ($wp_user_id > 0) {
+            $subscriber_data['user_id'] = $wp_user_id;
+        }
+
+        $subscriber_id = $this->database->add_subscriber($subscriber_data);
+        if ($subscriber_id) {
+            $subscriber = $this->database->get_subscriber($subscriber_id);
+            if ($subscriber) {
+                $this->item_notifications->send_item_subscribe_email($subscriber, $post_id);
+            }
+            wp_send_json_success(array(
+                'html' => $this->get_post_subscribe_success_html($post, $display_copy),
+            ));
+        }
+
+        wp_send_json_error(__('An error occurred. Please try again.', 'subscriber-notifications'));
+    }
+
+    /**
+     * HTML fragment after successful post subscribe (same session).
+     *
+     * @param WP_Post $post Post object.
+     * @return string
+     */
+    private function get_post_subscribe_success_html($post, array $copy = array()) {
+        $rules = array('copy' => $copy);
+        ob_start();
+        $this->render_post_subscribe_widget($post, true, $rules);
+        return subscriber_notifications_prepare_shortcode_html(ob_get_clean());
+    }
+
+    /**
+     * Copy overrides posted with the post subscribe AJAX form.
+     *
+     * @return array<string, string>
+     */
+    private function get_post_subscribe_copy_from_request() {
+        if (empty($_POST['post_subscribe_display'])) {
+            return array();
+        }
+
+        $raw     = wp_unslash((string) $_POST['post_subscribe_display']);
+        $decoded = json_decode($raw, true);
+
+        return SubscriberNotifications_Post_Subscribe_Display::sanitize_copy_from_request($decoded);
+    }
+
     public function subscription_form_shortcode($atts) {
         $atts = shortcode_atts(array(
             'title' => __('Subscribe to Notifications', 'subscriber-notifications'),
@@ -165,7 +485,7 @@ class SubscriberNotifications_Frontend {
 
         ob_start();
         $this->render_subscription_form($atts, $reactivation_subscriber);
-        return ob_get_clean();
+        return subscriber_notifications_prepare_shortcode_html(ob_get_clean());
     }
 
     /**
@@ -207,7 +527,7 @@ class SubscriberNotifications_Frontend {
 
         ob_start();
         $this->render_preferences_form_content($subscriber, $token, $atts);
-        return ob_get_clean();
+        return subscriber_notifications_prepare_shortcode_html(ob_get_clean());
     }
 
     /**
@@ -513,23 +833,23 @@ class SubscriberNotifications_Frontend {
                 </p>
 
                 <?php if (SubscriberNotifications_Content_Config::is_configured()) : ?>
-                    <h3><?php esc_html_e('Your subscriptions', 'subscriber-notifications'); ?></h3>
-                    <?php $this->render_preferences_sections($current_prefs); ?>
+                    <?php $this->render_preferences_subscription_sections($current_prefs); ?>
                 <?php endif; ?>
 
                 <h3><?php esc_html_e('How often would you like to receive notifications?', 'subscriber-notifications'); ?></h3>
+                <p class="description sn-frequency-help">
+                    <?php esc_html_e('Specific page updates are emailed immediately. Frequency applies to topic digests only.', 'subscriber-notifications'); ?>
+                </p>
                 <?php $this->render_frequency_fieldset($subscriber->frequency); ?>
 
-                <p>
-                    <button type="submit" class="subscriber-notifications-submit wp-element-button">
-                        <?php
+                <p class="sn-form-actions">
+                    <button type="submit" class="subscriber-notifications-submit wp-element-button"><?php
                         echo esc_html(
                             $is_inactive
                                 ? __('Reactivate Subscription', 'subscriber-notifications')
                                 : __('Update Preferences', 'subscriber-notifications')
                         );
-                        ?>
-                    </button>
+                    ?></button>
                 </p>
 
                 <div id="preferences-message" class="subscriber-message" style="display: none;"></div>
@@ -622,21 +942,82 @@ class SubscriberNotifications_Frontend {
                 <?php $this->render_frequency_fieldset($frequency); ?>
 
                 <?php if (!empty(subscriber_notifications_get_option('captcha_site_key', ''))): ?>
-                    <p>
+                    <div class="sn-captcha">
                         <div class="g-recaptcha" data-sitekey="<?php echo esc_attr(subscriber_notifications_get_option('captcha_site_key')); ?>"></div>
-                    </p>
+                    </div>
                 <?php endif; ?>
 
-                <p>
-                    <button type="submit" class="subscriber-notifications-submit wp-element-button">
-                        <?php esc_html_e('Subscribe', 'subscriber-notifications'); ?>
-                    </button>
+                <p class="sn-form-actions">
+                    <button type="submit" class="subscriber-notifications-submit wp-element-button"><?php esc_html_e('Subscribe', 'subscriber-notifications'); ?></button>
                 </p>
 
                 <div id="subscriber-message" class="subscriber-message" style="display: none;"></div>
             </form>
         </div>
         <?php
+    }
+
+    /**
+     * Topic digests + specific page updates on the preferences form.
+     *
+     * @param array $current_prefs Existing subscriber preferences.
+     */
+    private function render_preferences_subscription_sections(array $current_prefs) {
+        $has_topic_sections = false;
+        foreach (SubscriberNotifications_Content_Config::get_enabled_post_types() as $post_type) {
+            if (!empty(SubscriberNotifications_Content_Config::get_form_taxonomies($post_type))) {
+                $has_topic_sections = true;
+                break;
+            }
+        }
+        if ($has_topic_sections) {
+            echo '<h3>' . esc_html__('Topic digests', 'subscriber-notifications') . '</h3>';
+            $this->render_preferences_sections($current_prefs);
+        }
+        $this->render_item_preferences_section($current_prefs);
+    }
+
+    /**
+     * Flat checklist of single-post subscriptions grouped by post type.
+     *
+     * @param array $current_prefs Existing preferences.
+     */
+    private function render_item_preferences_section(array $current_prefs) {
+        $has_any_items = false;
+        foreach (SubscriberNotifications_Content_Config::get_single_item_post_types() as $post_type) {
+            if (!empty(SubscriberNotifications_Preferences::get_items($current_prefs, $post_type))) {
+                $has_any_items = true;
+                break;
+            }
+        }
+        if (!$has_any_items) {
+            return;
+        }
+
+        echo '<h3>' . esc_html__('Specific page updates', 'subscriber-notifications') . '</h3>';
+        foreach (SubscriberNotifications_Content_Config::get_single_item_post_types() as $post_type) {
+            $items = SubscriberNotifications_Preferences::get_items($current_prefs, $post_type);
+            if (empty($items)) {
+                continue;
+            }
+            $label = SubscriberNotifications_Content_Config::get_post_type_label($post_type);
+            echo '<fieldset class="sn-item-subscriptions">';
+            echo '<legend><strong>' . esc_html($label) . '</strong></legend>';
+            echo '<ul class="sn-item-subscriptions-list">';
+            foreach ($items as $post_id) {
+                $post = get_post((int) $post_id);
+                $field_name = 'preferences[' . $post_type . '][' . SubscriberNotifications_Preferences::ITEMS_KEY . '][]';
+                echo '<li><label>';
+                echo '<input type="checkbox" name="' . esc_attr($field_name) . '" value="' . esc_attr((string) $post_id) . '" checked /> ';
+                if ($post && $post->post_status === 'publish') {
+                    echo '<a href="' . esc_url(get_permalink($post)) . '">' . esc_html(get_the_title($post)) . '</a>';
+                } else {
+                    echo esc_html(SubscriberNotifications_Preferences::get_item_label($post_id));
+                }
+                echo '</label></li>';
+            }
+            echo '</ul></fieldset>';
+        }
     }
 
     /**
@@ -1049,9 +1430,9 @@ class SubscriberNotifications_Frontend {
 
         $raw_prefs = isset($_POST['preferences']) ? wp_unslash($_POST['preferences']) : array();
         $prefs     = SubscriberNotifications_Preferences::sanitize_from_post($raw_prefs);
-        $prefs     = SubscriberNotifications_Preferences::prune_to_allowed_terms($prefs, 'public');
+        $prefs     = SubscriberNotifications_Preferences::prune_for_save($prefs, 'public');
 
-        if (SubscriberNotifications_Content_Config::is_configured() && !SubscriberNotifications_Preferences::has_at_least_one_term($prefs)) {
+        if (SubscriberNotifications_Content_Config::is_configured() && !SubscriberNotifications_Preferences::has_any_subscription($prefs)) {
             if ($subscriber->status === 'inactive') {
                 wp_send_json_error(__('Please select at least one option to reactivate your subscription.', 'subscriber-notifications'));
             } else {

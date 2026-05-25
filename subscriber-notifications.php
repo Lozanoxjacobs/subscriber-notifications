@@ -3,7 +3,7 @@
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
  * Description: Let visitors subscribe to your content by post type and taxonomy, then send scheduled, targeted email notifications with personalized digests, templates, and open/click tracking.
- * Version: 3.7.0
+ * Version: 3.8.0
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.7.0');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.8.0');
 define('SUBSCRIBER_NOTIFICATIONS_DB_VERSION', '4');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -267,6 +267,8 @@ class SubscriberNotifications {
             'includes/class-notifications-list-table.php',
             'includes/class-logs-list-table.php',
             'includes/class-admin.php',
+            'includes/class-item-notifications.php',
+            'includes/class-post-subscribe-display.php',
             'includes/class-frontend.php',
             'includes/class-notifications.php',
             'includes/class-email-sender.php',
@@ -306,6 +308,10 @@ class SubscriberNotifications {
             $this->scheduler = new SubscriberNotifications_Scheduler($this->database);
             $this->csv_handler = new SubscriberNotifications_CSV_Handler($this->database);
             $this->analytics = new SubscriberNotifications_Analytics($this->database);
+
+            if (class_exists('SubscriberNotifications_Item_Notifications')) {
+                SubscriberNotifications_Item_Notifications::register_hooks();
+            }
 
         } catch (Exception $e) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -394,6 +400,7 @@ class SubscriberNotifications {
             wp_clear_scheduled_hook('subscriber_notifications_send_weekly');
             wp_clear_scheduled_hook('subscriber_notifications_send_monthly');
             wp_clear_scheduled_hook('subscriber_notifications_drain_queue');
+            wp_clear_scheduled_hook('subscriber_notifications_send_item_updates');
             
             // Delete transients
             delete_transient('subscriber_notifications_tokens_checked');
@@ -421,6 +428,10 @@ class SubscriberNotifications {
             'welcome_back_email_content',
             'preferences_update_email_subject',
             'preferences_update_email_content',
+            'item_subscribe_email_subject',
+            'item_subscribe_email_content',
+            'item_update_email_subject',
+            'item_update_email_content',
             'captcha_site_key',
             'captcha_secret_key',
             'global_header_logo',
@@ -473,9 +484,11 @@ class SubscriberNotifications {
         wp_clear_scheduled_hook('subscriber_notifications_send_weekly');
         wp_clear_scheduled_hook('subscriber_notifications_send_monthly');
         wp_clear_scheduled_hook('subscriber_notifications_drain_queue');
+        wp_clear_scheduled_hook('subscriber_notifications_send_item_updates');
         
         // Delete transients
         delete_transient('subscriber_notifications_tokens_checked');
+        delete_option('subscriber_notifications_item_update_queue');
         
         // Flush rewrite rules
         flush_rewrite_rules();
@@ -492,6 +505,10 @@ class SubscriberNotifications {
             'welcome_back_email_content'      => __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_subscriptions].', 'subscriber-notifications'),
             'preferences_update_email_subject' => __('Your preferences have been updated', 'subscriber-notifications'),
             'preferences_update_email_content' => __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('Subscriptions: [selected_subscriptions]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'),
+            'item_subscribe_email_subject'     => __('[site_title] You\'re subscribed to updates for [post_title]', 'subscriber-notifications'),
+            'item_subscribe_email_content'      => __("Hello [subscriber_name],\n\nYou're subscribed to receive email when [post_title] is updated.\n\nView page: [post_link]\n\n[manage_preferences_link]", 'subscriber-notifications'),
+            'item_update_email_subject'         => __('[site_title] Update: [post_title]', 'subscriber-notifications'),
+            'item_update_email_content'          => __("Hello [subscriber_name],\n\n[post_title] has been updated.\n\n[post_link]\n\n[manage_preferences_link]", 'subscriber-notifications'),
             'captcha_site_key'                => '',
             'captcha_secret_key'              => '',
             'hide_terms_without_published_content' => 1,

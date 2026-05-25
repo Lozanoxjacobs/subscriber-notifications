@@ -498,7 +498,7 @@ class SubscriberNotifications_Scheduler {
                         'compare' => '=',
                     ),
                     array(
-                        'key'     => '_subscriber_notifications_last_notification_date',
+                        'key'     => '_subscriber_notifications_feed_since',
                         'value'   => $cutoff_date,
                         'compare' => '>=',
                         // Keep this as a plain string comparison for cross-DB compatibility.

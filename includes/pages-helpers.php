@@ -84,6 +84,22 @@ function subscriber_notifications_frontend_pages_are_configured(): bool {
 }
 
 /**
+ * Whether a page ID is the configured subscribe or preferences frontend page.
+ *
+ * @param int $page_id Page ID.
+ * @return bool
+ */
+function subscriber_notifications_is_frontend_page(int $page_id): bool {
+    $page_id = absint($page_id);
+    if ($page_id < 1) {
+        return false;
+    }
+
+    return $page_id === subscriber_notifications_get_subscribe_page_id()
+        || $page_id === subscriber_notifications_get_preferences_page_id();
+}
+
+/**
  * Permalink for the subscribe page, or empty string.
  *
  * @return string
@@ -120,4 +136,34 @@ function subscriber_notifications_get_preferences_page_url(array $args = array()
     }
 
     return $url;
+}
+
+/**
+ * Clean shortcode HTML when a theme or template runs wpautop on shortcode output.
+ *
+ * FSE/block templates sometimes insert <p> and <br /> around form markup, which
+ * breaks layout (for example extra padding inside buttons).
+ *
+ * @param string $html Shortcode HTML.
+ * @return string
+ */
+function subscriber_notifications_prepare_shortcode_html(string $html): string {
+    if ($html === '') {
+        return '';
+    }
+
+    if (function_exists('shortcode_unautop')) {
+        $html = shortcode_unautop($html);
+    }
+
+    $html = preg_replace('#<(form[^>]*>)>\s*</p>#i', '<$1>', $html);
+    $html = preg_replace('#(<input[^>]*>)\s*</p>#i', '$1', $html);
+    $html = preg_replace('#<p>\s*(<(?:input|form|div|h[1-6]|fieldset|button))#i', '$1', $html);
+    $html = preg_replace('#(</form>)\s*</p>#i', '$1', $html);
+    $html = preg_replace('#</label>\s*<br\s*/?>\s*#i', '</label> ', $html);
+    $html = preg_replace('#(<button[^>]*>)\s*<br\s*/?>\s*#i', '$1', $html);
+    $html = preg_replace('#\s*<br\s*/?>\s*(</button>)#i', '$1', $html);
+    $html = preg_replace('#<p>\s*</p>#', '', $html);
+
+    return $html;
 }

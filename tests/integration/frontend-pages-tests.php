@@ -361,6 +361,60 @@ sn_test_assert(
 );
 unset($_GET['unsubscribed']);
 
+sn_test_assert(
+    'is_frontend_page true for subscribe page',
+    subscriber_notifications_is_frontend_page((int) $subscribe_page_id)
+);
+sn_test_assert(
+    'is_frontend_page true for preferences page',
+    subscriber_notifications_is_frontend_page((int) $preferences_page_id)
+);
+
+$stored_content_config = get_option(SubscriberNotifications_Content_Config::OPTION_KEY, array());
+update_option(
+    SubscriberNotifications_Content_Config::OPTION_KEY,
+    array(
+        'page' => array(
+            'enabled'                         => false,
+            'allow_single_item_subscriptions' => true,
+            'label'                           => 'Pages',
+            'taxonomies'                      => array(),
+        ),
+    )
+);
+SubscriberNotifications_Content_Config::clear_cache();
+
+global $wp_query, $post;
+$post = get_post((int) $subscribe_page_id);
+$GLOBALS['post'] = $post;
+$wp_query->post              = $post;
+$wp_query->posts             = array($post);
+$wp_query->queried_object    = $post;
+$wp_query->queried_object_id = (int) $subscribe_page_id;
+$wp_query->is_singular       = true;
+$wp_query->is_page           = true;
+
+$post_subscribe_html = do_shortcode('[subscriber_notifications_post_subscribe]');
+sn_test_assert(
+    'post subscribe shortcode empty on subscribe frontend page',
+    $post_subscribe_html === ''
+);
+
+wp_reset_postdata();
+
+update_option(SubscriberNotifications_Content_Config::OPTION_KEY, $stored_content_config);
+SubscriberNotifications_Content_Config::clear_cache();
+
+sn_test_assert(
+    'prepare_shortcode_html removes wpautop br inside button',
+    strpos(
+        subscriber_notifications_prepare_shortcode_html(
+            '<form><input type="hidden" name="post_id" value="1"></p><p><button class="wp-element-button"><br /> Subscribe </button></p></form>'
+        ),
+        '<br'
+    ) === false
+);
+
 unset($_GET['token']);
 $database->delete_subscriber((int) $guest_return_id);
 
