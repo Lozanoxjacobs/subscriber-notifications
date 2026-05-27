@@ -236,7 +236,8 @@ class SubscriberNotifications_Notifications_List_Table extends WP_List_Table {
      */
     protected function column_targets($item): void {
         $targets_summary = SubscriberNotifications_Preferences::human_readable_admin_html(
-            $item->target_preferences ?? ''
+            $item->target_preferences ?? '',
+            'targets'
         );
 
         if ($targets_summary === '') {

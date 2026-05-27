@@ -1,6 +1,12 @@
 # Subscriber Notifications Plugin
 
-Subscriber Notifications is a complete subscription and delivery system for WordPress. Configure Content Types from any public post type and taxonomy, collect preferences via a theme-native form, and send one-time or recurring notifications on daily, weekly, or monthly schedules. Emails are personalized with shortcodes and content feeds, fully brandable, and delivered through WordPress mail—with logs, analytics, and CSV tools for managing your list.
+Subscriber Notifications lets visitors subscribe by post type, taxonomy, or individual posts. Configure Content Types from any public post type and taxonomy, collect preferences via a theme-native form or on-page subscribe widgets, and send one-time or recurring notifications on daily, weekly, or monthly schedules. Emails are personalized with shortcodes and content feeds, fully brandable, and delivered through WordPress mail—with logs, analytics, and CSV tools for managing your list.
+
+## GitHub repository description
+
+Paste this into GitHub **Settings → General → Description**:
+
+> WordPress subscriptions by topic or individual page: global form + on-page widget, scheduled topic notifications, immediate on-page update emails, branded templates, and delivery analytics.
 
 ## Features
 
@@ -8,6 +14,7 @@ Subscriber Notifications is a complete subscription and delivery system for Word
 - **Subscriber Registration Form** - Frontend form with CAPTCHA protection; guests enter name and email, logged-in users use readonly account fields
 - **WordPress account linking** - Logged-in signups store the subscriber's WordPress `user_id` for admin visibility and reliable identity on resubscribe
 - **Immediate Subscription** - Subscribers are activated immediately upon form submission
+- **On-page subscribe widget** - Per-post subscriptions via `[subscriber_notifications_post_subscribe]` on singular templates, with visibility rules in Content Types
 - **Notification Management** - WYSIWYG editor for creating notifications
 - **Email Delivery** - Sends through WordPress `wp_mail()` (use your SMTP or mail plugin); open/click logging preserved
 - **Smart Scheduling System** - Daily, weekly and monthly email scheduling
@@ -22,7 +29,7 @@ Subscriber Notifications is a complete subscription and delivery system for Word
 - **Recurring Notification Support** - Create and manage notifications that send repeatedly
 - **Subscriber Management** - View subscribers (including **WP User** link and ID), search, activate/deactivate, delete, and CSV import/export
 - **Notification Creation** - Rich text editor with shortcodes and send preview email
-- **Email Logs** - Track all email activity with open/click counts and log type (notification, welcome, preferences update, test, etc.)
+- **Email Logs** - Track all email activity with open/click counts and log type (topic notification, welcome, on-page subscription, on-page update, preferences update, test, etc.)
 - **Content Types** - Enable public post types and taxonomies, term display rules (all / children of / include / exclude), form labels, and **on-page subscriptions to individual posts** per type
 - **Settings** - Scheduling, CAPTCHA, email templates, Email Design branding, and general options (test email, hide empty terms on form, delete on uninstall)
 - **Test email** - Send a test message to verify mail delivery (`wp_mail()`)
@@ -33,6 +40,7 @@ Subscriber Notifications is a complete subscription and delivery system for Word
 2. Activate the plugin through the 'Plugins' menu in WordPress
 3. Configure settings in the 'Notifications' admin menu
 4. Add the subscription form to your pages using `[subscriber_notifications_form]`
+5. Add `[subscriber_notifications_post_subscribe]` to singular block templates for post types where **Allow on-page subscriptions** is enabled, then configure **On-page subscribe widget — where to show it** under **Notifications → Content Types**
 
 ## Requirements
 
@@ -44,19 +52,31 @@ Subscriber Notifications is a complete subscription and delivery system for Word
 
 > Subscriber Notifications is now content-type agnostic. Configure which public post types and taxonomies subscribers can choose from under **Notifications > Content Types** before publishing the subscription form. Any post type plugin (including The Events Calendar) is supported out of the box — there is no longer a hard dependency on a specific plugin.
 
+## Terminology
+
+The plugin uses two subscription paths with distinct user-facing labels:
+
+| Concept | User-facing label | How it works |
+|---------|-------------------|--------------|
+| Subscribe form + scheduled sends | **Topic notifications** | Subscribers choose post types and taxonomy terms on the global form. Scheduled notification emails include personalized content via `[content_feed]`. Posts are marked **Include in topic notifications** in the editor. |
+| On-page widget + immediate sends | **On-page subscriptions** / **On-page updates** | Subscribers follow a specific post via `[subscriber_notifications_post_subscribe]`. Confirmation and update emails use dedicated templates under **Settings → Email Templates → On-page subscriptions**. Admins can check **Send on-page update email now** when saving a post. |
+
+Internal slugs (`notification`, `item_subscribe`, `item_update`) and option keys are unchanged for compatibility.
+
 ## How it works
 
-1. **Content Types** — You enable post types and taxonomies; that drives the subscribe form, notification target checklists, CSV import/export columns, and matching rules.
-2. **Subscriber choices** — Each person’s selected terms and delivery frequency are saved when they subscribe or update preferences. Each notification stores which terms that send is about.
-3. **Who gets an email** — Active subscribers are matched by frequency (daily, weekly, or monthly), then filtered to those who share at least one targeted term with the notification.
-4. **What they see** — Email content uses shortcodes. `[content_feed]` builds a personalized list of posts per recipient. Global header, footer, and styling come from **Email Design** settings.
-5. **Delivery** — Mail is sent through WordPress (use SMTP or a mail plugin on your host if needed). Opens and clicks are logged automatically for every send.
+1. **Content Types** — You enable post types and taxonomies; that drives the subscribe form, notification target checklists, CSV import/export columns, matching rules, and on-page subscribe widget visibility.
+2. **Two subscription paths** — Visitors subscribe globally via `[subscriber_notifications_form]` (topics by post type and taxonomy) or to a specific post via `[subscriber_notifications_post_subscribe]` when that post type allows on-page subscriptions.
+3. **Subscriber choices** — Each person’s selected terms, on-page subscriptions, and delivery frequency are saved when they subscribe or update preferences. Each notification stores which terms that send is about.
+4. **Who gets an email** — Active subscribers are matched by frequency (daily, weekly, or monthly), then filtered to those who share at least one targeted term with the notification. On-page update emails go only to subscribers of that specific post.
+5. **What they see** — Email content uses shortcodes. `[content_feed]` builds a personalized list of posts per recipient. Global header, footer, and styling come from **Email Design** settings.
+6. **Delivery** — Scheduled topic notifications and immediate on-page update sends go through WordPress (use SMTP or a mail plugin on your host if needed). Opens and clicks are logged automatically for every send.
 
-Posts can be marked **Include in subscriber digests** in the editor (sets feed meta for digests). **Email item subscribers about this update** sends an immediate item update to single-post subscribers when saved.
+Posts can be marked **Include in topic notifications** in the editor (sets feed meta for scheduled sends). **Send on-page update email now** sends an immediate on-page update to on-page subscribers when saved.
 
-### Single-item subscriptions
+### On-page subscriptions
 
-Visitors can subscribe to a specific post via `[subscriber_notifications_post_subscribe]` on singular block templates — independent of the global taxonomy subscribe form. Item confirmation and update emails use dedicated templates under **Settings → Email Templates → Item subscriptions**. Subscribers manage item subscriptions on the preferences page under **Specific page updates**.
+Visitors can subscribe to a specific post via `[subscriber_notifications_post_subscribe]` on singular block templates — independent of the global taxonomy subscribe form. Under **Notifications → Content Types**, enable **Allow on-page subscriptions** for the post type, set **Taxonomies & term rules**, then choose **On-page subscribe widget — where to show it**: **By content rules** (taxonomy OR logic with optional **Except on these posts**) or **Only specific posts I choose**. On-page confirmation and update emails use dedicated templates under **Settings → Email Templates → On-page subscriptions**. Subscribers manage on-page subscriptions on the preferences page under **On-page subscriptions**.
 
 ## Shortcodes
 
@@ -69,28 +89,26 @@ Use in notification **subject** and **body**, welcome/preference emails, and glo
 | `[subscriber_name]` | Subscriber name |
 | `[subscriber_email]` | Subscriber email |
 | `[delivery_frequency]` | Daily / weekly / monthly label |
-| `[selected_subscriptions]` | Formatted list of all selections (HTML in body; use `format="plain"` in **subject** only) |
+| `[selected_subscriptions]` | Formatted subscription summary (HTML in body; `format="plain"` for subjects). Default shows **Topic notifications** and **On-page subscriptions**. Use `sections="topics"` or `sections="items"` to limit |
 | `[selected_terms taxonomy="…"]` | Names of the subscriber's selected terms in one taxonomy. Optional `post_type="…"` (omit to aggregate across post types) and `separator="…"` (default `, `) |
 | `[site_title]` | Site name |
 | `[manage_preferences_link]` | Clickable HTML link to the subscriber's preferences page. Default link text **Manage Preferences**; override with `text="…"` |
 | `[subscriber_notifications_form]` | Public subscribe form (`title="…"` optional) |
 | `[subscriber_notifications_preferences]` | Public manage-preferences form (`title="…"` optional). Requires **Preferences page** in Settings → General |
-| `[subscriber_notifications_post_subscribe]` | On-page widget to subscribe to the **current post** (singular templates). Requires **Allow on-page subscriptions** for that post type. Supports slug/term filters and plain-text copy overrides — see **Settings → Shortcodes** |
+| `[subscriber_notifications_post_subscribe]` | On-page widget to subscribe to the **current post** (singular templates). Requires **Allow on-page subscriptions** for that post type. Visibility is configured under **Notifications → Content Types**; optional plain-text copy overrides — see **Settings → Shortcodes** |
 
 ### `[subscriber_notifications_post_subscribe]` (single-post widget)
 
 Place on block templates for a post type (e.g. all Pages). The widget uses the current post; it is never shown on the configured subscribe or preferences pages.
 
+**Content eligibility** is configured per post type under **Notifications → Content Types**. Set **Taxonomies & term rules** first, then **On-page subscribe widget — where to show it**. Choose **By content rules** to match taxonomy term rules with optional **Except on these posts**, or **Only specific posts I choose** for an explicit pick list that ignores taxonomy rules.
+
 | Attribute | Notes |
 |-----------|--------|
-| `include` | Allowlist of post slugs (comma-separated) |
-| `exclude` | Denylist of post slugs |
-| `include_terms` | Allowlist of `taxonomy:term-slug` pairs (OR within the list) |
-| `exclude_terms` | Denylist of `taxonomy:term-slug` pairs |
 | `heading`, `description`, `button` | Plain-text overrides for the subscribe form |
 | `heading_subscribed`, `description_subscribed`, `button_manage` | Plain-text overrides for the subscribed state |
 
-If `include` or `include_terms` is set, the post must match at least one entry. `exclude` / `exclude_terms` then remove matches. Leave copy attributes empty for plugin defaults (post title and content type label).
+Leave copy attributes empty for plugin defaults (post title and singular content type label, e.g. "Post").
 
 ### `[content_feed]` (personalized post lists)
 
@@ -102,7 +120,7 @@ Only includes **published** posts flagged for the feed, notified within the `dur
 | `taxonomy` | Optional. **One taxonomy** — filter on that dimension only. **Omit** — match the subscriber in **any** form taxonomy for that post type (OR). |
 | `duration` | Default `1month`. |
 | `limit` | Default `10`. |
-| `format` | `list` (default) = bulleted title links; `summary` = linked title + short excerpt. |
+| `format` | `list` (default) = bulleted title links; `summary` = linked title + short excerpt. Modified posts append **(updated on …)** to link text — using the on-page update stamp when set, otherwise the post’s last modified date. |
 | `terms` | Optional comma-separated **term slugs**; **requires** `taxonomy`. Alias: `term` (same value). Scopes the feed block; each subscriber sees only slugs they subscribed to (intersection). Unknown slugs skipped. |
 
 **Slugs:** Use the exact slug from WordPress for each taxonomy and term (Posts → Categories / your taxonomy; edit a term to see its slug). Taxonomy slugs and term slugs may use different punctuation (e.g. `tribe_events_cat` vs `family-events`) — always copy from WordPress, do not guess.
@@ -295,7 +313,7 @@ Recurring notifications are sent repeatedly based on your frequency schedule set
 #### **Use Cases:**
 - **Weekly Newsletters**: Send weekly updates that continue indefinitely
 - **Monthly Reports**: Send monthly reports that repeat each month
-- **Daily Digests**: Send daily summaries that continue daily
+- **Daily topic notifications**: Send daily summaries that continue daily
 - **Regular Updates**: Any notification that should repeat at regular intervals
 
 ### Managing Large Subscriber Bases (Thousands of Subscribers)
@@ -315,7 +333,7 @@ Here are this week's updates based on your interests:
 [content_feed post_type="project" duration="1week"]
 [content_feed post_type="tribe_events" taxonomy="tribe_events_cat" duration="1week"]
 
-Your subscriptions: [selected_subscriptions]
+Your topic subscriptions: [selected_subscriptions sections="topics"]
 Delivery frequency: [delivery_frequency]
 
 [manage_preferences_link]
@@ -385,8 +403,9 @@ See [Guest vs logged-in behavior](#guest-vs-logged-in-behavior) for how the pref
 
 ### Flagging Posts for Notifications
 1. Edit any post in an enabled content type
-2. Check **Notify subscribers** in the meta box (includes the post in feed-flagged digests; does not send an immediate blast)
-3. Save — the post is eligible for the next scheduled notification that matches subscriber preferences
+2. In the **Subscriber Notifications** meta box, check **Include in topic notifications** to add the post to scheduled topic notification emails (does not send immediately; stays checked until you uncheck it)
+3. Optionally check **Send on-page update email now** to email on-page subscribers immediately when you save. This also stamps the post for **(updated on …)** in `[content_feed]` and `[post_link]` output in future topic notifications. That checkbox clears after save
+4. Save — flagged posts are eligible for the next scheduled notification that matches subscriber preferences
 
 ## Data storage
 
@@ -398,17 +417,29 @@ The plugin stores subscribers, scheduled notifications, and email logs in four c
 
 ## Security and performance
 
-Nonces, capability checks (`manage_options`), sanitized input, optional reCAPTCHA, rate limiting, and prepared SQL. Digests run on WordPress cron with batched sends for large lists; term lists are cached where appropriate.
+Nonces, capability checks (`manage_options`), sanitized input, optional reCAPTCHA, rate limiting, and prepared SQL. Topic notifications run on WordPress cron with batched sends for large lists; term lists are cached where appropriate.
 
 ## Analytics
 
 Every email the plugin sends is tracked automatically (there is no on/off setting).
 
-- **Open tracking** — A 1×1 pixel in each message requests `/track/open/` when the email is opened.
+- **Open tracking** — A 1×1 pixel in each message requests `/track/open/` when the email client loads images. This is standard pixel tracking: it measures **pixel loads**, not a guaranteed human “open.”
 - **Click tracking** — Links in the email body (including `[content_feed]` post links and `[manage_preferences_link]`) are wrapped with `/track/click/` redirects so clicks are counted before the subscriber reaches the destination. `mailto:` and `tel:` links are not tracked.
 - **Where to view logs** — **Notifications → Logs** (full list and CSV export) and the dashboard **Recent activity** panel.
-- **Email log types** — Each row is labeled by purpose: **Notification** (digests), **Welcome**, **Welcome back**, **Preferences update**, and **Test** (admin test/preview sends).
+- **Email log types** — Each row is labeled by purpose: **Topic notification**, **Welcome**, **Welcome back**, **Preferences update**, **Test** (admin test/preview sends), **On-page subscription**, and **On-page update**.
 - **Engagement metrics** — The dashboard **Email delivery** panel shows open and click rates for the selected period (7 / 30 / 90 days or all time), using unique opens and clicks divided by delivered emails.
+
+### Interpreting open and click counts
+
+Pixel tracking is approximate. Counts can differ from what a recipient remembers doing.
+
+- **Logs → Opens column** — Total times the tracking pixel was loaded for that send (`open_count`). A single person opening once can still show **2+** if the mail client loads images more than once.
+- **Dashboard rates** — Treat an email as opened or clicked **once** when `open_count` or `click_count` is greater than zero for that log row (unique engagement per send).
+- **Duplicate opens** — Rapid repeat requests for the same pixel (preload, retries) are deduplicated within a **10-second** window. Loads farther apart—preview pane then full open, mobile and desktop, or a second session—can each increment the count.
+- **Opens without clicking** — Many clients and providers (Gmail image proxy, Apple Mail Privacy Protection, inbox preview, security scanners) fetch images in the background. You may see **1 open / 0 clicks** even when the recipient did not consciously open the message.
+- **Clicks without extra opens** — Clicking a tracked link updates **click count** only; it does not add an open unless the client also loads the pixel separately.
+
+For manual QA, treat log opens as directional signal, not exact user actions. One click on **Manage Preferences** should always show **1 click** on that email if the link was wrapped correctly.
 
 ## Troubleshooting
 
@@ -474,11 +505,73 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 ## Changelog
 
+### Version 4.0.0
+
+- **Release packaging** — Integration tests, seed scripts, and Pantheon test runner moved out of the plugin (Internal Resources in repo; not shipped to sites). No database or runtime behavior change from 3.9.x
+
+### Version 3.9.10
+
+- **`[selected_subscriptions]` `sections` attribute** — Optional comma-separated filter: `topics`, `items` (alias `on-page`). Default shows both. Use `sections="topics"` in topic digest emails so on-page subscription links are not listed alongside feed updates
+
+### Version 3.9.9
+
+- **`[selected_subscriptions]` email layout** — When both exist, **Topic notifications** and **On-page subscriptions** appear as separate sections; taxonomy rows are indented under post types; on-page titles use bulleted lists with permalinks when published; plain `format="plain"` uses matching section labels
+- **Preferences updated email default** — Simpler template: shortcode on its own block, **Delivery frequency:** label, manage link only (no redundant “Subscriptions:” wrapper)
+- **Email wrapper** — Skips `wpautop` when the body already contains paragraph or subscription-summary block HTML
+
+### Version 3.9.8
+
+- **Subscribers list — Subscriptions column** — Split **Topic notifications** and **On-page subscriptions** when both exist; taxonomy rows show label + count with `+N` truncation for long term lists; on-page items grouped by post type with count, A–Z titles (truncated), and frontend permalinks (new tab); notification targets column uses compact taxonomy rows without subscriber-only section headings; topic rows read from **stored** subscriber preferences (not current Content Types form enablement)
+
+### Version 3.9.7
+
+- **Meta box layout** — Checkbox labels use Settings-style markup (no wrapping `<p>`); help text indented under the label with tighter spacing
+- **Preferences — On-page subscriptions** — Same accordion layout as **Choose your subscriptions** (collapsible post-type sections, **Select all**, shared checklist styling); removed redundant **Subscribed content** legend
+- **Preferences — guest email field** — Read-only email uses the same locked field styling as logged-in users
+
+### Version 3.9.6
+
+- **Meta box UX** — Removed section headings; checkbox help only, with divider between topic and on-page controls
+- **On-page update help** — Documents immediate email plus **(updated on …)** stamp in topic notification feeds
+- **Documentation** — README **Flagging Posts** and `[content_feed]` note for updated-on link text
+
+### Version 3.9.5
+
+- **Meta box UX** — Title **Subscriber Notifications** (Title Case); split into **Topic notifications** and **On-page updates** sections with scoped help text; removed combined intro that mixed both paths
+
+### Version 3.9.4
+
+- **Terminology** — Aligned user-facing copy: **Topic notifications** (subscribe form + scheduled path) vs **On-page subscriptions** / **On-page updates** (widget + immediate path). Meta box, preferences, email templates, logs, and admin shortcode reference updated; internal slugs unchanged
+- **Meta box** — Renamed to **Subscriber notifications** with intro explaining both paths; **Include in topic notifications** and **Send on-page update email now**
+- **Preferences** — **On-page subscriptions** section heading; frequency help references topic notifications only
+- **Documentation** — README Terminology section; GitHub About line updated
+
+### Version 3.9.3
+
+- **Preferences form** — Topic digest accordions use the same **Choose your subscriptions** heading as the subscribe form
+- **On-page subscribe widget** — Default heading uses the post type **singular** label (e.g. “Subscribe to Post updates”, not “Posts”)
+- **Documentation** — Analytics section explains pixel open counts, duplicate/background opens, and logs vs dashboard rates
+
+### Version 3.9.2
+
+- **Content Types admin UX** — Taxonomies & term rules appear before on-page widget settings; clearer labels and help text for form vs widget eligibility
+- **Strict visibility mode** — Widget visibility requires an explicit **By content rules** or **Only specific posts I choose** choice; include lists no longer infer pick-list mode at runtime
+- **Descriptions** — Updated plugin header, README opening, and GitHub About text
+
+### Version 3.9.1
+
+- **Content Types — widget visibility UX** — Radio choice between **By content rules** (taxonomy OR + optional “Except on these posts”) and **Only specific posts I choose**; conditional fields prevent conflicting include/exclude configuration
+
+### Version 3.9.0
+
+- **On-page subscribe widget — content eligibility** — Visibility moved from shortcode attributes to **Notifications → Content Types**: taxonomy rules (OR across restrictive modes), **Include specific posts** (explicit pick list; skips taxonomy), and **Exclude specific posts** (broadcast mode only)
+- **Post subscribe shortcode** — Copy overrides only (`heading`, `description`, `button`, subscribed-state strings); removed `include`, `exclude`, `include_terms`, and `exclude_terms` attributes
+- **AJAX subscribe** — Same eligibility check as the shortcode to prevent subscribing to ineligible posts
+
 ### Version 3.8.1
 
 - **Delete Data on Uninstall — full reset** — Removes all `subscriber_notifications_*` options (including subscribe/preferences page IDs and orphaned migration flags), post meta (`_subscriber_notifications_*`), admin screen preferences, and plugin transients; shortcodes in page or template content are intentionally left as plain text
 - **Settings → Data** — Updated uninstall checkbox description to match full-reset behavior
-- **Integration tests** — B8 uninstall verification now asserts zero plugin options and post meta remain after uninstall
 
 ### Version 3.8.0
 
@@ -488,13 +581,12 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 - **Content Types** — **Allow on-page subscriptions to individual posts** per post type (e.g. Careers page without enabling Pages on the global form)
 - **Admin meta box** — Split into **Include in subscriber digests** (persistent) and **Email item subscribers about this update** (one-time per save, immediate send); item updates queue when more than 10 subscribers
 - **Digest feed meta** — Digests use `_subscriber_notifications_feed_since` for date windows; **updated on** link text still uses `_subscriber_notifications_last_notification_date` when admins notify item subscribers
-- **Preferences** — **Topic digests** accordions plus **Specific page updates** flat list; frequency help text clarifies item mail is always immediate
+- **Preferences** — **Choose your subscriptions** accordions (same heading as the subscribe form) plus **Specific page updates** flat list; frequency help text clarifies item mail is always immediate
 - **Email templates** — Item subscription confirmation and Item update notification under **Settings → Email Templates → Item subscriptions**
-- **Shortcodes (email)** — `[post_title]`, `[post_link]`, `[post_permalink]`, `[post_type_label]`, `[post_excerpt]`, `[selected_item_subscriptions]`; `[selected_subscriptions]` includes item subscriptions
+- **Shortcodes (email)** — `[post_title]`, `[post_link]`, `[post_permalink]`, `[post_type_label]`, `[post_excerpt]`, `[selected_item_subscriptions]`; `[selected_subscriptions]` supports `sections="topics"` / `sections="items"`
 - **Settings → Shortcodes** — Reorganized reference (where shortcodes work, site slugs, topic vs item vs public website sections); full docs for post subscribe attributes
 - **Email logs** — New types **Item subscription** and **Item update**
 - **Fix — post subscribe in block templates** — Strip `wpautop` damage from form shortcode output so subscribe buttons match the main form styling in FSE templates
-- **Integration tests** — `item-subscriptions-tests.php`, `post-subscribe-display-tests.php`, `bootstrap-pantheon-dev.php`; manual QA in `tests/MANUAL-QA-3.8.0.md`
 
 ### Version 3.7.0
 
@@ -510,7 +602,6 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 - **Reactivation redirect** — after reactivating, redirect to a clean URL with a welcome-back confirmation (`?reactivated=1`); stale `?unsubscribed=1` is ignored once the subscriber is active
 - **Token page caching** — no-cache headers on token-based preferences views so edge caches do not serve stale inactive HTML
 - **Frontend notices** — styled success, inactive, and error banners for subscribe and preferences flows
-- **Integration tests** — `frontend-pages-tests.php` and `preferences-page-tests.php` cover v3.7 frontend pages, shortcodes, session auth, subscribe/unsubscribe/reactivate flows
 - **Admin — dashboard layout** — **Setup & health** is pinned to the top of the sidebar; **Content types** and **Email schedule** moved to the main column. Primary column is configuration plus daily operations; sidebar holds setup checklist, notification/subscriber stats, test email, and quick links
 - **Admin — dashboard setup checklist** — **Frontend pages configured** added as a required health item (links to **Settings → General**; shows selected page titles or missing subscribe/preferences page labels)
 
@@ -560,7 +651,6 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 - **Send-queue retention** — purge `sent` and `skipped` queue rows when a notification finishes; retain `failed` for dashboard visibility
 - **Site timezone datetimes** — all plugin timestamps written with `current_time( 'mysql' )`; removed UTC conversion helpers (`sn_format_log_date_utc`, log filter UTC bounds)
 - **Greenfield cleanup** — removed legacy DB migration methods and unprefixed options migration; `SUBSCRIBER_NOTIFICATIONS_DB_VERSION` decoupled from plugin version
-- **Integration tests** — `tests/integration/db-schema-tests.php`, `e2e-smoke-tests.php`, `preferences-page-tests.php`, `frontend-pages-tests.php` (v3.7 frontend pages + preferences shortcode), and B8 uninstall/reinstall verification via `tests/bin/run-pantheon-tests.sh`
 
 ### Version 3.5.3
 
@@ -702,7 +792,7 @@ This guarantees the send queue drains on a strict one-minute cadence regardless 
 
 - **`[content_feed]` omit `taxonomy`** — personalized feed across all form taxonomies for a post type (OR match)
 - **`format="summary"`** — linked title + excerpt per post. `format="list"` unchanged (bulleted title links). Unknown format values fall back to `list`
-- **`[selected_subscriptions]`** — HTML in email body (bold post type and taxonomy labels, line breaks per taxonomy). `[selected_subscriptions format="plain"]` for subject lines
+- **`[selected_subscriptions]`** — HTML in email body with **Topic notifications** / **On-page subscriptions** sections when both exist; `[selected_subscriptions format="plain"]` for subject lines
 
 ### Version 3.0.0
 

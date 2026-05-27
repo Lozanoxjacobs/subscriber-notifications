@@ -102,27 +102,48 @@ class SubscriberNotifications_Shortcodes {
      * Attributes:
      * - format="html" (default) — post type heading and taxonomy lines with bold labels (email body).
      * - format="plain" — plain text with line breaks (email subject lines).
+     * - sections="topics,items" (default) — comma-separated: topics, items (alias on-page). Omit either to limit output.
      */
     public function selected_subscriptions_shortcode($atts, $content = '', $tag = '') {
         global $subscriber_notifications_current_subscriber;
 
         $atts = shortcode_atts(array(
-            'format' => 'html',
+            'format'   => 'html',
+            'sections' => '',
         ), $atts, 'selected_subscriptions');
 
         if (!isset($subscriber_notifications_current_subscriber)) {
             return __('[Selected Subscriptions]', 'subscriber-notifications');
         }
 
-        $prefs = $subscriber_notifications_current_subscriber->subscription_preferences ?? '';
+        $prefs    = $subscriber_notifications_current_subscriber->subscription_preferences ?? '';
+        $include  = SubscriberNotifications_Preferences::parse_subscription_summary_sections($atts['sections']);
+        $empty_msg = $this->selected_subscriptions_empty_message($include);
 
         if ($atts['format'] === 'plain') {
-            $summary = SubscriberNotifications_Preferences::human_readable($prefs);
-            return $summary !== '' ? esc_html($summary) : __('No subscriptions selected', 'subscriber-notifications');
+            $summary = SubscriberNotifications_Preferences::human_readable($prefs, $include);
+            return $summary !== '' ? esc_html($summary) : $empty_msg;
         }
 
-        $summary = SubscriberNotifications_Preferences::human_readable_html($prefs);
-        return $summary !== '' ? wp_kses_post($summary) : __('No subscriptions selected', 'subscriber-notifications');
+        $summary = SubscriberNotifications_Preferences::human_readable_html($prefs, $include);
+        return $summary !== '' ? wp_kses_post($summary) : $empty_msg;
+    }
+
+    /**
+     * Empty-state copy when a filtered subscription summary has nothing to show.
+     *
+     * @param array{topics: bool, items: bool} $include Section flags.
+     * @return string
+     */
+    private function selected_subscriptions_empty_message(array $include) {
+        if ($include['topics'] && !$include['items']) {
+            return __('No topic subscriptions selected', 'subscriber-notifications');
+        }
+        if ($include['items'] && !$include['topics']) {
+            return __('No on-page subscriptions selected', 'subscriber-notifications');
+        }
+
+        return __('No subscriptions selected', 'subscriber-notifications');
     }
 
     /**
@@ -588,7 +609,7 @@ class SubscriberNotifications_Shortcodes {
         ), $atts, 'selected_item_subscriptions');
 
         if (!isset($subscriber_notifications_current_subscriber)) {
-            return __('[Selected Item Subscriptions]', 'subscriber-notifications');
+            return __('[Selected on-page subscriptions]', 'subscriber-notifications');
         }
 
         $prefs = SubscriberNotifications_Preferences::decode(

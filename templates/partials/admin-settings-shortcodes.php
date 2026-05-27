@@ -25,7 +25,7 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
     </p>
     <ul class="sn-where-list">
         <li><?php esc_html_e('Notifications → Add New / Edit (subject and body)', 'subscriber-notifications'); ?></li>
-        <li><?php esc_html_e('Settings → Email Templates (welcome, preference, and item subscription emails)', 'subscriber-notifications'); ?></li>
+        <li><?php esc_html_e('Settings → Email Templates (welcome, preference, and on-page subscription emails)', 'subscriber-notifications'); ?></li>
         <li><?php esc_html_e('Settings → Email Design (global header and footer on all notification emails)', 'subscriber-notifications'); ?></li>
     </ul>
     <p>
@@ -168,14 +168,14 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
     <pre class="sn-shortcode-code">[manage_preferences_link]
 [manage_preferences_link text="Manage your subscriptions"]</pre>
 
-    <h2><?php esc_html_e('Topic digests and subscription lists', 'subscriber-notifications'); ?></h2>
+    <h2><?php esc_html_e('Topic notifications and subscription lists', 'subscriber-notifications'); ?></h2>
     <p>
-        <?php esc_html_e('Use these in welcome emails, digest notifications, and other messages about taxonomy-based subscriptions. They do not require a single-post context.', 'subscriber-notifications'); ?>
+        <?php esc_html_e('Use these in welcome emails, topic notification bodies, and other messages about taxonomy-based subscriptions. They do not require a single-post context.', 'subscriber-notifications'); ?>
     </p>
 
     <h3><code>[selected_subscriptions]</code></h3>
     <p>
-        <?php esc_html_e('Inserts a formatted list of everything the subscriber selected — post types, taxonomies, terms, and specific page subscriptions. Useful in welcome emails and notification bodies to remind the subscriber what they signed up for.', 'subscriber-notifications'); ?>
+        <?php esc_html_e('Inserts a formatted list of what the subscriber selected. By default, output includes both topic notifications (taxonomies and terms) and on-page subscriptions (linked page titles). Use the sections attribute to limit what appears — for example, topic digests should use sections="topics" so on-page items are not listed alongside new feed content.', 'subscriber-notifications'); ?>
     </p>
     <h4><?php esc_html_e('Attributes', 'subscriber-notifications'); ?></h4>
     <table class="widefat striped sn-shortcode-table">
@@ -192,11 +192,18 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
                 <td><code>html</code> (<?php esc_html_e('default', 'subscriber-notifications'); ?>), <code>plain</code></td>
                 <td><?php esc_html_e("Use html in the email body. Use plain in email subject lines or anywhere you don't want HTML.", 'subscriber-notifications'); ?></td>
             </tr>
+            <tr>
+                <td><code>sections</code></td>
+                <td><code>topics</code>, <code>items</code> (<?php esc_html_e('alias', 'subscriber-notifications'); ?>: <code>on-page</code>)</td>
+                <td><?php esc_html_e('Optional. Comma-separated. Default: both sections. Use topics alone in topic notification emails so on-page subscriptions are not shown with the feed.', 'subscriber-notifications'); ?></td>
+            </tr>
         </tbody>
     </table>
     <p><strong><?php esc_html_e('Examples', 'subscriber-notifications'); ?>:</strong></p>
     <pre class="sn-shortcode-code">[selected_subscriptions]
-[selected_subscriptions format="plain"]</pre>
+[selected_subscriptions sections="topics"]
+[selected_subscriptions sections="items"]
+[selected_subscriptions format="plain" sections="topics"]</pre>
 
     <h3><code>[selected_terms]</code></h3>
     <p>
@@ -241,8 +248,8 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
     <p>
         <?php
         printf(
-            esc_html__('Builds a personalized list of posts for each subscriber, based on their selections, the notification\'s target terms, and posts marked %s in the editor. This is the main shortcode for sending a digest where each subscriber sees only what\'s relevant to them.', 'subscriber-notifications'),
-            '<strong>' . esc_html__('Include in subscriber digests', 'subscriber-notifications') . '</strong>'
+            esc_html__('Builds a personalized list of posts for each subscriber, based on their selections, the notification\'s target terms, and posts marked %s in the editor. This is the main shortcode for topic notifications where each subscriber sees only what\'s relevant to them.', 'subscriber-notifications'),
+            '<strong>' . esc_html__('Include in topic notifications', 'subscriber-notifications') . '</strong>'
         );
         ?>
     </p>
@@ -331,9 +338,9 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
 
     <hr class="sn-shortcodes-section-break">
 
-    <h2><?php esc_html_e('Item subscription emails (single post)', 'subscriber-notifications'); ?></h2>
+    <h2><?php esc_html_e('On-page subscription emails (single post)', 'subscriber-notifications'); ?></h2>
     <p>
-        <?php esc_html_e('Use only in Item subscription confirmation and Item update notification templates (Settings → Email Templates → Item subscriptions). The plugin sets the current post when those emails send.', 'subscriber-notifications'); ?>
+        <?php esc_html_e('Use only in On-page subscription confirmation and On-page update email templates (Settings → Email Templates → On-page subscriptions). The plugin sets the current post when those emails send.', 'subscriber-notifications'); ?>
     </p>
     <table class="widefat striped sn-shortcode-table">
         <thead>
@@ -365,7 +372,7 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
             </tr>
             <tr>
                 <td><code>[selected_item_subscriptions]</code></td>
-                <td><?php esc_html_e('List of specific pages the subscriber follows (item subscriptions only)', 'subscriber-notifications'); ?></td>
+                <td><?php esc_html_e('List of posts the subscriber follows via on-page subscriptions', 'subscriber-notifications'); ?></td>
             </tr>
         </tbody>
     </table>
@@ -440,42 +447,19 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
 
     <h3><code>[subscriber_notifications_post_subscribe]</code></h3>
     <p>
-        <?php esc_html_e('On-page widget to subscribe to updates for the current post. Place on singular block templates where single-item subscriptions are enabled under Notifications → Content Types. Never shown on the subscribe or preferences pages configured under Settings → General → Frontend pages.', 'subscriber-notifications'); ?>
+        <?php
+        printf(
+            wp_kses(
+                __('On-page widget to subscribe to updates for the current post. Place on singular block templates where on-page subscriptions are enabled under %s. Never shown on the subscribe or preferences pages configured under Settings → General → Frontend pages.', 'subscriber-notifications'),
+                array('a' => array('href' => true))
+            ),
+            '<a href="' . esc_url($content_types_url) . '"><strong>' . esc_html__('Notifications → Content Types', 'subscriber-notifications') . '</strong></a>'
+        );
+        ?>
     </p>
-    <h4><?php esc_html_e('Visibility', 'subscriber-notifications'); ?></h4>
-    <table class="widefat striped sn-shortcode-table">
-        <thead>
-            <tr>
-                <th><?php esc_html_e('Attribute', 'subscriber-notifications'); ?></th>
-                <th><?php esc_html_e('Values', 'subscriber-notifications'); ?></th>
-                <th><?php esc_html_e('Notes', 'subscriber-notifications'); ?></th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td><code>include</code></td>
-                <td><?php esc_html_e('comma-separated post slugs (e.g.', 'subscriber-notifications'); ?> <code>privacy-policy</code>, <code>cookies-policy</code>)</td>
-                <td><?php esc_html_e('Allowlist — show only when the current post slug matches one entry.', 'subscriber-notifications'); ?></td>
-            </tr>
-            <tr>
-                <td><code>exclude</code></td>
-                <td><?php esc_html_e('comma-separated post slugs (e.g.', 'subscriber-notifications'); ?> <code>sitemap</code>, <code>sample-page</code>)</td>
-                <td><?php esc_html_e('Denylist — hide when the current post slug matches one entry.', 'subscriber-notifications'); ?></td>
-            </tr>
-            <tr>
-                <td><code>include_terms</code></td>
-                <td><?php esc_html_e('comma-separated pairs (e.g.', 'subscriber-notifications'); ?> <code>project-status:in-progress</code>, <code>project-status:planning</code>)</td>
-                <td><?php esc_html_e('Allowlist by taxonomy term. Format: taxonomy-slug:term-slug. Match any listed term (OR).', 'subscriber-notifications'); ?></td>
-            </tr>
-            <tr>
-                <td><code>exclude_terms</code></td>
-                <td><?php esc_html_e('comma-separated pairs (e.g.', 'subscriber-notifications'); ?> <code>project-status:on-hold</code>)</td>
-                <td><?php esc_html_e('Denylist by taxonomy term. Same format as include_terms.', 'subscriber-notifications'); ?></td>
-            </tr>
-        </tbody>
-    </table>
-    <p class="description">
-        <?php esc_html_e('If include or include_terms is set, the post must match at least one entry in that group. exclude and exclude_terms then remove matches. Slugs and term slugs are copied from the panel above or from the term editor.', 'subscriber-notifications'); ?>
+    <h4><?php esc_html_e('Content eligibility', 'subscriber-notifications'); ?></h4>
+    <p>
+        <?php esc_html_e('Configure where the on-page subscribe widget appears under Notifications → Content Types. Choose By content rules to match taxonomy term rules with optional Except on these posts, or Only specific posts I choose for an explicit pick list.', 'subscriber-notifications'); ?>
     </p>
     <h4><?php esc_html_e('Copy overrides (plain text)', 'subscriber-notifications'); ?></h4>
     <table class="widefat striped sn-shortcode-table">
@@ -520,13 +504,10 @@ $enabled_post_types  = SubscriberNotifications_Content_Config::get_enabled_post_
         </tbody>
     </table>
     <p class="description">
-        <?php esc_html_e('Leave copy attributes empty to use the plugin defaults (post title and content type label). Overrides are plain text only — no shortcodes or tokens.', 'subscriber-notifications'); ?>
+        <?php esc_html_e('Leave copy attributes empty to use the plugin defaults (post title and singular content type label, e.g. “Post”). Overrides are plain text only — no shortcodes or tokens.', 'subscriber-notifications'); ?>
     </p>
     <p><strong><?php esc_html_e('Examples', 'subscriber-notifications'); ?>:</strong></p>
     <pre class="sn-shortcode-code">[subscriber_notifications_post_subscribe]
-[subscriber_notifications_post_subscribe include="privacy-policy,cookies-policy"]
-[subscriber_notifications_post_subscribe exclude="sitemap"]
-[subscriber_notifications_post_subscribe include_terms="project-status:in-progress" exclude_terms="project-status:on-hold"]
 [subscriber_notifications_post_subscribe heading="Get updates" description="We will email you when this page changes." button="Sign up"]</pre>
 
 </div>

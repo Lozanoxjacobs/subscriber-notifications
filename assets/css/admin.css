@@ -312,14 +312,15 @@
     padding: 10px;
 }
 
-.subscriber-notifications-meta-box label {
-    display: block;
-    margin-bottom: 10px;
-    font-weight: bold;
+.subscriber-notifications-meta-box .sn-meta-box-option label {
+    display: inline;
+    margin: 0;
+    font-weight: 600;
 }
 
 .subscriber-notifications-meta-box input[type="checkbox"] {
-    margin-right: 5px;
+    margin: 0 4px 0 0;
+    vertical-align: text-top;
 }
 
 .subscriber-notifications-meta-box textarea {
@@ -327,10 +328,16 @@
     margin-top: 5px;
 }
 
-.subscriber-notifications-meta-box .description {
+.subscriber-notifications-meta-box .sn-meta-box-option .description {
     font-size: 12px;
-    color: #666;
-    margin-top: 5px;
+    color: #646970;
+    margin: 4px 0 0 24px;
+}
+
+.subscriber-notifications-meta-box .sn-meta-box-section + .sn-meta-box-section {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #dcdcde;
 }
 
 /* Responsive design */
@@ -441,9 +448,31 @@
     margin-bottom: 0.65em;
 }
 
+.wp-list-table .column-subscriptions .sn-prefs-admin-summary .sn-prefs-block:last-child,
+.wp-list-table .column-targets .sn-prefs-admin-summary .sn-prefs-block:last-child {
+    margin-bottom: 0;
+}
+
 .wp-list-table .column-subscriptions .sn-prefs-block:last-child,
 .wp-list-table .column-targets .sn-prefs-block:last-child {
     margin-bottom: 0;
+}
+
+.wp-list-table .column-subscriptions .sn-prefs-admin-section + .sn-prefs-admin-section,
+.wp-list-table .column-targets .sn-prefs-admin-section + .sn-prefs-admin-section {
+    margin-top: 0.75em;
+    padding-top: 0.75em;
+    border-top: 1px solid #dcdcde;
+}
+
+.wp-list-table .column-subscriptions .sn-prefs-section-heading,
+.wp-list-table .column-targets .sn-prefs-section-heading {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #646970;
+    margin-bottom: 0.4em;
 }
 
 .wp-list-table .column-subscriptions .sn-prefs-post-type,
@@ -451,11 +480,55 @@
     font-weight: 600;
 }
 
+.wp-list-table .column-subscriptions .sn-prefs-item-count,
+.wp-list-table .column-targets .sn-prefs-item-count {
+    font-weight: 400;
+    color: #646970;
+}
+
 .wp-list-table .column-subscriptions .sn-prefs-taxonomies,
 .wp-list-table .column-targets .sn-prefs-taxonomies {
     color: #50575e;
     font-size: 12px;
     line-height: 1.5;
+}
+
+.wp-list-table .column-subscriptions .sn-prefs-taxonomy-row,
+.wp-list-table .column-targets .sn-prefs-taxonomy-row {
+    margin: 0.15em 0;
+}
+
+.wp-list-table .column-subscriptions .sn-prefs-taxonomy-label,
+.wp-list-table .column-targets .sn-prefs-taxonomy-label {
+    font-weight: 600;
+}
+
+.wp-list-table .column-subscriptions .sn-prefs-term-count,
+.wp-list-table .column-targets .sn-prefs-term-count {
+    color: #646970;
+    font-weight: 400;
+}
+
+.wp-list-table .column-subscriptions .sn-prefs-more,
+.wp-list-table .column-targets .sn-prefs-more {
+    color: #646970;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.wp-list-table .column-subscriptions .sn-prefs-item-list,
+.wp-list-table .column-targets .sn-prefs-item-list {
+    margin: 0.25em 0 0;
+    padding: 0 0 0 1em;
+    list-style: disc;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #50575e;
+}
+
+.wp-list-table .column-subscriptions .sn-prefs-item-list li,
+.wp-list-table .column-targets .sn-prefs-item-list li {
+    margin: 0.1em 0;
 }
 
 .wp-list-table .column-actions .sn-row-action-form {
@@ -576,6 +649,82 @@ select:focus {
 
 .sn-term-item {
     margin: 0.15em 0;
+}
+
+.sn-post-picker {
+    max-width: 480px;
+}
+
+.sn-eligibility-mode-fieldset {
+    margin: 0 0 1em;
+    padding: 0;
+    border: 0;
+}
+
+.sn-eligibility-mode-label {
+    margin: 0 0 0.5em;
+}
+
+.sn-eligibility-mode-options {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.sn-eligibility-mode-options li {
+    margin: 0 0 0.75em;
+}
+
+.sn-eligibility-mode-options li > label {
+    display: block;
+    font-weight: 600;
+}
+
+.sn-eligibility-mode-options li .description {
+    display: block;
+    margin: 0.15em 0 0 1.55em;
+}
+
+.sn-eligibility-rules-intro {
+    margin: 0 0 0.75em;
+}
+
+.sn-taxonomies-pick-list-note {
+    font-style: italic;
+}
+
+.sn-post-picker-search {
+    width: 100%;
+    max-width: 100%;
+}
+
+.sn-post-picker-results,
+.sn-post-picker-selected {
+    list-style: none;
+    margin: 0.5em 0 0;
+    padding: 0;
+}
+
+.sn-post-picker-results li,
+.sn-post-picker-selected li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0.25em 0;
+    padding: 6px 8px;
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    border-radius: 2px;
+}
+
+.sn-post-picker-results .button-link {
+    flex-shrink: 0;
+}
+
+.sn-post-picker-selected .sn-post-picker-title {
+    flex: 1;
+    min-width: 0;
 }
 
 .sn-select-all-label {

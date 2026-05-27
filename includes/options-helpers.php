@@ -39,3 +39,16 @@ function subscriber_notifications_get_option($short_key, $default = false) {
 function subscriber_notifications_update_option($short_key, $value) {
     return update_option(subscriber_notifications_option_name($short_key), $value);
 }
+
+/**
+ * Default body for the preferences-updated confirmation email.
+ *
+ * @return string
+ */
+function subscriber_notifications_default_preferences_update_email_content() {
+    return __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n"
+        . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n"
+        . '[selected_subscriptions]' . "\n\n"
+        . __('Delivery frequency:', 'subscriber-notifications') . ' [delivery_frequency]' . "\n\n"
+        . '[manage_preferences_link text="' . __('Manage your preferences', 'subscriber-notifications') . '"]';
+}

@@ -55,7 +55,7 @@ class SubscriberNotifications_Notifications {
         foreach ($post_types as $post_type) {
             add_meta_box(
                 'subscriber_notifications_update',
-                __('Notify Subscribers', 'subscriber-notifications'),
+                __('Subscriber Notifications', 'subscriber-notifications'),
                 array($this, 'notification_meta_box'),
                 $post_type,
                 'side',
@@ -74,25 +74,29 @@ class SubscriberNotifications_Notifications {
         $include_in_feed = (int) get_post_meta($post->ID, SubscriberNotifications_Preferences::META_INCLUDE_IN_FEED, true);
         ?>
         <div class="subscriber-notifications-meta-box">
-            <p>
-                <label>
-                    <input type="checkbox" id="sn_include_in_feed" name="sn_include_in_feed" value="1" <?php checked($include_in_feed, 1); ?>>
-                    <?php esc_html_e('Include in subscriber digests', 'subscriber-notifications'); ?>
-                </label>
-            </p>
-            <p class="description">
-                <?php esc_html_e('Adds this content to scheduled topic digest emails. Stays checked until you remove it.', 'subscriber-notifications'); ?>
-            </p>
+            <div class="sn-meta-box-section">
+                <div class="sn-meta-box-option">
+                    <label for="sn_include_in_feed">
+                        <input type="checkbox" id="sn_include_in_feed" name="sn_include_in_feed" value="1" <?php checked($include_in_feed, 1); ?>>
+                        <?php esc_html_e('Include in topic notifications', 'subscriber-notifications'); ?>
+                    </label>
+                    <p class="description">
+                        <?php esc_html_e('Adds this post to scheduled emails for subscribers who chose matching topics on the subscribe form. Stays checked until you uncheck it.', 'subscriber-notifications'); ?>
+                    </p>
+                </div>
+            </div>
 
-            <p>
-                <label>
-                    <input type="checkbox" id="sn_notify_item_subscribers" name="sn_notify_item_subscribers" value="1">
-                    <?php esc_html_e('Email item subscribers about this update', 'subscriber-notifications'); ?>
-                </label>
-            </p>
-            <p class="description">
-                <?php esc_html_e('Sends immediately to people subscribed to this specific page. Does not stay checked after save.', 'subscriber-notifications'); ?>
-            </p>
+            <div class="sn-meta-box-section">
+                <div class="sn-meta-box-option">
+                    <label for="sn_notify_item_subscribers">
+                        <input type="checkbox" id="sn_notify_item_subscribers" name="sn_notify_item_subscribers" value="1">
+                        <?php esc_html_e('Send on-page update email now', 'subscriber-notifications'); ?>
+                    </label>
+                    <p class="description">
+                        <?php esc_html_e('Emails people subscribed to this page via the on-page widget. Also stamps the post for “(updated on …)” in topic notification feeds. Clears after save.', 'subscriber-notifications'); ?>
+                    </p>
+                </div>
+            </div>
         </div>
         <?php
     }

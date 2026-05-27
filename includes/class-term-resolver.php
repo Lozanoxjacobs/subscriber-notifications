@@ -146,6 +146,110 @@ class SubscriberNotifications_Term_Resolver {
      *                          empty" setting).
      * @return int[]
      */
+    /**
+     * Whether a post passes a configured taxonomy display rule for single-item eligibility.
+     *
+     * Call only for restrictive modes (not `all`).
+     *
+     * @param WP_Post $post      Post object.
+     * @param string  $post_type Post type slug.
+     * @param string  $taxonomy  Taxonomy slug.
+     * @return bool
+     */
+    public static function post_passes_taxonomy_display_rule(WP_Post $post, $post_type, $taxonomy) {
+        $tax_config = SubscriberNotifications_Content_Config::get_taxonomy_config($post_type, $taxonomy);
+        if (empty($tax_config)) {
+            return false;
+        }
+
+        $mode = isset($tax_config['term_display']) ? (string) $tax_config['term_display'] : 'all';
+        if ($mode === 'all') {
+            return false;
+        }
+
+        if (!is_object_in_taxonomy($post->post_type, $taxonomy)) {
+            return false;
+        }
+
+        $post_term_ids = self::get_post_term_ids($post, $taxonomy);
+
+        switch ($mode) {
+            case 'include':
+                $allowed = array_map('intval', (array) ($tax_config['include_term_ids'] ?? array()));
+                $allowed = array_values(array_filter($allowed, function ($id) { return $id > 0; }));
+                if (empty($allowed)) {
+                    return false;
+                }
+                return !empty(array_intersect($post_term_ids, $allowed));
+
+            case 'exclude':
+                $denied = array_map('intval', (array) ($tax_config['exclude_term_ids'] ?? array()));
+                $denied = array_values(array_filter($denied, function ($id) { return $id > 0; }));
+                if (empty($denied)) {
+                    return true;
+                }
+                return empty(array_intersect($post_term_ids, $denied));
+
+            case 'children_of':
+                $parent_id = isset($tax_config['parent_term_id']) ? (int) $tax_config['parent_term_id'] : 0;
+                if ($parent_id <= 0) {
+                    return false;
+                }
+                foreach ($post_term_ids as $term_id) {
+                    if (self::term_is_under_parent((int) $term_id, $parent_id, $taxonomy)) {
+                        return true;
+                    }
+                }
+                return false;
+        }
+
+        return false;
+    }
+
+    /**
+     * Term IDs assigned to a post for a taxonomy.
+     *
+     * @param WP_Post $post     Post object.
+     * @param string  $taxonomy Taxonomy slug.
+     * @return int[]
+     */
+    private static function get_post_term_ids(WP_Post $post, $taxonomy) {
+        $terms = wp_get_object_terms($post->ID, $taxonomy, array('fields' => 'ids'));
+        if (is_wp_error($terms) || empty($terms)) {
+            return array();
+        }
+        return array_values(array_unique(array_map('intval', $terms)));
+    }
+
+    /**
+     * Whether a term is the parent or a descendant of the configured parent term.
+     *
+     * @param int    $term_id   Term ID on the post.
+     * @param int    $parent_id Configured parent term ID.
+     * @param string $taxonomy  Taxonomy slug.
+     * @return bool
+     */
+    private static function term_is_under_parent($term_id, $parent_id, $taxonomy) {
+        $term_id   = (int) $term_id;
+        $parent_id = (int) $parent_id;
+        if ($term_id <= 0 || $parent_id <= 0) {
+            return false;
+        }
+
+        $term = get_term($term_id, $taxonomy);
+        while ($term && !is_wp_error($term)) {
+            if ((int) $term->term_id === $parent_id) {
+                return true;
+            }
+            if ((int) $term->parent <= 0) {
+                break;
+            }
+            $term = get_term((int) $term->parent, $taxonomy);
+        }
+
+        return false;
+    }
+
     public static function get_allowed_term_ids($post_type, $taxonomy, $context = 'admin') {
         $terms = ($context === 'public')
             ? self::get_terms_for_public_form($post_type, $taxonomy)
@@ -288,7 +392,7 @@ class SubscriberNotifications_Term_Resolver {
     }
 
     /**
-     * HTML summary for admin list tables (bold post type labels only).
+     * HTML summary for admin list tables (compact term rows with optional truncation).
      *
      * @param array $prefs Preferences-shaped array.
      * @return string Safe HTML fragment.
@@ -303,20 +407,51 @@ class SubscriberNotifications_Term_Resolver {
 
             $lines = array();
             foreach ($section['taxonomies'] as $tax_row) {
-                $lines[] = esc_html($tax_row['label']) . ': ' . esc_html(implode(', ', $tax_row['term_names']));
+                $lines[] = self::format_admin_taxonomy_row($tax_row['label'], $tax_row['term_names']);
             }
 
             if (empty($lines)) {
                 continue;
             }
 
-            $html .= '<div class="sn-prefs-block">';
+            $html .= '<div class="sn-prefs-block sn-prefs-block--topics">';
             $html .= '<div class="sn-prefs-post-type">' . esc_html($section['post_type_label']) . '</div>';
-            $html .= '<div class="sn-prefs-taxonomies">' . implode('<br />', $lines) . '</div>';
+            $html .= '<div class="sn-prefs-taxonomies">' . implode('', $lines) . '</div>';
             $html .= '</div>';
         }
 
         return $html;
+    }
+
+    /**
+     * Format one taxonomy row for admin list tables.
+     *
+     * @param string   $label      Taxonomy label.
+     * @param string[] $term_names Term names.
+     * @return string Safe HTML.
+     */
+    private static function format_admin_taxonomy_row($label, array $term_names) {
+        $count   = count($term_names);
+        $limit   = 5;
+        $full    = implode(', ', $term_names);
+        $names_html = esc_html($full);
+
+        if ($count > $limit) {
+            $shown      = array_slice($term_names, 0, $limit);
+            $names_html = sprintf(
+                '<span class="sn-prefs-term-list" title="%1$s">%2$s <span class="sn-prefs-more">+%3$d</span></span>',
+                esc_attr($full),
+                esc_html(implode(', ', $shown)),
+                $count - $limit
+            );
+        }
+
+        return sprintf(
+            '<div class="sn-prefs-taxonomy-row"><span class="sn-prefs-taxonomy-label">%1$s</span> <span class="sn-prefs-term-count">(%2$d)</span>: %3$s</div>',
+            esc_html($label),
+            $count,
+            $names_html
+        );
     }
 
     /**
@@ -331,13 +466,13 @@ class SubscriberNotifications_Term_Resolver {
             if (empty($section['taxonomies'])) {
                 continue;
             }
-            $html .= '<p><strong>' . esc_html($section['post_type_label']) . '</strong></p><p>';
-            $lines = array();
+            $html .= '<p style="margin:12px 0 4px;font-weight:bold;">' . esc_html($section['post_type_label']) . '</p>';
             foreach ($section['taxonomies'] as $tax_row) {
-                $lines[] = '<strong>' . esc_html($tax_row['label']) . ':</strong> '
-                    . esc_html(implode(', ', $tax_row['term_names']));
+                $html .= '<p style="margin:0 0 6px;padding-left:12px;">'
+                    . '<strong>' . esc_html($tax_row['label']) . ':</strong> '
+                    . esc_html(implode(', ', $tax_row['term_names']))
+                    . '</p>';
             }
-            $html .= implode('<br />', $lines) . '</p>';
         }
         return $html;
     }
@@ -345,31 +480,28 @@ class SubscriberNotifications_Term_Resolver {
     /**
      * Build ordered post type / taxonomy / term name rows from preferences.
      *
+     * Uses stored preference keys (not current Content Types enablement) so admin
+     * summaries reflect what the subscriber actually selected.
+     *
      * @param array $prefs Preferences-shaped array.
      * @return array<int, array{post_type_label: string, taxonomies: array<int, array{label: string, term_names: string[]}>}>
      */
     private static function get_selection_sections(array $prefs) {
-        $sections = array();
-        $post_types = class_exists('SubscriberNotifications_Content_Config')
-            ? SubscriberNotifications_Content_Config::get_enabled_post_types()
-            : array_keys($prefs);
+        $sections   = array();
+        $post_types = self::ordered_post_types_from_prefs($prefs);
 
         foreach ($post_types as $post_type) {
-            if (empty($prefs[$post_type]) || !is_array($prefs[$post_type])) {
+            if (empty($prefs[ $post_type ]) || !is_array($prefs[ $post_type ])) {
                 continue;
             }
 
-            $taxonomies = class_exists('SubscriberNotifications_Content_Config')
-                ? SubscriberNotifications_Content_Config::get_form_taxonomies($post_type)
-                : array_keys($prefs[$post_type]);
-
             $tax_rows = array();
-            foreach ($taxonomies as $taxonomy) {
-                if (empty($prefs[$post_type][$taxonomy]) || !is_array($prefs[$post_type][$taxonomy])) {
+            foreach ($prefs[ $post_type ] as $taxonomy => $ids) {
+                if ($taxonomy === '_items' || !is_string($taxonomy) || !is_array($ids) || empty($ids)) {
                     continue;
                 }
                 $term_names = array();
-                foreach ($prefs[$post_type][$taxonomy] as $id) {
+                foreach ($ids as $id) {
                     $term = get_term((int) $id, $taxonomy);
                     if ($term && !is_wp_error($term)) {
                         $term_names[] = $term->name;
@@ -380,19 +512,50 @@ class SubscriberNotifications_Term_Resolver {
                 }
                 sort($term_names, SORT_NATURAL | SORT_FLAG_CASE);
                 $tax_rows[] = array(
-                    'label'      => SubscriberNotifications_Content_Config::get_taxonomy_label($post_type, $taxonomy),
+                    'label'      => class_exists('SubscriberNotifications_Content_Config')
+                        ? SubscriberNotifications_Content_Config::get_taxonomy_label($post_type, $taxonomy)
+                        : $taxonomy,
                     'term_names' => $term_names,
                 );
             }
 
             if (!empty($tax_rows)) {
                 $sections[] = array(
-                    'post_type_label' => SubscriberNotifications_Content_Config::get_post_type_label($post_type),
+                    'post_type_label' => class_exists('SubscriberNotifications_Content_Config')
+                        ? SubscriberNotifications_Content_Config::get_post_type_label($post_type)
+                        : $post_type,
                     'taxonomies'      => $tax_rows,
                 );
             }
         }
 
         return $sections;
+    }
+
+    /**
+     * Post type order for summaries: Content Types order, then any remaining keys.
+     *
+     * @param array $prefs Preferences-shaped array.
+     * @return string[]
+     */
+    private static function ordered_post_types_from_prefs(array $prefs) {
+        $keys  = array_filter(array_keys($prefs), 'is_string');
+        $order = array();
+
+        if (class_exists('SubscriberNotifications_Content_Config')) {
+            foreach (array_keys(SubscriberNotifications_Content_Config::get_available_post_types()) as $post_type) {
+                if (isset($prefs[ $post_type ]) && is_array($prefs[ $post_type ])) {
+                    $order[] = $post_type;
+                }
+            }
+        }
+
+        foreach ($keys as $post_type) {
+            if (!in_array($post_type, $order, true)) {
+                $order[] = $post_type;
+            }
+        }
+
+        return $order;
     }
 }

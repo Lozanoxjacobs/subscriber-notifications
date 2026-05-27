@@ -55,12 +55,30 @@ class SubscriberNotifications_Content_Types_Admin {
             return;
         }
         wp_enqueue_script('postbox');
+        wp_enqueue_script('wp-api-fetch');
         wp_enqueue_script(
             'subscriber-notifications-content-types-admin',
             SUBSCRIBER_NOTIFICATIONS_PLUGIN_URL . 'assets/js/content-types-admin.js',
-            array('jquery', 'postbox'),
+            array('jquery', 'postbox', 'wp-api-fetch'),
             SUBSCRIBER_NOTIFICATIONS_VERSION,
             true
+        );
+        wp_add_inline_script(
+            'subscriber-notifications-content-types-admin',
+            'var snContentTypesAdmin = ' . wp_json_encode(
+                array(
+                    'restRoot' => esc_url_raw(rest_url()),
+                    'nonce'    => wp_create_nonce('wp_rest'),
+                    'i18n'     => array(
+                        'add'              => __('Add', 'subscriber-notifications'),
+                        'noResults'        => __('No posts found.', 'subscriber-notifications'),
+                        'searching'        => __('Searching…', 'subscriber-notifications'),
+                        'confirmPickList'  => __('Switching to “Only specific posts” will remove your “Except on these posts” list when you save. Continue?', 'subscriber-notifications'),
+                        'confirmRules'     => __('Switching to “By content rules” will remove your picked posts when you save. Continue?', 'subscriber-notifications'),
+                    ),
+                )
+            ) . ';',
+            'before'
         );
     }
 

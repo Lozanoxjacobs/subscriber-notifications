@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Subscriber Notifications
  * Plugin URI: https://github.com/Lozanoxjacobs/subscriber-notifications
- * Description: Let visitors subscribe to your content by post type and taxonomy, then send scheduled, targeted email notifications with personalized digests, templates, and open/click tracking.
- * Version: 3.8.1
+ * Description: Subscribe by post type, taxonomy, or individual posts. Scheduled topic notifications, on-page subscribe widgets, templates, and open/click tracking.
+ * Version: 4.0.0
  * Author: Jackie Lozano
  * License: GPL v2 or later
  * Text Domain: subscriber-notifications
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SUBSCRIBER_NOTIFICATIONS_VERSION', '3.8.1');
+define('SUBSCRIBER_NOTIFICATIONS_VERSION', '4.0.0');
 define('SUBSCRIBER_NOTIFICATIONS_DB_VERSION', '4');
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_FILE', __FILE__);
 define('SUBSCRIBER_NOTIFICATIONS_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -482,7 +482,7 @@ class SubscriberNotifications {
             'welcome_back_email_subject'      => __('Welcome back! Your subscription has been reactivated', 'subscriber-notifications'),
             'welcome_back_email_content'      => __('Welcome back, [subscriber_name]! Your subscription has been reactivated. You will receive [delivery_frequency] updates about [selected_subscriptions].', 'subscriber-notifications'),
             'preferences_update_email_subject' => __('Your preferences have been updated', 'subscriber-notifications'),
-            'preferences_update_email_content' => __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('Subscriptions: [selected_subscriptions]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'),
+            'preferences_update_email_content' => subscriber_notifications_default_preferences_update_email_content(),
             'item_subscribe_email_subject'     => __('[site_title] You\'re subscribed to updates for [post_title]', 'subscriber-notifications'),
             'item_subscribe_email_content'      => __("Hello [subscriber_name],\n\nYou're subscribed to receive email when [post_title] is updated.\n\nView page: [post_link]\n\n[manage_preferences_link]", 'subscriber-notifications'),
             'item_update_email_subject'         => __('[site_title] Update: [post_title]', 'subscriber-notifications'),

@@ -400,8 +400,13 @@ class SubscriberNotifications_Email_Formatter {
      * @return string Wrapped content with email structure
      */
     public function wrap_with_email_structure(string $content, string $css, $subscriber = null): string {
-        // Convert plain text line breaks to HTML paragraphs.
-        $content = wpautop($content);
+        // Avoid double-wrapping when the body already has block HTML (shortcodes, wp_editor).
+        if (
+            strpos($content, 'sn-email-prefs-summary') === false
+            && !preg_match('/<\s*p[\s>]/i', $content)
+        ) {
+            $content = wpautop($content);
+        }
 
         $t = $this->get_brand_tokens();
         $color_bg      = esc_attr($t['color_bg']);

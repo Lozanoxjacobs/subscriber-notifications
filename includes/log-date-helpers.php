@@ -16,13 +16,13 @@ if (!defined('ABSPATH')) {
  */
 function sn_get_email_log_types(): array {
     return array(
-        'notification'       => __('Notification', 'subscriber-notifications'),
+        'notification'       => __('Topic notification', 'subscriber-notifications'),
         'welcome'            => __('Welcome', 'subscriber-notifications'),
         'welcome_back'       => __('Welcome back', 'subscriber-notifications'),
         'preferences_update' => __('Preferences update', 'subscriber-notifications'),
         'test'               => __('Test', 'subscriber-notifications'),
-        'item_subscribe'     => __('Item subscription', 'subscriber-notifications'),
-        'item_update'        => __('Item update', 'subscriber-notifications'),
+        'item_subscribe'     => __('On-page subscription', 'subscriber-notifications'),
+        'item_update'        => __('On-page update', 'subscriber-notifications'),
     );
 }
 

@@ -116,7 +116,7 @@ class SubscriberNotifications_Item_Notifications {
             return array(
                 'sent'    => 0,
                 'queued'  => 0,
-                'message' => __('No item subscribers to notify for this content.', 'subscriber-notifications'),
+                'message' => __('No on-page subscribers to notify for this content.', 'subscriber-notifications'),
             );
         }
 
@@ -146,7 +146,7 @@ class SubscriberNotifications_Item_Notifications {
             'queued'  => $count,
             'message' => sprintf(
                 /* translators: %d: number of subscribers */
-                __('Sending item update emails to %d subscribers in the background.', 'subscriber-notifications'),
+                __('Sending on-page update emails to %d subscribers in the background.', 'subscriber-notifications'),
                 $count
             ),
         );

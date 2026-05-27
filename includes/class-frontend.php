@@ -153,8 +153,9 @@ class SubscriberNotifications_Frontend {
      * @return string
      */
     public function post_subscribe_shortcode($atts) {
-        $atts  = shortcode_atts(SubscriberNotifications_Post_Subscribe_Display::default_atts(), $atts, 'subscriber_notifications_post_subscribe');
-        $rules = SubscriberNotifications_Post_Subscribe_Display::parse_atts($atts);
+        $copy = SubscriberNotifications_Post_Subscribe_Display::parse_atts(
+            shortcode_atts(SubscriberNotifications_Post_Subscribe_Display::default_atts(), $atts, 'subscriber_notifications_post_subscribe')
+        );
 
         $post_id = get_queried_object_id();
         if (!is_singular() || $post_id < 1) {
@@ -166,15 +167,7 @@ class SubscriberNotifications_Frontend {
             return '';
         }
 
-        if (!SubscriberNotifications_Content_Config::is_single_item_available($post->post_type)) {
-            return '';
-        }
-
-        if (subscriber_notifications_is_frontend_page($post_id)) {
-            return '';
-        }
-
-        if (!SubscriberNotifications_Post_Subscribe_Display::is_visible($post, $rules)) {
+        if (!SubscriberNotifications_Content_Config::is_post_eligible_for_single_item($post)) {
             return '';
         }
 
@@ -192,7 +185,7 @@ class SubscriberNotifications_Frontend {
         }
 
         ob_start();
-        $this->render_post_subscribe_widget($post, $subscribed, $rules);
+        $this->render_post_subscribe_widget($post, $subscribed, $copy);
         return subscriber_notifications_prepare_shortcode_html(ob_get_clean());
     }
 
@@ -201,13 +194,12 @@ class SubscriberNotifications_Frontend {
      *
      * @param WP_Post $post       Post object.
      * @param bool    $subscribed Whether the current visitor is subscribed to this post.
-     * @param array   $rules      Parsed display rules from Post_Subscribe_Display::parse_atts().
+     * @param array<string, string> $copy       Copy overrides from parse_atts().
      */
-    private function render_post_subscribe_widget($post, $subscribed = false, array $rules = array()) {
+    private function render_post_subscribe_widget($post, $subscribed = false, array $copy = array()) {
         $post_title    = get_the_title($post);
-        $display_label = SubscriberNotifications_Content_Config::get_post_type_label($post->post_type);
+        $display_label = SubscriberNotifications_Content_Config::get_post_type_singular_label($post->post_type);
         $strings       = $this->get_post_subscribe_strings($post_title, $display_label);
-        $copy          = SubscriberNotifications_Post_Subscribe_Display::copy_for_client($rules);
         if (!empty($copy)) {
             $strings = SubscriberNotifications_Post_Subscribe_Display::apply_copy_overrides($strings, $copy);
         }
@@ -310,8 +302,8 @@ class SubscriberNotifications_Frontend {
             return;
         }
 
-        if (!SubscriberNotifications_Content_Config::is_single_item_available($post->post_type)) {
-            wp_send_json_error(__('Subscriptions are not available for this content type.', 'subscriber-notifications'));
+        if (!SubscriberNotifications_Content_Config::is_post_eligible_for_single_item($post)) {
+            wp_send_json_error(__('Subscriptions are not available for this page.', 'subscriber-notifications'));
             return;
         }
 
@@ -435,9 +427,8 @@ class SubscriberNotifications_Frontend {
      * @return string
      */
     private function get_post_subscribe_success_html($post, array $copy = array()) {
-        $rules = array('copy' => $copy);
         ob_start();
-        $this->render_post_subscribe_widget($post, true, $rules);
+        $this->render_post_subscribe_widget($post, true, $copy);
         return subscriber_notifications_prepare_shortcode_html(ob_get_clean());
     }
 
@@ -823,7 +814,7 @@ class SubscriberNotifications_Frontend {
                     <label for="subscriber_email"><?php esc_html_e('Email', 'subscriber-notifications'); ?></label>
                     <input type="email" id="subscriber_email" name="subscriber_email"
                         value="<?php echo esc_attr($email_value); ?>"
-                        class="<?php echo esc_attr($locked_class); ?>"
+                        class="subscriber-notifications-field--locked"
                         readonly>
                     <?php if ($is_linked) : ?>
                         <small class="description"><?php esc_html_e('Taken from your account email address.', 'subscriber-notifications'); ?></small>
@@ -836,9 +827,9 @@ class SubscriberNotifications_Frontend {
                     <?php $this->render_preferences_subscription_sections($current_prefs); ?>
                 <?php endif; ?>
 
-                <h3><?php esc_html_e('How often would you like to receive notifications?', 'subscriber-notifications'); ?></h3>
+                <h3><?php esc_html_e('How often would you like to receive topic notifications?', 'subscriber-notifications'); ?></h3>
                 <p class="description sn-frequency-help">
-                    <?php esc_html_e('Specific page updates are emailed immediately. Frequency applies to topic digests only.', 'subscriber-notifications'); ?>
+                    <?php esc_html_e('On-page subscriptions are emailed immediately when content is updated. Delivery frequency applies to topic notifications only.', 'subscriber-notifications'); ?>
                 </p>
                 <?php $this->render_frequency_fieldset($subscriber->frequency); ?>
 
@@ -938,7 +929,10 @@ class SubscriberNotifications_Frontend {
                 <h3><?php esc_html_e('Choose your subscriptions', 'subscriber-notifications'); ?></h3>
                 <?php $this->render_preferences_sections($current_prefs); ?>
 
-                <h3><?php esc_html_e('How often would you like to receive notifications?', 'subscriber-notifications'); ?></h3>
+                <h3><?php esc_html_e('How often would you like to receive topic notifications?', 'subscriber-notifications'); ?></h3>
+                <p class="description sn-frequency-help">
+                    <?php esc_html_e('Delivery frequency applies to topic notifications only. On-page subscriptions are emailed immediately when content is updated.', 'subscriber-notifications'); ?>
+                </p>
                 <?php $this->render_frequency_fieldset($frequency); ?>
 
                 <?php if (!empty(subscriber_notifications_get_option('captcha_site_key', ''))): ?>
@@ -958,7 +952,7 @@ class SubscriberNotifications_Frontend {
     }
 
     /**
-     * Topic digests + specific page updates on the preferences form.
+     * Subscription topics + specific page updates on the preferences form.
      *
      * @param array $current_prefs Existing subscriber preferences.
      */
@@ -971,52 +965,88 @@ class SubscriberNotifications_Frontend {
             }
         }
         if ($has_topic_sections) {
-            echo '<h3>' . esc_html__('Topic digests', 'subscriber-notifications') . '</h3>';
+            echo '<h3>' . esc_html__('Choose your subscriptions', 'subscriber-notifications') . '</h3>';
             $this->render_preferences_sections($current_prefs);
         }
         $this->render_item_preferences_section($current_prefs);
     }
 
     /**
-     * Flat checklist of single-post subscriptions grouped by post type.
+     * Accordion checklist of single-post subscriptions grouped by post type.
      *
      * @param array $current_prefs Existing preferences.
      */
     private function render_item_preferences_section(array $current_prefs) {
-        $has_any_items = false;
+        $groups = array();
         foreach (SubscriberNotifications_Content_Config::get_single_item_post_types() as $post_type) {
-            if (!empty(SubscriberNotifications_Preferences::get_items($current_prefs, $post_type))) {
-                $has_any_items = true;
-                break;
+            $items = SubscriberNotifications_Preferences::get_items($current_prefs, $post_type);
+            if (!empty($items)) {
+                $groups[ $post_type ] = $items;
             }
         }
-        if (!$has_any_items) {
+        if (empty($groups)) {
             return;
         }
 
-        echo '<h3>' . esc_html__('Specific page updates', 'subscriber-notifications') . '</h3>';
-        foreach (SubscriberNotifications_Content_Config::get_single_item_post_types() as $post_type) {
-            $items = SubscriberNotifications_Preferences::get_items($current_prefs, $post_type);
-            if (empty($items)) {
-                continue;
-            }
-            $label = SubscriberNotifications_Content_Config::get_post_type_label($post_type);
-            echo '<fieldset class="sn-item-subscriptions">';
-            echo '<legend><strong>' . esc_html($label) . '</strong></legend>';
-            echo '<ul class="sn-item-subscriptions-list">';
+        echo '<h3>' . esc_html__('On-page subscriptions', 'subscriber-notifications') . '</h3>';
+        echo '<p class="description">' . esc_html__('Uncheck a page to stop receiving immediate update emails for that content.', 'subscriber-notifications') . '</p>';
+
+        foreach ($groups as $post_type => $items) {
+            $post_type_label = SubscriberNotifications_Content_Config::get_post_type_label($post_type);
+            $select_all_target = 'preferences[' . $post_type . '][' . SubscriberNotifications_Preferences::ITEMS_KEY . ']';
+            $field_name        = $select_all_target . '[]';
+
+            $posts = array();
             foreach ($items as $post_id) {
                 $post = get_post((int) $post_id);
-                $field_name = 'preferences[' . $post_type . '][' . SubscriberNotifications_Preferences::ITEMS_KEY . '][]';
-                echo '<li><label>';
-                echo '<input type="checkbox" name="' . esc_attr($field_name) . '" value="' . esc_attr((string) $post_id) . '" checked /> ';
-                if ($post && $post->post_status === 'publish') {
-                    echo '<a href="' . esc_url(get_permalink($post)) . '">' . esc_html(get_the_title($post)) . '</a>';
-                } else {
-                    echo esc_html(SubscriberNotifications_Preferences::get_item_label($post_id));
+                if ($post) {
+                    $posts[] = $post;
                 }
-                echo '</label></li>';
             }
-            echo '</ul></fieldset>';
+            usort(
+                $posts,
+                function ($a, $b) {
+                    return strcasecmp(get_the_title($a), get_the_title($b));
+                }
+            );
+            if (empty($posts)) {
+                continue;
+            }
+            ?>
+            <details class="sn-section">
+                <summary><strong><?php echo esc_html($post_type_label); ?></strong></summary>
+                <div class="sn-section__body">
+                    <fieldset class="sn-taxonomy sn-item-subscriptions" data-target="<?php echo esc_attr($select_all_target); ?>">
+                        <label class="sn-select-all-label">
+                            <input type="checkbox" class="sn-select-all" data-target="<?php echo esc_attr($select_all_target); ?>" />
+                            <?php
+                            /* translators: %s: Post type label */
+                            printf(esc_html__('Select all %s', 'subscriber-notifications'), esc_html($post_type_label));
+                            ?>
+                        </label>
+                        <ul class="sn-term-list sn-item-subscriptions-list">
+                            <?php foreach ($posts as $post) :
+                                $post_id = (int) $post->ID;
+                                ?>
+                                <li class="sn-term-item">
+                                    <label>
+                                        <input type="checkbox"
+                                            name="<?php echo esc_attr($field_name); ?>"
+                                            value="<?php echo esc_attr((string) $post_id); ?>"
+                                            checked />
+                                        <?php if ($post->post_status === 'publish') : ?>
+                                            <a href="<?php echo esc_url(get_permalink($post)); ?>"><?php echo esc_html(get_the_title($post)); ?></a>
+                                        <?php else : ?>
+                                            <?php echo esc_html(SubscriberNotifications_Preferences::get_item_label($post_id)); ?>
+                                        <?php endif; ?>
+                                    </label>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </fieldset>
+                </div>
+            </details>
+            <?php
         }
     }
 
@@ -1512,12 +1542,7 @@ class SubscriberNotifications_Frontend {
      */
     private function send_preferences_update_email($subscriber) {
         $subject = subscriber_notifications_get_option('preferences_update_email_subject', __('Your preferences have been updated', 'subscriber-notifications'));
-        $default_content = __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n"
-            . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n"
-            . __('Your current preferences:', 'subscriber-notifications') . "\n"
-            . __('Subscriptions: [selected_subscriptions]', 'subscriber-notifications') . "\n"
-            . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n"
-            . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications');
+        $default_content = subscriber_notifications_default_preferences_update_email_content();
         $content = subscriber_notifications_get_option('preferences_update_email_content', $default_content);
 
         $shortcodes = new SubscriberNotifications_Shortcodes();

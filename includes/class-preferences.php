@@ -520,53 +520,258 @@ class SubscriberNotifications_Preferences {
     /**
      * Human-readable description of terms and items.
      *
-     * @param array|string $prefs Preferences array or JSON.
+     * @param array|string              $prefs   Preferences array or JSON.
+     * @param array{topics: bool, items: bool} $include Which sections to include.
      * @return string
      */
-    public static function human_readable($prefs) {
+    public static function human_readable($prefs, array $include = array('topics' => true, 'items' => true)) {
         if (!is_array($prefs)) {
             $prefs = self::decode($prefs);
         }
-        $parts = array();
-        $term_text = SubscriberNotifications_Term_Resolver::describe_selection($prefs);
-        if ($term_text !== '') {
-            $parts[] = $term_text;
+
+        $include  = self::normalize_subscription_summary_sections($include);
+        $term_text = $include['topics']
+            ? SubscriberNotifications_Term_Resolver::describe_selection($prefs)
+            : '';
+        $item_text = $include['items']
+            ? self::describe_items_plain($prefs)
+            : '';
+
+        if ($term_text === '' && $item_text === '') {
+            return '';
         }
-        $item_text = self::describe_items_plain($prefs);
-        if ($item_text !== '') {
+
+        $parts = array();
+        if ($include['topics'] && $include['items'] && $term_text !== '' && $item_text !== '') {
+            $parts[] = __('Topic notifications', 'subscriber-notifications') . "\n\n" . $term_text;
+            $parts[] = __('On-page subscriptions', 'subscriber-notifications') . "\n\n" . $item_text;
+        } elseif ($term_text !== '') {
+            $parts[] = $term_text;
+        } else {
             $parts[] = $item_text;
         }
+
         return implode("\n\n", $parts);
+    }
+
+    /**
+     * Parse the sections attribute for subscription summary shortcodes.
+     *
+     * @param string $sections Comma-separated section keys. Empty = both.
+     * @return array{topics: bool, items: bool}
+     */
+    public static function parse_subscription_summary_sections($sections = '') {
+        $sections = strtolower(trim((string) $sections));
+        if ($sections === '') {
+            return array(
+                'topics' => true,
+                'items'  => true,
+            );
+        }
+
+        $parts  = array_map('trim', explode(',', $sections));
+        $topics = false;
+        $items  = false;
+
+        foreach ($parts as $part) {
+            if (in_array($part, array('topics', 'topic'), true)) {
+                $topics = true;
+            }
+            if (in_array($part, array('items', 'item', 'on-page', 'onpage', 'on_page'), true)) {
+                $items = true;
+            }
+        }
+
+        if (!$topics && !$items) {
+            return array(
+                'topics' => true,
+                'items'  => true,
+            );
+        }
+
+        return array(
+            'topics' => $topics,
+            'items'  => $items,
+        );
+    }
+
+    /**
+     * @param array{topics?: bool, items?: bool} $include Section flags.
+     * @return array{topics: bool, items: bool}
+     */
+    private static function normalize_subscription_summary_sections(array $include) {
+        return array(
+            'topics' => !empty($include['topics']),
+            'items'  => !empty($include['items']),
+        );
     }
 
     /**
      * HTML summary for admin list tables.
      *
-     * @param array|string $prefs Preferences array or JSON.
+     * @param array|string $prefs   Preferences array or JSON.
+     * @param string       $context `subscriber` (default) or `targets` (notification targets column).
      * @return string
      */
-    public static function human_readable_admin_html($prefs) {
+    public static function human_readable_admin_html($prefs, $context = 'subscriber') {
         if (!is_array($prefs)) {
             $prefs = self::decode($prefs);
         }
-        $html = SubscriberNotifications_Term_Resolver::describe_selection_admin_html($prefs);
-        $item_html = self::describe_items_html($prefs, false);
-        return $html . $item_html;
+
+        $topic_html = SubscriberNotifications_Term_Resolver::describe_selection_admin_html($prefs);
+        $item_html  = self::describe_items_admin_html($prefs);
+        $use_groups = ($context === 'subscriber' && $topic_html !== '' && $item_html !== '');
+
+        if ($topic_html === '' && $item_html === '') {
+            return '';
+        }
+
+        $html = '<div class="sn-prefs-admin-summary">';
+
+        if ($topic_html !== '') {
+            if ($use_groups) {
+                $html .= '<div class="sn-prefs-admin-section">';
+                $html .= '<div class="sn-prefs-section-heading">' . esc_html__('Topic notifications', 'subscriber-notifications') . '</div>';
+            }
+            $html .= $topic_html;
+            if ($use_groups) {
+                $html .= '</div>';
+            }
+        }
+
+        if ($item_html !== '') {
+            if ($use_groups) {
+                $html .= '<div class="sn-prefs-admin-section">';
+                $html .= '<div class="sn-prefs-section-heading">' . esc_html__('On-page subscriptions', 'subscriber-notifications') . '</div>';
+            }
+            $html .= $item_html;
+            if ($use_groups) {
+                $html .= '</div>';
+            }
+        }
+
+        $html .= '</div>';
+        return $html;
+    }
+
+    /**
+     * Truncate text for narrow admin list-table cells.
+     *
+     * @param string $text      Plain text.
+     * @param int    $max_chars Maximum length before ellipsis.
+     * @return string
+     */
+    private static function truncate_admin_label($text, $max_chars = 60) {
+        $text = (string) $text;
+        $length = function_exists('mb_strlen') ? mb_strlen($text) : strlen($text);
+        if ($max_chars < 1 || $length <= $max_chars) {
+            return $text;
+        }
+        if (function_exists('mb_substr')) {
+            return rtrim(mb_substr($text, 0, $max_chars - 1)) . '…';
+        }
+        return rtrim(substr($text, 0, $max_chars - 1)) . '…';
+    }
+
+    /**
+     * HTML list of item subscriptions for admin list tables.
+     *
+     * @param array $prefs Preferences array.
+     * @return string
+     */
+    public static function describe_items_admin_html(array $prefs) {
+        $html = '';
+        foreach (self::get_item_sections($prefs) as $section) {
+            if (empty($section['entries'])) {
+                continue;
+            }
+            $count = count($section['entries']);
+            $html .= '<div class="sn-prefs-block sn-prefs-block--items">';
+            $html .= '<div class="sn-prefs-post-type">';
+            $html .= esc_html($section['post_type_label']);
+            $html .= ' <span class="sn-prefs-item-count">(' . (int) $count . ')</span>';
+            $html .= '</div>';
+            $html .= '<ul class="sn-prefs-item-list">';
+            foreach ($section['entries'] as $entry) {
+                $label_full = $entry['label'];
+                $label_show = self::truncate_admin_label($label_full);
+                $html      .= '<li>';
+                if (!empty($entry['view_link'])) {
+                    $html .= '<a href="' . esc_url($entry['view_link']) . '" title="' . esc_attr($label_full) . '" target="_blank" rel="noopener noreferrer">'
+                        . esc_html($label_show) . '</a>';
+                } else {
+                    $html .= '<span title="' . esc_attr($label_full) . '">' . esc_html($label_show) . '</span>';
+                }
+                $html .= '</li>';
+            }
+            $html .= '</ul></div>';
+        }
+        return $html;
     }
 
     /**
      * HTML summary for email shortcodes.
      *
-     * @param array|string $prefs Preferences array or JSON.
+     * @param array|string              $prefs   Preferences array or JSON.
+     * @param array{topics: bool, items: bool} $include Which sections to include.
      * @return string
      */
-    public static function human_readable_html($prefs) {
+    public static function human_readable_html($prefs, array $include = array('topics' => true, 'items' => true)) {
         if (!is_array($prefs)) {
             $prefs = self::decode($prefs);
         }
-        $html = SubscriberNotifications_Term_Resolver::describe_selection_html($prefs);
-        $item_html = self::describe_items_html($prefs, true);
-        return $html . $item_html;
+
+        $include   = self::normalize_subscription_summary_sections($include);
+        $topic_html = $include['topics']
+            ? SubscriberNotifications_Term_Resolver::describe_selection_html($prefs)
+            : '';
+        $item_html  = $include['items']
+            ? self::describe_items_html($prefs, true)
+            : '';
+
+        if ($topic_html === '' && $item_html === '') {
+            return '';
+        }
+
+        $use_groups = $include['topics'] && $include['items'] && $topic_html !== '' && $item_html !== '';
+        $html       = '<div class="sn-email-prefs-summary">';
+
+        if ($topic_html !== '') {
+            $html .= '<div class="sn-email-prefs-section">';
+            if ($use_groups) {
+                $html .= self::email_section_heading(__('Topic notifications', 'subscriber-notifications'), true);
+            }
+            $html .= $topic_html;
+            $html .= '</div>';
+        }
+
+        if ($item_html !== '') {
+            $section_style = $use_groups ? ' style="margin-top:16px;"' : '';
+            $html         .= '<div class="sn-email-prefs-section"' . $section_style . '>';
+            if ($use_groups) {
+                $html .= self::email_section_heading(__('On-page subscriptions', 'subscriber-notifications'));
+            }
+            $html .= $item_html;
+            $html .= '</div>';
+        }
+
+        $html .= '</div>';
+        return $html;
+    }
+
+    /**
+     * Section heading for grouped email subscription summaries.
+     *
+     * @param string $label            Heading text.
+     * @param bool   $with_top_spacing Extra space above (first block after intro copy).
+     * @return string
+     */
+    private static function email_section_heading($label, $with_top_spacing = false) {
+        $margin = $with_top_spacing ? 'margin:16px 0 10px' : 'margin:0 0 10px';
+
+        return '<p class="sn-email-prefs-section-heading" style="' . esc_attr($margin) . ';font-weight:bold;font-size:15px;">'
+            . esc_html($label)
+            . '</p>';
     }
 
     /**
@@ -596,13 +801,27 @@ class SubscriberNotifications_Preferences {
     public static function describe_items_html(array $prefs, $email_style = true) {
         $html = '';
         foreach (self::get_item_sections($prefs) as $section) {
-            if (empty($section['titles'])) {
+            if (empty($section['entries'])) {
                 continue;
             }
-            $lines = array_map('esc_html', $section['titles']);
             if ($email_style) {
-                $html .= '<p><strong>' . esc_html($section['post_type_label']) . '</strong></p><p>' . implode('<br />', $lines) . '</p>';
+                $link_color = esc_attr((string) subscriber_notifications_get_option('email_color_link', '#0066cc'));
+                $html .= '<p style="margin:12px 0 4px;font-weight:bold;">' . esc_html($section['post_type_label']) . '</p>';
+                $html .= '<ul style="margin:0 0 10px;padding-left:24px;">';
+                foreach ($section['entries'] as $entry) {
+                    $html .= '<li style="margin:0 0 4px;">';
+                    if (!empty($entry['view_link'])) {
+                        $html .= '<a href="' . esc_url($entry['view_link']) . '" style="color:' . $link_color . ';text-decoration:underline;">'
+                            . esc_html($entry['label'])
+                            . '</a>';
+                    } else {
+                        $html .= esc_html($entry['label']);
+                    }
+                    $html .= '</li>';
+                }
+                $html .= '</ul>';
             } else {
+                $lines = array_map('esc_html', $section['titles']);
                 $html .= '<div class="sn-prefs-block">';
                 $html .= '<div class="sn-prefs-post-type">' . esc_html($section['post_type_label']) . '</div>';
                 $html .= '<div class="sn-prefs-taxonomies">' . implode('<br />', $lines) . '</div>';
@@ -629,13 +848,28 @@ class SubscriberNotifications_Preferences {
             if (empty($items)) {
                 continue;
             }
-            $titles = array();
+            $entries = array();
             foreach ($items as $post_id) {
-                $titles[] = self::get_item_label($post_id);
+                $post_id = (int) $post_id;
+                $post    = get_post($post_id);
+                $entries[] = array(
+                    'post_id'   => $post_id,
+                    'label'     => self::get_item_label($post_id),
+                    'view_link' => ($post instanceof WP_Post && $post->post_status === 'publish')
+                        ? get_permalink($post)
+                        : '',
+                );
             }
+            usort(
+                $entries,
+                function ($a, $b) {
+                    return strcasecmp($a['label'], $b['label']);
+                }
+            );
             $sections[] = array(
                 'post_type_label' => SubscriberNotifications_Content_Config::get_post_type_label($post_type),
-                'titles'          => $titles,
+                'entries'         => $entries,
+                'titles'          => array_column($entries, 'label'),
             );
         }
         return $sections;

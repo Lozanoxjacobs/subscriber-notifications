@@ -22,6 +22,8 @@ class SubscriberNotifications_Content_Config {
     const OPTION_KEY    = 'subscriber_notifications_content_config';
     const OPTION_GROUP  = 'subscriber_notifications_content_types';
     const TERM_DISPLAY_MODES = array('all', 'children_of', 'include', 'exclude');
+    const SINGLE_ITEM_VISIBILITY_RULES    = 'rules';
+    const SINGLE_ITEM_VISIBILITY_PICK_LIST  = 'pick_list';
 
     /**
      * In-process cache to avoid re-reading + re-normalizing the option on every helper call.
@@ -129,6 +131,30 @@ class SubscriberNotifications_Content_Config {
     }
 
     /**
+     * Singular label for a post type (on-page subscribe widget defaults).
+     *
+     * Uses the Content Types display label when set; otherwise the post type
+     * singular_name (e.g. "Post", not "Posts").
+     *
+     * @param string $post_type Post type slug.
+     * @return string
+     */
+    public static function get_post_type_singular_label($post_type) {
+        $config = self::get_config();
+        if (!empty($config[$post_type]['label'])) {
+            return $config[$post_type]['label'];
+        }
+        $pt = get_post_type_object($post_type);
+        if ($pt && !empty($pt->labels->singular_name)) {
+            return $pt->labels->singular_name;
+        }
+        if ($pt && !empty($pt->labels->name)) {
+            return $pt->labels->name;
+        }
+        return $post_type;
+    }
+
+    /**
      * Get the admin-defined label for a taxonomy under a given post type, falling back to the WP label.
      *
      * @param string $post_type Post type slug.
@@ -188,6 +214,112 @@ class SubscriberNotifications_Content_Config {
         }
         $config = self::get_config();
         return !empty($config[ $post_type ]['allow_single_item_subscriptions']);
+    }
+
+    /**
+     * On-page subscribe widget visibility mode for a post type.
+     *
+     * @param string $post_type Post type slug.
+     * @return string self::SINGLE_ITEM_VISIBILITY_RULES or self::SINGLE_ITEM_VISIBILITY_PICK_LIST
+     */
+    public static function get_single_item_visibility_mode($post_type) {
+        $post_type = sanitize_key((string) $post_type);
+        if ($post_type === '') {
+            return self::SINGLE_ITEM_VISIBILITY_RULES;
+        }
+        $config = self::get_config();
+        $entry  = isset($config[ $post_type ]) && is_array($config[ $post_type ]) ? $config[ $post_type ] : array();
+        return self::resolve_single_item_visibility_mode($entry);
+    }
+
+    /**
+     * Resolve stored visibility mode.
+     *
+     * @param array $entry Post type config entry.
+     * @return string
+     */
+    private static function resolve_single_item_visibility_mode(array $entry) {
+        $mode = isset($entry['single_item_visibility_mode']) ? (string) $entry['single_item_visibility_mode'] : '';
+        if ($mode === self::SINGLE_ITEM_VISIBILITY_PICK_LIST) {
+            return self::SINGLE_ITEM_VISIBILITY_PICK_LIST;
+        }
+        return self::SINGLE_ITEM_VISIBILITY_RULES;
+    }
+
+    /**
+     * Whether the on-page subscribe widget may render for this post.
+     *
+     * @param WP_Post $post Post object.
+     * @return bool
+     */
+    public static function is_post_eligible_for_single_item($post) {
+        if (!$post instanceof WP_Post) {
+            return false;
+        }
+
+        if (!self::is_single_item_available($post->post_type)) {
+            return false;
+        }
+
+        if ($post->post_status !== 'publish') {
+            return false;
+        }
+
+        if (subscriber_notifications_is_frontend_page((int) $post->ID)) {
+            return false;
+        }
+
+        $entry           = self::get_config()[ $post->post_type ] ?? array();
+        $visibility_mode = self::resolve_single_item_visibility_mode($entry);
+
+        if ($visibility_mode === self::SINGLE_ITEM_VISIBILITY_PICK_LIST) {
+            $include_ids = isset($entry['single_item_include_post_ids']) ? (array) $entry['single_item_include_post_ids'] : array();
+            return in_array((int) $post->ID, array_map('intval', $include_ids), true);
+        }
+
+        $exclude_ids = isset($entry['single_item_exclude_post_ids']) ? (array) $entry['single_item_exclude_post_ids'] : array();
+        if (!empty($exclude_ids) && in_array((int) $post->ID, array_map('intval', $exclude_ids), true)) {
+            return false;
+        }
+
+        return self::post_passes_single_item_taxonomy_gate($post);
+    }
+
+    /**
+     * OR gate across restrictive taxonomy rules (broadcast mode only).
+     *
+     * @param WP_Post $post Post object.
+     * @return bool
+     */
+    private static function post_passes_single_item_taxonomy_gate(WP_Post $post) {
+        $config    = self::get_config();
+        $post_type = $post->post_type;
+        $taxonomies = isset($config[ $post_type ]['taxonomies']) && is_array($config[ $post_type ]['taxonomies'])
+            ? $config[ $post_type ]['taxonomies']
+            : array();
+
+        $restrictive = array();
+        foreach ($taxonomies as $taxonomy => $tax_entry) {
+            if (!is_string($taxonomy) || !is_array($tax_entry)) {
+                continue;
+            }
+            $mode = isset($tax_entry['term_display']) ? (string) $tax_entry['term_display'] : 'all';
+            if ($mode !== 'all') {
+                $restrictive[] = $taxonomy;
+            }
+        }
+
+        if (empty($restrictive)) {
+            return true;
+        }
+
+        foreach ($restrictive as $taxonomy) {
+            if (SubscriberNotifications_Term_Resolver::post_passes_taxonomy_display_rule($post, $post_type, $taxonomy)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -307,10 +439,34 @@ class SubscriberNotifications_Content_Config {
                 continue;
             }
 
+            $include_post_ids = self::sanitize_post_id_list(
+                isset($entry['single_item_include_post_ids']) ? $entry['single_item_include_post_ids'] : array(),
+                $post_type
+            );
+            $exclude_post_ids = self::sanitize_post_id_list(
+                isset($entry['single_item_exclude_post_ids']) ? $entry['single_item_exclude_post_ids'] : array(),
+                $post_type
+            );
+
+            $visibility_mode = isset($entry['single_item_visibility_mode']) ? sanitize_key((string) $entry['single_item_visibility_mode']) : '';
+            if (!in_array($visibility_mode, array(self::SINGLE_ITEM_VISIBILITY_RULES, self::SINGLE_ITEM_VISIBILITY_PICK_LIST), true)) {
+                $visibility_mode = self::SINGLE_ITEM_VISIBILITY_RULES;
+            }
+
+            if ($visibility_mode === self::SINGLE_ITEM_VISIBILITY_PICK_LIST) {
+                $exclude_post_ids = array();
+            } else {
+                $visibility_mode  = self::SINGLE_ITEM_VISIBILITY_RULES;
+                $include_post_ids = array();
+            }
+
             $sanitized[$post_type] = array(
                 'enabled'                         => !empty($entry['enabled']),
                 'allow_single_item_subscriptions' => !empty($entry['allow_single_item_subscriptions']),
                 'label'                           => isset($entry['label']) ? sanitize_text_field((string) $entry['label']) : '',
+                'single_item_visibility_mode'     => $visibility_mode,
+                'single_item_include_post_ids'    => $include_post_ids,
+                'single_item_exclude_post_ids'    => $exclude_post_ids,
                 'taxonomies'                      => array(),
             );
 
@@ -363,10 +519,30 @@ class SubscriberNotifications_Content_Config {
             if (!is_string($post_type) || !is_array($entry)) {
                 continue;
             }
+            $include_post_ids = self::sanitize_post_id_list(
+                isset($entry['single_item_include_post_ids']) ? $entry['single_item_include_post_ids'] : array(),
+                $post_type
+            );
+            $exclude_post_ids = self::sanitize_post_id_list(
+                isset($entry['single_item_exclude_post_ids']) ? $entry['single_item_exclude_post_ids'] : array(),
+                $post_type
+            );
+            $visibility_mode = self::resolve_single_item_visibility_mode($entry);
+
+            if ($visibility_mode === self::SINGLE_ITEM_VISIBILITY_PICK_LIST) {
+                $exclude_post_ids = array();
+            } else {
+                $visibility_mode  = self::SINGLE_ITEM_VISIBILITY_RULES;
+                $include_post_ids = array();
+            }
+
             $out[$post_type] = array(
                 'enabled'                         => !empty($entry['enabled']),
                 'allow_single_item_subscriptions' => !empty($entry['allow_single_item_subscriptions']),
                 'label'                           => isset($entry['label']) ? (string) $entry['label'] : '',
+                'single_item_visibility_mode'     => $visibility_mode,
+                'single_item_include_post_ids'    => $include_post_ids,
+                'single_item_exclude_post_ids'    => $exclude_post_ids,
                 'taxonomies'                      => array(),
             );
             $taxonomies = isset($entry['taxonomies']) && is_array($entry['taxonomies']) ? $entry['taxonomies'] : array();
@@ -410,6 +586,32 @@ class SubscriberNotifications_Content_Config {
             if ($id > 0) {
                 $out[$id] = $id;
             }
+        }
+        sort($out);
+        return array_values($out);
+    }
+
+    /**
+     * Sanitize a list of post IDs for single-item include/exclude.
+     *
+     * @param mixed  $list      Raw list from POST.
+     * @param string $post_type Expected post type slug.
+     * @return int[]
+     */
+    private static function sanitize_post_id_list($list, $post_type) {
+        $ids = self::sanitize_term_id_list($list);
+        if (empty($ids)) {
+            return array();
+        }
+
+        $post_type = sanitize_key((string) $post_type);
+        $out       = array();
+        foreach ($ids as $id) {
+            $post = get_post((int) $id);
+            if (!$post || $post->post_type !== $post_type || $post->post_status !== 'publish') {
+                continue;
+            }
+            $out[ (int) $post->ID ] = (int) $post->ID;
         }
         sort($out);
         return array_values($out);

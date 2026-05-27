@@ -28,7 +28,7 @@ $term_display_modes = array(
     <h1 class="wp-heading-inline"><?php esc_html_e('Content Types', 'subscriber-notifications'); ?></h1>
     <hr class="wp-header-end">
     <p class="description">
-        <?php esc_html_e('Choose which public post types and taxonomies appear on the subscription form. Subscribers will only see the post types and taxonomies you enable here.', 'subscriber-notifications'); ?>
+        <?php esc_html_e('Configure how each post type works with Subscriber Notifications: the public subscription form, per-post on-page subscribe widgets, and the taxonomies that scope both.', 'subscriber-notifications'); ?>
     </p>
 
     <?php settings_errors(); ?>
@@ -48,6 +48,11 @@ $term_display_modes = array(
                     $pt_enabled = !empty($pt_config['enabled']);
                     $pt_single_item = !empty($pt_config['allow_single_item_subscriptions']);
                     $pt_label = isset($pt_config['label']) ? (string) $pt_config['label'] : '';
+                    $single_item_include_ids = isset($pt_config['single_item_include_post_ids']) ? (array) $pt_config['single_item_include_post_ids'] : array();
+                    $single_item_exclude_ids = isset($pt_config['single_item_exclude_post_ids']) ? (array) $pt_config['single_item_exclude_post_ids'] : array();
+                    $single_item_visibility_mode = SubscriberNotifications_Content_Config::get_single_item_visibility_mode($post_type_slug);
+                    $single_item_rules_mode = ($single_item_visibility_mode === SubscriberNotifications_Content_Config::SINGLE_ITEM_VISIBILITY_RULES);
+                    $rest_base = !empty($post_type_object->rest_base) ? (string) $post_type_object->rest_base : $post_type_slug;
                     $name_prefix = $option_key . '[' . $post_type_slug . ']';
                     $available_taxonomies = SubscriberNotifications_Content_Config::get_available_taxonomies($post_type_slug);
                     $box_id = 'sn-pt-' . sanitize_html_class($post_type_slug);
@@ -86,7 +91,7 @@ $term_display_modes = array(
                             <tr>
                                 <th scope="row">
                                     <label for="<?php echo esc_attr($box_id . '-single-item'); ?>">
-                                        <?php esc_html_e('Allow on-page subscriptions to individual posts', 'subscriber-notifications'); ?>
+                                        <?php esc_html_e('Allow on-page subscriptions', 'subscriber-notifications'); ?>
                                     </label>
                                 </th>
                                 <td>
@@ -123,7 +128,14 @@ $term_display_modes = array(
                         <?php if (empty($available_taxonomies)) : ?>
                             <p class="description"><?php esc_html_e('No public taxonomies are registered for this post type.', 'subscriber-notifications'); ?></p>
                         <?php else : ?>
-                            <h3><?php esc_html_e('Taxonomies', 'subscriber-notifications'); ?></h3>
+                            <div class="sn-taxonomies-section">
+                            <h3><?php esc_html_e('Taxonomies & term rules', 'subscriber-notifications'); ?></h3>
+                            <p class="description">
+                                <?php esc_html_e('Term rules here affect two things: which terms subscribers can choose on the subscription form, and — when widget visibility is “By content rules” — which posts show the on-page subscribe widget.', 'subscriber-notifications'); ?>
+                            </p>
+                            <p class="description sn-taxonomies-pick-list-note" <?php echo $single_item_rules_mode ? 'style="display:none;"' : ''; ?>>
+                                <?php esc_html_e('Not used for on-page widget eligibility while visibility is “Only specific posts I choose”.', 'subscriber-notifications'); ?>
+                            </p>
                             <?php foreach ($available_taxonomies as $tax_slug => $tax_object) :
                                 $tax_config = isset($pt_config['taxonomies'][$tax_slug]) ? $pt_config['taxonomies'][$tax_slug] : array();
                                 $tax_enabled = !empty($tax_config['enabled_on_form']);
@@ -144,7 +156,7 @@ $term_display_modes = array(
                                     <tr>
                                         <th scope="row">
                                             <label for="<?php echo esc_attr($tax_id . '-enabled'); ?>">
-                                                <?php esc_html_e('Show on form', 'subscriber-notifications'); ?>
+                                                <?php esc_html_e('Offer on subscription form', 'subscriber-notifications'); ?>
                                             </label>
                                         </th>
                                         <td>
@@ -154,7 +166,7 @@ $term_display_modes = array(
                                                     name="<?php echo esc_attr($tax_name_prefix . '[enabled_on_form]'); ?>"
                                                     value="1"
                                                     <?php checked($tax_enabled); ?> />
-                                                <?php esc_html_e('Let subscribers pick terms from this taxonomy.', 'subscriber-notifications'); ?>
+                                                <?php esc_html_e('Subscribers can select terms from this taxonomy when signing up.', 'subscriber-notifications'); ?>
                                             </label>
                                         </td>
                                     </tr>
@@ -176,7 +188,7 @@ $term_display_modes = array(
                                     <tr>
                                         <th scope="row">
                                             <label for="<?php echo esc_attr($tax_id . '-display'); ?>">
-                                                <?php esc_html_e('Which terms to show', 'subscriber-notifications'); ?>
+                                                <?php esc_html_e('Which terms apply', 'subscriber-notifications'); ?>
                                             </label>
                                         </th>
                                         <td>
@@ -193,6 +205,7 @@ $term_display_modes = array(
                                                     </option>
                                                 <?php endforeach; ?>
                                             </select>
+                                            <p class="description"><?php esc_html_e('Subscription form: limits terms subscribers can select. On-page widget: limits which posts qualify (combined with OR logic across taxonomies).', 'subscriber-notifications'); ?></p>
                                         </td>
                                     </tr>
                                     <?php if (!empty($tax_object->hierarchical)) : ?>
@@ -265,7 +278,123 @@ $term_display_modes = array(
                                 </table>
                             </fieldset>
                             <?php endforeach; ?>
+                            </div>
                         <?php endif; ?>
+
+                        <div class="sn-single-item-eligibility" data-post-type="<?php echo esc_attr($post_type_slug); ?>" data-rest-base="<?php echo esc_attr($rest_base); ?>" <?php echo $pt_single_item ? '' : 'style="display:none;"'; ?>>
+                            <h3><?php esc_html_e('On-page subscribe widget — where to show it', 'subscriber-notifications'); ?></h3>
+
+                            <fieldset class="sn-eligibility-mode-fieldset">
+                                <legend class="screen-reader-text"><?php esc_html_e('Widget visibility mode', 'subscriber-notifications'); ?></legend>
+                                <p class="sn-eligibility-mode-label"><strong><?php esc_html_e('Widget visibility', 'subscriber-notifications'); ?></strong></p>
+                                <ul class="sn-eligibility-mode-options">
+                                    <li>
+                                        <label>
+                                            <input type="radio"
+                                                class="sn-eligibility-mode-radio"
+                                                name="<?php echo esc_attr($name_prefix . '[single_item_visibility_mode]'); ?>"
+                                                value="<?php echo esc_attr(SubscriberNotifications_Content_Config::SINGLE_ITEM_VISIBILITY_RULES); ?>"
+                                                <?php checked($single_item_rules_mode); ?> />
+                                            <?php esc_html_e('By content rules', 'subscriber-notifications'); ?>
+                                        </label>
+                                        <span class="description"><?php esc_html_e('Match posts by taxonomy; add exceptions in “Except on these posts”.', 'subscriber-notifications'); ?></span>
+                                    </li>
+                                    <li>
+                                        <label>
+                                            <input type="radio"
+                                                class="sn-eligibility-mode-radio"
+                                                name="<?php echo esc_attr($name_prefix . '[single_item_visibility_mode]'); ?>"
+                                                value="<?php echo esc_attr(SubscriberNotifications_Content_Config::SINGLE_ITEM_VISIBILITY_PICK_LIST); ?>"
+                                                <?php checked(!$single_item_rules_mode); ?> />
+                                            <?php esc_html_e('Only specific posts I choose', 'subscriber-notifications'); ?>
+                                        </label>
+                                        <span class="description"><?php esc_html_e('Ignore taxonomy rules; show the widget only on posts you pick.', 'subscriber-notifications'); ?></span>
+                                    </li>
+                                </ul>
+                            </fieldset>
+
+                            <div class="sn-eligibility-rules-mode" <?php echo $single_item_rules_mode ? '' : 'style="display:none;"'; ?>>
+                                <table class="form-table" role="presentation">
+                                    <tr>
+                                        <th scope="row">
+                                            <label for="<?php echo esc_attr($box_id . '-exclude-post-search'); ?>">
+                                                <?php esc_html_e('Except on these posts', 'subscriber-notifications'); ?>
+                                            </label>
+                                        </th>
+                                        <td>
+                                            <div class="sn-post-picker" data-list="exclude">
+                                                <p>
+                                                    <input type="search"
+                                                        id="<?php echo esc_attr($box_id . '-exclude-post-search'); ?>"
+                                                        class="sn-post-picker-search regular-text"
+                                                        placeholder="<?php esc_attr_e('Search by title…', 'subscriber-notifications'); ?>"
+                                                        autocomplete="off" />
+                                                </p>
+                                                <ul class="sn-post-picker-results" aria-live="polite"></ul>
+                                                <ul class="sn-post-picker-selected">
+                                                    <?php foreach ($single_item_exclude_ids as $picked_id) :
+                                                        $picked_post = get_post((int) $picked_id);
+                                                        if (!$picked_post) {
+                                                            continue;
+                                                        }
+                                                        ?>
+                                                        <li data-post-id="<?php echo esc_attr((string) $picked_post->ID); ?>">
+                                                            <span class="sn-post-picker-title"><?php echo esc_html(get_the_title($picked_post)); ?></span>
+                                                            <button type="button" class="button-link sn-post-picker-remove" aria-label="<?php esc_attr_e('Remove', 'subscriber-notifications'); ?>">&times;</button>
+                                                            <input type="hidden" name="<?php echo esc_attr($name_prefix . '[single_item_exclude_post_ids][]'); ?>" value="<?php echo esc_attr((string) $picked_post->ID); ?>" />
+                                                        </li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                                <p class="description">
+                                                    <?php esc_html_e('Use this to carve out exceptions — e.g. hide the widget on one FAQ that is otherwise in an allowed category.', 'subscriber-notifications'); ?>
+                                                </p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <div class="sn-eligibility-pick-list-mode" <?php echo $single_item_rules_mode ? 'style="display:none;"' : ''; ?>>
+                                <table class="form-table" role="presentation">
+                                    <tr>
+                                        <th scope="row">
+                                            <label for="<?php echo esc_attr($box_id . '-include-post-search'); ?>">
+                                                <?php esc_html_e('Limit widget to these posts', 'subscriber-notifications'); ?>
+                                            </label>
+                                        </th>
+                                        <td>
+                                            <div class="sn-post-picker" data-list="include">
+                                                <p>
+                                                    <input type="search"
+                                                        id="<?php echo esc_attr($box_id . '-include-post-search'); ?>"
+                                                        class="sn-post-picker-search regular-text"
+                                                        placeholder="<?php esc_attr_e('Search by title…', 'subscriber-notifications'); ?>"
+                                                        autocomplete="off" />
+                                                </p>
+                                                <ul class="sn-post-picker-results" aria-live="polite"></ul>
+                                                <ul class="sn-post-picker-selected">
+                                                    <?php foreach ($single_item_include_ids as $picked_id) :
+                                                        $picked_post = get_post((int) $picked_id);
+                                                        if (!$picked_post) {
+                                                            continue;
+                                                        }
+                                                        ?>
+                                                        <li data-post-id="<?php echo esc_attr((string) $picked_post->ID); ?>">
+                                                            <span class="sn-post-picker-title"><?php echo esc_html(get_the_title($picked_post)); ?></span>
+                                                            <button type="button" class="button-link sn-post-picker-remove" aria-label="<?php esc_attr_e('Remove', 'subscriber-notifications'); ?>">&times;</button>
+                                                            <input type="hidden" name="<?php echo esc_attr($name_prefix . '[single_item_include_post_ids][]'); ?>" value="<?php echo esc_attr((string) $picked_post->ID); ?>" />
+                                                        </li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                                <p class="description">
+                                                    <?php esc_html_e('The on-page subscribe widget appears only on these posts. Taxonomy rules are not used in this mode.', 'subscriber-notifications'); ?>
+                                                </p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <?php endforeach; ?>

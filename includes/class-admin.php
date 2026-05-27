@@ -1720,7 +1720,7 @@ class SubscriberNotifications_Admin {
 
         add_settings_section(
             'subscriber_notifications_item_email_templates_section',
-            __('Item subscriptions', 'subscriber-notifications'),
+            __('On-page subscriptions', 'subscriber-notifications'),
             array($this, 'render_item_email_templates_section_description'),
             'subscriber-notifications-settings-email-templates'
         );
@@ -1928,7 +1928,7 @@ class SubscriberNotifications_Admin {
 
         add_settings_field(
             'item_subscribe_email_subject',
-            __('Item subscription confirmation subject', 'subscriber-notifications'),
+            __('On-page subscription confirmation subject', 'subscriber-notifications'),
             array($this, 'render_item_subscribe_email_subject_field'),
             'subscriber-notifications-settings-email-templates',
             'subscriber_notifications_item_email_templates_section'
@@ -1936,7 +1936,7 @@ class SubscriberNotifications_Admin {
 
         add_settings_field(
             'item_subscribe_email_content',
-            __('Item subscription confirmation content', 'subscriber-notifications'),
+            __('On-page subscription confirmation content', 'subscriber-notifications'),
             array($this, 'render_item_subscribe_email_content_field'),
             'subscriber-notifications-settings-email-templates',
             'subscriber_notifications_item_email_templates_section'
@@ -1944,7 +1944,7 @@ class SubscriberNotifications_Admin {
 
         add_settings_field(
             'item_update_email_subject',
-            __('Item update notification subject', 'subscriber-notifications'),
+            __('On-page update email subject', 'subscriber-notifications'),
             array($this, 'render_item_update_email_subject_field'),
             'subscriber-notifications-settings-email-templates',
             'subscriber_notifications_item_email_templates_section'
@@ -1952,7 +1952,7 @@ class SubscriberNotifications_Admin {
 
         add_settings_field(
             'item_update_email_content',
-            __('Item update notification content', 'subscriber-notifications'),
+            __('On-page update email content', 'subscriber-notifications'),
             array($this, 'render_item_update_email_content_field'),
             'subscriber-notifications-settings-email-templates',
             'subscriber_notifications_item_email_templates_section'
@@ -2522,7 +2522,7 @@ class SubscriberNotifications_Admin {
     
     public function render_preferences_update_email_content_field() {
         $name_opt = subscriber_notifications_option_name('preferences_update_email_content');
-        $value = subscriber_notifications_get_option('preferences_update_email_content', __('Hello [subscriber_name],', 'subscriber-notifications') . "\n\n" . __('Your notification preferences have been successfully updated.', 'subscriber-notifications') . "\n\n" . __('Your current preferences:', 'subscriber-notifications') . "\n" . __('Subscriptions: [selected_subscriptions]', 'subscriber-notifications') . "\n" . __('Frequency: [delivery_frequency]', 'subscriber-notifications') . "\n\n" . __('You can manage your preferences anytime using this link: [manage_preferences_link]', 'subscriber-notifications'));
+        $value = subscriber_notifications_get_option('preferences_update_email_content', subscriber_notifications_default_preferences_update_email_content());
         wp_editor(
             wp_unslash($value),
             'preferences_update_email_content',
@@ -2544,7 +2544,7 @@ class SubscriberNotifications_Admin {
      */
     public function render_item_email_templates_section_description() {
         echo '<p class="description">' . esc_html__(
-            'Sent for on-page post subscriptions and immediate item update notifications. Use post shortcodes such as [post_title] and [post_link]. Avoid [delivery_frequency] and [content_feed] here.',
+            'Sent for on-page subscriptions and immediate on-page update emails. Use post shortcodes such as [post_title] and [post_link]. Avoid [delivery_frequency] and [content_feed] here.',
             'subscriber-notifications'
         ) . '</p>';
     }
@@ -2557,7 +2557,7 @@ class SubscriberNotifications_Admin {
         );
         ?>
         <input type="text" id="item_subscribe_email_subject" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" required>
-        <p class="description"><?php esc_html_e('Sent when someone subscribes to a specific page from the on-page widget.', 'subscriber-notifications'); ?></p>
+        <p class="description"><?php esc_html_e('Sent when someone subscribes via the on-page widget.', 'subscriber-notifications'); ?></p>
         <?php
     }
 
@@ -2585,7 +2585,7 @@ class SubscriberNotifications_Admin {
         );
         ?>
         <input type="text" id="item_update_email_subject" name="<?php echo esc_attr($name_opt); ?>" value="<?php echo esc_attr($value); ?>" class="large-text" required>
-        <p class="description"><?php esc_html_e('Sent when an admin checks “Email item subscribers about this update” on save.', 'subscriber-notifications'); ?></p>
+        <p class="description"><?php esc_html_e('Sent when an admin checks “Send on-page update email now” on save.', 'subscriber-notifications'); ?></p>
         <?php
     }
 
